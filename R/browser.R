@@ -1,6 +1,53 @@
 # R/browser.R
 # Shiny gadget for browsing the data lake
 
+#' @title Run a package example script
+#' @export
+#' @description Runs one of the example scripts included with the package.
+#' @param name Name of the example (without .R extension)
+#' @return Runs the example script
+#' @examples
+#' \dontrun{
+#' # List available examples
+#' run_example()
+#' 
+#' # Run specific example
+#' run_example("browser_demo_hive")
+#' run_example("browser_demo_ducklake")
+#' }
+run_example <- function(name = NULL) {
+  examples_dir <- system.file("examples", package = "csolake")
+  
+  if (examples_dir == "") {
+    stop("Examples directory not found. Is the package installed?", call. = FALSE)
+  }
+  
+  available <- list.files(examples_dir, pattern = "\\.R$")
+  available_names <- sub("\\.R$", "", available)
+  
+  if (is.null(name)) {
+    cat("Available examples:\n")
+    for (ex in available_names) {
+      cat("  -", ex, "\n")
+    }
+    cat("\nRun with: run_example(\"name\")\n")
+    return(invisible(available_names))
+  }
+  
+  if (!name %in% available_names) {
+    stop(
+      "Example '", name, "' not found.\n",
+      "Available: ", paste(available_names, collapse = ", "),
+      call. = FALSE
+    )
+  }
+  
+  script_path <- file.path(examples_dir, paste0(name, ".R"))
+  cat("Running example:", name, "\n\n")
+  source(script_path, local = FALSE)
+}
+
+
 #' @title Browse the data lake interactively
 #' @export
 #' @family shiny

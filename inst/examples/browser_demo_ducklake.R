@@ -1,5 +1,12 @@
-# test_browser_demo_ducklake.R
-# Quick demo script to test db_browser() with DuckLake mode
+# browser_demo_ducklake.R
+# ========================
+# Interactive demo of db_browser() with sample DuckLake data
+#
+# Run with:
+#   source(system.file("examples", "browser_demo_ducklake.R", package = "csolake"))
+#
+# Or use the helper:
+#   csolake::run_example("browser_demo_ducklake")
 
 library(csolake)
 

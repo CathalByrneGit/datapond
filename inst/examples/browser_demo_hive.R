@@ -1,5 +1,12 @@
-# test_browser_demo.R
-# Quick demo script to test db_browser() with sample data
+# browser_demo_hive.R
+# =====================
+# Interactive demo of db_browser() with sample hive-partitioned data
+#
+# Run with:
+#   source(system.file("examples", "browser_demo_hive.R", package = "csolake"))
+#
+# Or use the helper:
+#   csolake::run_example("browser_demo_hive")
 
 library(csolake)
 
@@ -110,7 +117,7 @@ tags = c("trade", "monthly", "official", "imports")
 db_describe_column("Trade", "Imports", column = "value",
                    description = "Import value",
                    units = "EUR (thousands)")
-db_describe_column("Trade", "Imports", colum = "quantity",
+db_describe_column("Trade", "Imports", column = "quantity",
                    description = "Quantity imported",
                    units = "tonnes")
 db_describe_column("Trade", "Imports", column = "country",
@@ -212,8 +219,7 @@ cat("(Close the browser window to return to R)\n\n")
 db_browser()
 
 # Cleanup
-cat("\nCleaning up...\n
-")
+cat("\nCleaning up...\n")
 db_disconnect()
 unlink(lake_path, recursive = TRUE)
 cat("Done!\n")
