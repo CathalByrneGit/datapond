@@ -35,7 +35,7 @@ devtools::load_all("path/to/csolake")
 ### Hive Mode (Folder-based)
 
 ``` r
-library(csolake,eval=FALSE)
+library(csolake)
 
 # Connect to the data lake
 db_connect(path = "//CSO-NAS/DataLake")
@@ -56,6 +56,15 @@ imports |>
   group_by(country) |>
   summarise(total = sum(value)) |>
   collect()
+
+# Preview before writing (see what will happen)
+db_preview_hive_write(
+  my_data,
+  section = "Trade",
+  dataset = "Imports",
+  partition_by = c("year", "month"),
+  mode = "replace_partitions"
+)
 
 # Write data (partitioned by year and month)
 db_hive_write(
@@ -102,6 +111,9 @@ imports_jan <- db_lake_read(
   timestamp = "2025-01-15 00:00:00"
 )
 
+# Preview write to see impact
+db_preview_lake_write(my_data, schema = "trade", table = "imports", mode = "append")
+
 # Write with commit metadata
 db_lake_write(
   my_data,
@@ -111,6 +123,9 @@ db_lake_write(
   commit_author = "jsmith",
   commit_message = "Added Q1 2025 data"
 )
+
+# Preview upsert to see how many inserts vs updates
+db_preview_upsert(my_data, schema = "trade", table = "products", by = "product_id")
 
 # Upsert (update existing, insert new)
 db_upsert(
@@ -137,6 +152,43 @@ db_rollback(schema = "trade", table = "imports", version = 5)
 db_vacuum(older_than = "30 days", dry_run = FALSE)
 
 db_disconnect()
+```
+
+### Data Documentation & Discovery
+
+``` r
+library(csolake)
+db_connect(path = "//CSO-NAS/DataLake")
+
+# Document your datasets
+db_describe(
+  section = "Trade",
+  dataset = "Imports",
+  description = "Monthly import values by country and commodity code",
+  owner = "Trade Section",
+  tags = c("trade", "monthly", "official")
+)
+
+# Document individual columns
+db_describe_column(
+  section = "Trade",
+  dataset = "Imports",
+  column = "value",
+  description = "Import value in thousands",
+  units = "EUR (thousands)"
+)
+
+# Search for datasets
+db_search("trade")
+db_search("official", field = "tags")
+
+# Find columns across all datasets
+db_search_columns("country")
+
+# Generate a data dictionary
+dict <- db_dictionary()
+# Export to Excel
+writexl::write_xlsx(dict, "data_dictionary.xlsx")
 ```
 
 ## Why Two Modes?
@@ -234,6 +286,14 @@ systems needed.
 | `db_lake_write()` | DuckLake | Write table (overwrite/append) |
 | `db_upsert()` | DuckLake | MERGE operation (update + insert) |
 
+### Preview Operations
+
+| Function | Mode | Description |
+|----|----|----|
+| `db_preview_hive_write()` | Hive | Preview write impact before executing |
+| `db_preview_lake_write()` | DuckLake | Preview write impact before executing |
+| `db_preview_upsert()` | DuckLake | Preview inserts vs updates before executing |
+
 ### Discovery
 
 | Function              | Mode     | Description                |
@@ -246,6 +306,17 @@ systems needed.
 | `db_list_views()`     | DuckLake | List views in schema       |
 | `db_table_exists()`   | DuckLake | Check if table exists      |
 | `db_create_schema()`  | DuckLake | Create a new schema        |
+
+### Documentation & Search
+
+| Function               | Mode | Description                                   |
+|------------------------|------|-----------------------------------------------|
+| `db_describe()`        | Both | Add description, owner, tags to dataset/table |
+| `db_describe_column()` | Both | Document a column (description, units, notes) |
+| `db_get_docs()`        | Both | Retrieve documentation for a dataset/table    |
+| `db_dictionary()`      | Both | Generate full data dictionary                 |
+| `db_search()`          | Both | Search by name, description, owner, or tags   |
+| `db_search_columns()`  | Both | Find columns by name across all datasets      |
 
 ### Metadata & Maintenance
 

@@ -347,6 +347,132 @@ They serve the same organisational purpose - grouping related data together.
 
 ---
 
+## Data Documentation
+
+Good data governance requires documentation. `csolake` provides built-in tools to document your datasets and generate a data dictionary.
+
+### Documenting Datasets
+
+```{r}
+# Add metadata to a dataset
+db_describe(
+  section = "Trade",
+  dataset = "Imports",
+  description = "Monthly import values by country and HS commodity code",
+  owner = "Trade Section",
+  tags = c("trade", "monthly", "official")
+)
+
+# Document individual columns
+db_describe_column(
+  section = "Trade",
+  dataset = "Imports",
+  column = "value",
+  description = "Import value",
+  units = "EUR (thousands)"
+)
+
+db_describe_column(
+  section = "Trade",
+  dataset = "Imports",
+  column = "country_code",
+  description = "ISO 3166-1 alpha-2 country code"
+)
+```
+
+### Where is Documentation Stored?
+
+- **Hive mode**: Creates a `_metadata.json` file in each dataset folder
+- **DuckLake mode**: Stores in a `_metadata` schema in the catalog
+
+Either way, documentation travels with the data.
+
+### Searching and Discovery
+
+```{r}
+# Search datasets by any field
+db_search("trade")                        # Matches name, description, owner, or tags
+db_search("monthly", field = "tags")      # Search only tags
+db_search("Trade Section", field = "owner")  # Find datasets by owner
+
+# Find columns across all datasets
+db_search_columns("country")
+#>   section  dataset  column_name  column_type  column_description
+#> 1 Trade    Imports  country_code VARCHAR      ISO 3166-1 alpha-2...
+#> 2 Trade    Exports  country_code VARCHAR      ISO 3166-1 alpha-2...
+#> 3 Labour   Survey   country      VARCHAR      Country of residence
+```
+
+### Generating a Data Dictionary
+
+```{r}
+# Full data dictionary with column details
+dict <- db_dictionary()
+
+# Just dataset-level summary
+dict_summary <- db_dictionary(include_columns = FALSE)
+
+# Filter to specific section
+dict_trade <- db_dictionary(section = "Trade")
+
+# Export to Excel
+writexl::write_xlsx(dict, "data_dictionary.xlsx")
+```
+
+The data dictionary includes:
+- Dataset/table name and location
+- Description, owner, tags
+- Column names, types, and documentation
+- Last updated timestamps
+
+---
+
+## Preview Before Writing
+
+Before making changes to production data, you can preview what will happen:
+
+### Hive Write Preview
+
+```{r}
+db_preview_hive_write(
+  my_data,
+  section = "Trade",
+  dataset = "Imports",
+  partition_by = c("year", "month"),
+  mode = "replace_partitions"
+)
+```
+
+Shows:
+- Target path and whether it exists
+- Incoming vs existing row counts
+- **Schema changes** - new columns, removed columns, type changes
+- **Partition impact** - which partitions will be affected
+
+### DuckLake Write Preview
+
+```{r}
+db_preview_lake_write(my_data, table = "imports", mode = "overwrite")
+```
+
+Shows:
+- Current vs new row counts
+- Schema comparison
+- Warnings (e.g., append to non-existent table)
+
+### Upsert Preview
+
+```{r}
+db_preview_upsert(my_data, table = "products", by = "product_id")
+```
+
+Shows:
+- How many rows will be **inserted** (new keys)
+- How many rows will be **updated** (existing keys)
+- Warnings about duplicate keys in incoming data
+
+---
+
 ## Comparing the Two Approaches
 
 ### When to Use Hive Mode
@@ -437,6 +563,9 @@ db_lake_connect(
 # Prepare your data
 imports_q1 <- prepare_imports_data(raw_files)
 
+# Preview what will happen
+db_preview_lake_write(imports_q1, schema = "trade", table = "imports", mode = "append")
+
 # Publish with a meaningful commit message
 db_lake_write(
   imports_q1,
@@ -445,6 +574,14 @@ db_lake_write(
   mode = "append",
   commit_author = Sys.info()["user"],
   commit_message = "Q1 2025 imports data - final"
+)
+
+# Document your dataset
+db_describe(
+  schema = "trade",
+  table = "imports",
+  description = "Monthly import values by country and HS code",
+  owner = "Trade Section"
 )
 
 db_disconnect()
@@ -465,6 +602,12 @@ db_lake_connect(
 # Discover what's available
 db_list_schemas()
 db_list_tables("trade")
+
+# Search for relevant data
+db_search("imports")
+
+# Check documentation
+db_get_docs(schema = "trade", table = "imports")
 
 # Read and analyse
 imports <- db_lake_read(schema = "trade", table = "imports")
@@ -493,6 +636,7 @@ db_disconnect()
 | **Schema** | A namespace/folder for organising related tables |
 | **ACID** | Atomicity, Consistency, Isolation, Durability - database reliability guarantees |
 | **Upsert** | Update existing rows + insert new rows in one operation |
+| **Data dictionary** | Documentation of all datasets, their columns, types, and descriptions |
 
 ---
 

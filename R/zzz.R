@@ -5,6 +5,11 @@
 #' @import dbplyr
 NULL
 
+# Null coalesce operator (handles NULL and length-0)
+# Used throughout the package
+#' @noRd
+`%||%` <- function(x, y) if (is.null(x) || length(x) == 0) y else x
+
 .onLoad <- function(libname, pkgname) {
   # Nothing needed on load currently
   # Could add:
@@ -19,12 +24,12 @@ NULL
   if (!is.null(con)) {
     try(DBI::dbDisconnect(con, shutdown = TRUE), silent = TRUE)
   }
-
+  
   # Clear the environment
   if (exists(".db_env", envir = asNamespace("csolake"), inherits = FALSE)) {
     rm(list = ls(envir = .db_env), envir = .db_env)
   }
-
+  
   invisible()
 }
 

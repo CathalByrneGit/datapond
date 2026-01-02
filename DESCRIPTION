@@ -19,7 +19,8 @@ Imports:
     duckdb (>= 0.10.0),
     dplyr,
     glue,
-    dbplyr
+    dbplyr,
+    jsonlite
 Suggests:
     fs,
     testthat (>= 3.0.0),
