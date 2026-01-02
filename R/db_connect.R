@@ -91,7 +91,17 @@ db_connect <- function(path = "//CSO-NAS/DataLake",
                         memory_limit = NULL,
                         load_extensions = NULL) {
   con <- .db_get_con()
-  if (!is.null(con)) return(con)
+  if (!is.null(con)) {
+    # Check if already connected in same mode
+    curr_mode <- .db_get("mode")
+    if (identical(curr_mode, "hive")) {
+      return(con)
+    } else {
+      # Connected in different mode - disconnect first
+      message("Disconnecting from DuckLake mode to connect in hive mode...")
+      db_disconnect()
+    }
+  }
 
   con <- DBI::dbConnect(duckdb::duckdb(), dbdir = db)
 
@@ -197,7 +207,17 @@ db_lake_connect <- function(duckdb_db = ":memory:",
                        load_extensions = NULL) {
   
   con <- .db_get_con()
-  if (!is.null(con)) return(con)
+  if (!is.null(con)) {
+    # Check if already connected in same mode
+    curr_mode <- .db_get("mode")
+    if (identical(curr_mode, "ducklake")) {
+      return(con)
+    } else {
+      # Connected in different mode - disconnect first
+      message("Disconnecting from hive mode to connect in DuckLake mode...")
+      db_disconnect()
+    }
+  }
   
   catalog_type <- match.arg(catalog_type)
   

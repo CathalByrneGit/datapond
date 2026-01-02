@@ -219,6 +219,65 @@ test_that("db_connect returns existing connection on second call", {
   clean_db_env()
 })
 
+test_that("db_lake_connect auto-disconnects from hive mode", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+  
+  temp_dir <- tempfile(pattern = "mode_switch_")
+  dir.create(temp_dir)
+  
+  # Connect in hive mode first
+  con1 <- db_connect(path = temp_dir, db = ":memory:")
+  expect_equal(csolake:::.db_get("mode"), "hive")
+  
+  # Now connect in DuckLake mode - should auto-disconnect
+  expect_message(
+    con2 <- db_lake_connect(
+      catalog = "test",
+      metadata_path = file.path(temp_dir, "cat.ducklake"),
+      data_path = temp_dir
+    ),
+    "Disconnecting from hive mode"
+  )
+  
+  # Should now be in DuckLake mode
+  expect_equal(csolake:::.db_get("mode"), "ducklake")
+  
+  # Connections should be different (new connection was made)
+  expect_false(identical(con1, con2))
+  
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_connect auto-disconnects from DuckLake mode", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+  
+  temp_dir <- tempfile(pattern = "mode_switch2_")
+  dir.create(temp_dir)
+  
+  # Connect in DuckLake mode first
+  con1 <- db_lake_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "cat.ducklake"),
+    data_path = temp_dir
+  )
+  expect_equal(csolake:::.db_get("mode"), "ducklake")
+  
+  # Now connect in hive mode - should auto-disconnect
+  expect_message(
+    con2 <- db_connect(path = temp_dir, db = ":memory:"),
+    "Disconnecting from DuckLake mode"
+  )
+  
+  # Should now be in hive mode
+  expect_equal(csolake:::.db_get("mode"), "hive")
+  
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
 test_that("db_connect respects threads parameter", {
   clean_db_env()
   
@@ -590,26 +649,34 @@ test_that("full hive mode workflow works", {
   expect_false(status$connected)
 })
 
-test_that("cannot mix modes without disconnecting", {
+test_that("switching modes auto-disconnects and reconnects", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
   clean_db_env()
   
-  # Connect in hive mode
-  con1 <- db_connect(path = "/test", db = ":memory:")
+  temp_dir <- tempfile(pattern = "mode_test_")
+  dir.create(temp_dir)
   
-  # Try to connect in DuckLake mode - should return existing connection
-  temp_dir <- tempdir()
-  con2 <- db_lake_connect(
-    metadata_path = file.path(temp_dir, "test.ducklake"),
-    data_path = temp_dir
+  # Connect in hive mode
+
+  con1 <- db_connect(path = temp_dir, db = ":memory:")
+  expect_equal(csolake:::.db_get("mode"), "hive")
+  
+  # Connect in DuckLake mode - should auto-switch
+  expect_message(
+    con2 <- db_lake_connect(
+      metadata_path = file.path(temp_dir, "test.ducklake"),
+      data_path = temp_dir
+    ),
+    "Disconnecting"
   )
   
-  # Should be the same connection (singleton pattern)
-  expect_identical(con1, con2)
+  # Should NOT be the same connection (new one was created)
+  expect_false(identical(con1, con2))
   
-  # Mode should still be hive (first connection wins)
+  # Mode should now be ducklake
   status <- db_status(verbose = FALSE)
-  expect_equal(status$mode, "hive")
+  expect_equal(status$mode, "ducklake")
   
   clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
 })
