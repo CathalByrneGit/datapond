@@ -36,6 +36,9 @@ csolake/
 │   ├── maintenance.R    # Vacuum, rollback, diff
 │   ├── docs.R           # Documentation & data dictionary
 │   ├── preview.R        # Write preview functions
+│   ├── browser.R        # Shiny browser launcher
+│   ├── browser_ui.R     # Shiny browser UI module
+│   ├── browser_server.R # Shiny browser server module
 │   └── zzz.R            # Package load/unload hooks
 └── vignettes/
     ├── concepts.Rmd     # Conceptual background
@@ -805,6 +808,134 @@ db_diff <- function(schema, table, from_version, to_version, key_cols = NULL) {
 - `.onAttach` runs when the package is loaded (shows helpful message)
 - `.onUnload` ensures cleanup if the package is unloaded
 - `%||%` handles both `NULL` and zero-length values
+
+---
+
+## `R/browser.R`, `R/browser_ui.R`, `R/browser_server.R` - Interactive Browser
+
+These files implement a Shiny gadget for interactively browsing the data lake.
+
+### Architecture
+
+The browser uses the **Shiny module** pattern, which allows it to be:
+1. Used standalone via `db_browser()`
+2. Embedded in other Shiny apps via `db_browser_ui()` + `db_browser_server()`
+
+```{r}
+# Standalone usage
+db_browser()
+
+# Embedded in another app
+ui <- fluidPage(
+  db_browser_ui("my_browser")
+)
+server <- function(input, output, session) {
+  db_browser_server("my_browser")
+}
+```
+
+### `browser.R` - Launcher
+
+```{r}
+db_browser <- function(height = "500px", viewer = c("dialog", "browser", "pane")) {
+  # Check packages are available
+  .db_assert_browser_packages()
+  
+  # Build app
+  ui <- db_browser_app_ui(height = height)
+  server <- function(input, output, session) {
+    db_browser_server(id = "db_browser", height = height)
+  }
+  app <- shiny::shinyApp(ui = ui, server = server)
+  
+  # Run as gadget
+  shiny::runGadget(app, viewer = viewer_func, stopOnCancel = TRUE)
+}
+```
+
+### `browser_ui.R` - Module UI
+
+The UI is built with `bslib` for modern Bootstrap 5 styling:
+
+```{r}
+db_browser_ui <- function(id, height = "500px") {
+  ns <- shiny::NS(id)  # Namespace for module
+  
+  # Sidebar with tree view
+  sidebar <- bslib::sidebar(
+    shiny::uiOutput(ns("tree_view")),
+    shiny::actionButton(ns("refresh_tree"), "Refresh")
+  )
+  
+  # Main content with tabs
+  main_content <- bslib::navset_card_tab(
+    bslib::nav_panel("Preview", ...),
+    bslib::nav_panel("Metadata", ...),
+    bslib::nav_panel("Search", ...),
+    bslib::nav_panel("Dictionary", ...)
+  )
+  
+  bslib::page_sidebar(sidebar = sidebar, main_content)
+}
+```
+
+**Key points:**
+
+- `NS(id)` creates namespaced IDs so multiple instances don't conflict
+- `bslib` provides modern Bootstrap 5 components
+- Tree view is rendered dynamically based on hive vs DuckLake mode
+
+### `browser_server.R` - Module Server
+
+```{r}
+db_browser_server <- function(id, height = "500px") {
+  shiny::moduleServer(id, function(input, output, session) {
+    
+    # Reactive values for selection state
+    rv <- shiny::reactiveValues(
+      selected_section = NULL,
+      selected_dataset = NULL
+    )
+    
+    # Tree view - renders differently for hive vs DuckLake
+    output$tree_view <- shiny::renderUI({
+      if (is_hive) .render_hive_tree(ns, rv)
+      else .render_ducklake_tree(ns, rv)
+    })
+    
+    # Preview - loads data on button click
+    preview_data <- shiny::eventReactive(input$load_preview, {
+      db_hive_read(rv$selected_section, rv$selected_dataset) |>
+        head(input$preview_rows) |>
+        collect()
+    })
+    
+    output$preview_table <- DT::renderDataTable({
+      DT::datatable(preview_data(), filter = "top")
+    })
+    
+    # Search
+    search_results <- shiny::eventReactive(input$do_search, {
+      db_search(input$search_pattern, field = input$search_field)
+    })
+    
+    # Dictionary with download
+    output$download_dict <- shiny::downloadHandler(
+      filename = "data_dictionary.csv",
+      content = function(file) {
+        write.csv(db_dictionary(), file)
+      }
+    )
+  })
+}
+```
+
+**Key points:**
+
+- `moduleServer()` creates the namespaced server logic
+- `reactiveValues` tracks UI state (selected table, etc.)
+- `eventReactive` triggers expensive operations only on button click
+- `DT::datatable` provides interactive tables with filtering
 
 ---
 

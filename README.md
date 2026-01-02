@@ -191,6 +191,25 @@ dict <- db_dictionary()
 writexl::write_xlsx(dict, "data_dictionary.xlsx")
 ```
 
+### Interactive Browser
+
+``` r
+library(csolake)
+db_connect(path = "//CSO-NAS/DataLake")
+
+# Launch interactive browser
+db_browser()
+```
+
+The browser provides a point-and-click interface for:
+
+- **Browse** - Navigate sections/datasets or schemas/tables in a tree
+  view
+- **Preview** - View sample rows from any dataset
+- **Metadata** - See documentation, owner, and tags
+- **Search** - Find datasets by name, description, or tags
+- **Dictionary** - Generate and export a data dictionary
+
 ## Why Two Modes?
 
 | Feature | Hive Mode | DuckLake Mode |
@@ -329,6 +348,12 @@ systems needed.
 | `db_rollback()`   | DuckLake | Restore to previous version |
 | `db_vacuum()`     | DuckLake | Clean up old snapshots      |
 | `db_query()`      | Both     | Run arbitrary SQL           |
+
+### Interactive Tools
+
+| Function       | Description                                         |
+|----------------|-----------------------------------------------------|
+| `db_browser()` | Launch interactive Shiny browser for exploring data |
 
 ## Learn More
 
