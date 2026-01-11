@@ -248,30 +248,10 @@ db_describe <- function(section = NULL, dataset = NULL,
 
     DBI::dbExecute(con, meta_sql)
 
-    # Handle public catalog (master discovery catalog)
-    section <- .db_get("section")
-    if (!is.null(section)) {
-      if (isTRUE(public)) {
-        .db_publish_to_master(schema, table)
-        message("Updated metadata for ", qname, " (published to master catalog)")
-      } else if (isFALSE(public)) {
-        .db_unpublish_from_master(schema, table)
-        message("Updated metadata for ", qname, " (removed from master catalog)")
-      } else {
-        # NULL: auto-sync if already public
-        if (.db_is_public_in_master(schema, table)) {
-          .db_publish_to_master(schema, table)
-          message("Updated metadata for ", qname, " (synced to master catalog)")
-        } else {
-          message("Updated metadata for ", qname)
-        }
-      }
-    } else {
-      message("Updated metadata for ", qname)
-      if (!is.null(public)) {
-        message("Note: public parameter ignored - no section set. ",
-                "Use db_lake_connect_section() to enable master catalog sync.")
-      }
+    message("Updated metadata for ", qname)
+    if (!is.null(public)) {
+      message("Note: public parameter is only supported in hive mode. ",
+              "In DuckLake mode, use schema paths for access control.")
     }
 
     invisible(list(
@@ -940,217 +920,163 @@ db_search_columns <- function(pattern) {
 # Public Catalog Management (Hive Mode)
 # ==============================================================================
 
-#' Make a dataset/table discoverable in the public catalog
+#' Make a dataset discoverable in the public catalog (Hive mode only)
 #'
-#' @description Makes metadata discoverable organisation-wide.
+#' @description Makes metadata discoverable organisation-wide by copying it
+#' to the shared `_catalog/` folder.
 #'
-#' In hive mode: Copies metadata to the shared `_catalog/` folder.
-#' In DuckLake mode: Publishes to the master discovery catalog (requires section).
+#' This function is only available in hive mode. In DuckLake mode, use
+#' schema paths with folder ACLs to control access.
 #'
-#' @param section Section name (hive mode), or NULL in DuckLake mode
-#' @param dataset Dataset name (hive mode only)
-#' @param schema Schema name (DuckLake mode, default "main")
-#' @param table Table name (DuckLake mode only)
+#' @param section Section name
+#' @param dataset Dataset name
 #' @return Invisibly returns TRUE
 #'
 #' @examples
 #' \dontrun{
-#' # Hive mode
 #' db_connect("//CSO-NAS/DataLake")
 #' db_set_public(section = "Trade", dataset = "Imports")
-#'
-#' # DuckLake mode
-#' db_lake_connect_section("trade")
-#' db_set_public(schema = "main", table = "imports")
 #' }
 #' @export
-db_set_public <- function(section = NULL, dataset = NULL,
-                          schema = "main", table = NULL) {
+db_set_public <- function(section, dataset) {
   con <- .db_get_con()
   if (is.null(con)) {
-    stop("Not connected. Use db_connect() or db_lake_connect() first.", call. = FALSE)
+    stop("Not connected. Use db_connect() first.", call. = FALSE)
   }
 
   curr_mode <- .db_get("mode")
 
-  if (curr_mode == "hive") {
-    if (is.null(section) || is.null(dataset)) {
-      stop("section and dataset are required in hive mode.", call. = FALSE)
-    }
-    section <- .db_validate_name(section, "section")
-    dataset <- .db_validate_name(dataset, "dataset")
-
-    .db_publish_metadata(section, dataset)
-    message("Published ", section, "/", dataset, " to public catalog")
-  } else {
-    # DuckLake mode
-    if (is.null(table)) {
-      stop("table is required in DuckLake mode.", call. = FALSE)
-    }
-    schema <- .db_validate_name(schema, "schema")
-    table <- .db_validate_name(table, "table")
-
-    curr_section <- .db_get("section")
-    if (is.null(curr_section)) {
-      stop("No section set. Use db_lake_connect_section() first.", call. = FALSE)
-    }
-
-    .db_publish_to_master(schema, table)
-    message("Published ", schema, ".", table, " to master catalog")
+  if (curr_mode != "hive") {
+    stop("db_set_public() is only available in hive mode. ",
+         "In DuckLake mode, use db_create_schema(path=...) for access control.",
+         call. = FALSE)
   }
+
+  section <- .db_validate_name(section, "section")
+  dataset <- .db_validate_name(dataset, "dataset")
+
+  .db_publish_metadata(section, dataset)
+  message("Published ", section, "/", dataset, " to public catalog")
 
   invisible(TRUE)
 }
 
 
-#' Remove a dataset/table from the public catalog
+#' Remove a dataset from the public catalog (Hive mode only)
 #'
 #' @description Removes metadata from the public discovery catalog.
-#' The dataset/table and its data remain unchanged.
+#' The dataset and its data remain unchanged.
 #'
-#' @param section Section name (hive mode), or NULL in DuckLake mode
-#' @param dataset Dataset name (hive mode only)
-#' @param schema Schema name (DuckLake mode, default "main")
-#' @param table Table name (DuckLake mode only)
+#' This function is only available in hive mode. In DuckLake mode, use
+#' schema paths with folder ACLs to control access.
+#'
+#' @param section Section name
+#' @param dataset Dataset name
 #' @return Invisibly returns TRUE
 #'
 #' @examples
 #' \dontrun{
-#' # Hive mode
 #' db_connect("//CSO-NAS/DataLake")
 #' db_set_private(section = "Trade", dataset = "Imports")
-#'
-#' # DuckLake mode
-#' db_lake_connect_section("trade")
-#' db_set_private(schema = "main", table = "imports")
 #' }
 #' @export
-db_set_private <- function(section = NULL, dataset = NULL,
-                            schema = "main", table = NULL) {
+db_set_private <- function(section, dataset) {
   con <- .db_get_con()
   if (is.null(con)) {
-    stop("Not connected. Use db_connect() or db_lake_connect() first.", call. = FALSE)
+    stop("Not connected. Use db_connect() first.", call. = FALSE)
   }
 
   curr_mode <- .db_get("mode")
 
-  if (curr_mode == "hive") {
-    if (is.null(section) || is.null(dataset)) {
-      stop("section and dataset are required in hive mode.", call. = FALSE)
-    }
-    section <- .db_validate_name(section, "section")
-    dataset <- .db_validate_name(dataset, "dataset")
-
-    .db_unpublish_metadata(section, dataset)
-    message("Removed ", section, "/", dataset, " from public catalog")
-  } else {
-    # DuckLake mode
-    if (is.null(table)) {
-      stop("table is required in DuckLake mode.", call. = FALSE)
-    }
-    schema <- .db_validate_name(schema, "schema")
-    table <- .db_validate_name(table, "table")
-
-    curr_section <- .db_get("section")
-    if (is.null(curr_section)) {
-      stop("No section set. Use db_lake_connect_section() first.", call. = FALSE)
-    }
-
-    .db_unpublish_from_master(schema, table)
-    message("Removed ", schema, ".", table, " from master catalog")
+  if (curr_mode != "hive") {
+    stop("db_set_private() is only available in hive mode. ",
+         "In DuckLake mode, use db_create_schema(path=...) for access control.",
+         call. = FALSE)
   }
+
+  section <- .db_validate_name(section, "section")
+  dataset <- .db_validate_name(dataset, "dataset")
+
+  .db_unpublish_metadata(section, dataset)
+  message("Removed ", section, "/", dataset, " from public catalog")
 
   invisible(TRUE)
 }
 
 
-#' Check if a dataset/table is in the public catalog
+#' Check if a dataset is in the public catalog (Hive mode only)
 #'
 #' @description Check whether metadata has been published to the discovery catalog.
 #'
-#' @param section Section name (hive mode), or NULL in DuckLake mode
-#' @param dataset Dataset name (hive mode only)
-#' @param schema Schema name (DuckLake mode, default "main")
-#' @param table Table name (DuckLake mode only)
+#' This function is only available in hive mode. In DuckLake mode, access
+#' control is managed via schema paths and folder ACLs.
+#'
+#' @param section Section name
+#' @param dataset Dataset name
 #' @return Logical TRUE if public, FALSE otherwise
 #'
 #' @examples
 #' \dontrun{
-#' # Hive mode
 #' db_connect("//CSO-NAS/DataLake")
 #' db_is_public(section = "Trade", dataset = "Imports")
-#'
-#' # DuckLake mode
-#' db_lake_connect_section("trade")
-#' db_is_public(schema = "main", table = "imports")
 #' }
 #' @export
-db_is_public <- function(section = NULL, dataset = NULL,
-                          schema = "main", table = NULL) {
+db_is_public <- function(section, dataset) {
   con <- .db_get_con()
   if (is.null(con)) {
-    stop("Not connected. Use db_connect() or db_lake_connect() first.", call. = FALSE)
+    stop("Not connected. Use db_connect() first.", call. = FALSE)
   }
 
   curr_mode <- .db_get("mode")
 
-  if (curr_mode == "hive") {
-    if (is.null(section) || is.null(dataset)) {
-      stop("section and dataset are required in hive mode.", call. = FALSE)
-    }
-    section <- .db_validate_name(section, "section")
-    dataset <- .db_validate_name(dataset, "dataset")
-
-    path <- .db_public_metadata_path(section, dataset)
-    file.exists(path)
-  } else {
-    # DuckLake mode
-    if (is.null(table)) {
-      stop("table is required in DuckLake mode.", call. = FALSE)
-    }
-    schema <- .db_validate_name(schema, "schema")
-    table <- .db_validate_name(table, "table")
-
-    .db_is_public_in_master(schema, table)
+  if (curr_mode != "hive") {
+    stop("db_is_public() is only available in hive mode. ",
+         "In DuckLake mode, use db_get_schema_path() to check schema paths.",
+         call. = FALSE)
   }
+
+  section <- .db_validate_name(section, "section")
+  dataset <- .db_validate_name(dataset, "dataset")
+
+  path <- .db_public_metadata_path(section, dataset)
+  file.exists(path)
 }
 
 
-#' List all datasets/tables in the public catalog
+#' List all datasets in the public catalog (Hive mode only)
 #'
 #' @description Lists all entries published to the discovery catalog.
 #' This works even if you don't have access to the underlying data,
 #' allowing organisation-wide data discovery.
+#'
+#' This function is only available in hive mode. In DuckLake mode, use
+#' `db_dictionary()` for data discovery, with access controlled via schema paths.
 #'
 #' @param section Optional section to filter by
 #' @return A data.frame with discovery information
 #'
 #' @examples
 #' \dontrun{
-#' # Hive mode
 #' db_connect("//CSO-NAS/DataLake")
 #' db_list_public()
 #' db_list_public(section = "Trade")
-#'
-#' # DuckLake mode - lists from master catalog
-#' db_lake_connect_section("trade")
-#' db_list_public()
-#' db_list_public(section = "trade")
 #' }
 #' @export
 db_list_public <- function(section = NULL) {
   con <- .db_get_con()
   if (is.null(con)) {
-    stop("Not connected. Use db_connect() or db_lake_connect() first.", call. = FALSE)
+    stop("Not connected. Use db_connect() first.", call. = FALSE)
   }
 
   curr_mode <- .db_get("mode")
 
-  if (curr_mode == "hive") {
-    .db_list_public_hive(section)
-  } else {
-    .db_list_public_ducklake(section)
+  if (curr_mode != "hive") {
+    stop("db_list_public() is only available in hive mode. ",
+         "In DuckLake mode, use db_dictionary() for data discovery.",
+         call. = FALSE)
   }
+
+  .db_list_public_hive(section)
 }
 
 #' List public datasets (hive mode)
@@ -1211,67 +1137,14 @@ db_list_public <- function(section = NULL) {
   do.call(rbind, results)
 }
 
-#' List public tables (DuckLake mode - from master catalog)
-#' @noRd
-.db_list_public_ducklake <- function(section = NULL) {
-  master_con <- tryCatch(.db_master_connect(), error = function(e) NULL)
-  if (is.null(master_con)) {
-    return(data.frame(
-      section = character(),
-      schema = character(),
-      table = character(),
-      description = character(),
-      owner = character(),
-      tags = character(),
-      row_count = integer(),
-      last_updated = character(),
-      stringsAsFactors = FALSE
-    ))
-  }
-  on.exit(DBI::dbDisconnect(master_con))
-
-  .db_ensure_master_schema(master_con)
-
-  if (!is.null(section)) {
-    section <- .db_validate_name(section, "section")
-    result <- DBI::dbGetQuery(master_con, "
-      SELECT section_name as section, schema_name as schema, table_name as 'table',
-             description, owner, tags, row_count, last_updated
-      FROM tables
-      WHERE section_name = ?
-      ORDER BY section_name, schema_name, table_name
-    ", params = list(section))
-  } else {
-    result <- DBI::dbGetQuery(master_con, "
-      SELECT section_name as section, schema_name as schema, table_name as 'table',
-             description, owner, tags, row_count, last_updated
-      FROM tables
-      ORDER BY section_name, schema_name, table_name
-    ")
-  }
-
-  if (nrow(result) == 0) {
-    return(data.frame(
-      section = character(),
-      schema = character(),
-      table = character(),
-      description = character(),
-      owner = character(),
-      tags = character(),
-      row_count = integer(),
-      last_updated = character(),
-      stringsAsFactors = FALSE
-    ))
-  }
-
-  result
-}
 
 
-#' Sync the public catalog with source metadata
+#' Sync the public catalog with source metadata (Hive mode only)
 #'
 #' @description Scans the public catalog and updates entries from their source
 #' metadata. Optionally removes entries where the source no longer exists.
+#'
+#' This function is only available in hive mode.
 #'
 #' @param remove_orphans Logical. If TRUE, remove catalog entries where the
 #'   source no longer exists. Default FALSE.
@@ -1279,29 +1152,24 @@ db_list_public <- function(section = NULL) {
 #'
 #' @examples
 #' \dontrun{
-#' # Hive mode
 #' db_connect("//CSO-NAS/DataLake")
 #' db_sync_catalog()
 #' db_sync_catalog(remove_orphans = TRUE)
-#'
-#' # DuckLake mode
-#' db_lake_connect_section("trade")
-#' db_sync_catalog()
 #' }
 #' @export
 db_sync_catalog <- function(remove_orphans = FALSE) {
   con <- .db_get_con()
   if (is.null(con)) {
-    stop("Not connected. Use db_connect() or db_lake_connect() first.", call. = FALSE)
+    stop("Not connected. Use db_connect() first.", call. = FALSE)
   }
 
   curr_mode <- .db_get("mode")
 
-  if (curr_mode == "hive") {
-    .db_sync_catalog_hive(remove_orphans)
-  } else {
-    .db_sync_catalog_ducklake(remove_orphans)
+  if (curr_mode != "hive") {
+    stop("db_sync_catalog() is only available in hive mode.", call. = FALSE)
   }
+
+  .db_sync_catalog_hive(remove_orphans)
 }
 
 #' Sync public catalog (hive mode)
@@ -1350,383 +1218,6 @@ db_sync_catalog <- function(remove_orphans = FALSE) {
   message("Sync complete: ", synced, " synced, ", removed, " removed, ", errors, " errors")
   invisible(list(synced = synced, removed = removed, errors = errors))
 }
-
-#' Sync public catalog (DuckLake mode - current section only)
-#' @noRd
-.db_sync_catalog_ducklake <- function(remove_orphans = FALSE) {
-  section <- .db_get("section")
-  if (is.null(section)) {
-    stop("No section set. Use db_lake_connect_section() first.", call. = FALSE)
-  }
-
-  con <- .db_get_con()
-  catalog <- .db_get("catalog")
-
-  master_con <- .db_master_connect()
-  on.exit(DBI::dbDisconnect(master_con))
-
-  .db_ensure_master_schema(master_con)
-
-  # Get all public entries for this section
-  public_entries <- DBI::dbGetQuery(master_con, "
-    SELECT schema_name, table_name FROM tables WHERE section_name = ?
-  ", params = list(section))
-
-  synced <- 0
-  removed <- 0
-  errors <- 0
-
-  for (i in seq_len(nrow(public_entries))) {
-    schema <- public_entries$schema_name[i]
-    tbl <- public_entries$table_name[i]
-
-    # Check if table still exists
-    table_exists <- tryCatch({
-      result <- DBI::dbGetQuery(con, glue::glue("
-        SELECT 1 FROM information_schema.tables
-        WHERE table_catalog = {.db_sql_quote(catalog)}
-          AND table_schema = {.db_sql_quote(schema)}
-          AND table_name = {.db_sql_quote(tbl)}
-        LIMIT 1
-      "))
-      nrow(result) > 0
-    }, error = function(e) FALSE)
-
-    if (!table_exists) {
-      if (remove_orphans) {
-        DBI::dbExecute(master_con, "
-          DELETE FROM tables WHERE section_name = ? AND schema_name = ? AND table_name = ?
-        ", params = list(section, schema, tbl))
-        message("Removed orphan: ", schema, ".", tbl)
-        removed <- removed + 1
-      } else {
-        message("Orphan found (table missing): ", schema, ".", tbl)
-      }
-    } else {
-      # Re-sync
-      tryCatch({
-        .db_publish_to_master(schema, tbl)
-        synced <- synced + 1
-      }, error = function(e) {
-        message("Error syncing ", schema, ".", tbl, ": ", e$message)
-        errors <<- errors + 1
-      })
-    }
-  }
-
-  message("Sync complete: ", synced, " synced, ", removed, " removed, ", errors, " errors")
-  invisible(list(synced = synced, removed = removed, errors = errors))
-}
-
-
-# ==============================================================================
-# Master Discovery Catalog (DuckLake Multi-Catalog)
-# ==============================================================================
-
-#' Get path to the master discovery catalog
-#' @noRd
-.db_master_path <- function() {
-  # Check for explicit option first
-  master_path <- getOption("datapond.master_catalog")
-  if (!is.null(master_path)) {
-    return(master_path)
-  }
-
-  # Default: _master/discovery.sqlite relative to data_path parent
-  data_path <- .db_get("data_path")
-  if (is.null(data_path)) {
-    stop("Not connected. Cannot determine master catalog path.", call. = FALSE)
-  }
-
-  file.path(dirname(data_path), "_master", "discovery.sqlite")
-}
-
-#' Connect to master discovery catalog
-#' @noRd
-.db_master_connect <- function(master_path = NULL) {
-  if (is.null(master_path)) {
-    master_path <- .db_master_path()
-  }
-
-  # Ensure directory exists
-  dir.create(dirname(master_path), recursive = TRUE, showWarnings = FALSE)
-
-  DBI::dbConnect(RSQLite::SQLite(), master_path)
-}
-
-#' Ensure master catalog schema exists
-#' @noRd
-.db_ensure_master_schema <- function(master_con) {
-  # Create sections table
-  DBI::dbExecute(master_con, "
-    CREATE TABLE IF NOT EXISTS sections (
-      section_name TEXT PRIMARY KEY,
-      catalog_path TEXT NOT NULL,
-      data_path TEXT NOT NULL,
-      description TEXT,
-      owner TEXT,
-      registered_at TEXT DEFAULT (datetime('now'))
-    )
-  ")
-
-  # Create tables registry
-  DBI::dbExecute(master_con, "
-    CREATE TABLE IF NOT EXISTS tables (
-      section_name TEXT NOT NULL,
-      schema_name TEXT NOT NULL,
-      table_name TEXT NOT NULL,
-      description TEXT,
-      owner TEXT,
-      tags TEXT,
-      columns_json TEXT,
-      row_count INTEGER,
-      last_updated TEXT,
-      synced_at TEXT DEFAULT (datetime('now')),
-      PRIMARY KEY (section_name, schema_name, table_name),
-      FOREIGN KEY (section_name) REFERENCES sections(section_name)
-    )
-  ")
-
-  invisible(TRUE)
-}
-
-#' Set up the master discovery catalog
-#'
-#' @description Creates the master discovery catalog SQLite database with the
-#' required schema. This is a one-time admin task.
-#'
-#' @param master_path Path to the master catalog SQLite file
-#' @return Invisibly returns the master_path
-#'
-#' @examples
-#' \dontrun{
-#' db_setup_master("//CSO-NAS/DataLake/_master/discovery.sqlite")
-#' }
-#' @export
-db_setup_master <- function(master_path) {
-  if (missing(master_path)) {
-    stop("master_path is required.", call. = FALSE)
-  }
-
-  # Ensure directory exists
-  dir.create(dirname(master_path), recursive = TRUE, showWarnings = FALSE)
-
-  master_con <- DBI::dbConnect(RSQLite::SQLite(), master_path)
-  on.exit(DBI::dbDisconnect(master_con))
-
-  .db_ensure_master_schema(master_con)
-
-  message("Master discovery catalog created at: ", master_path)
-  invisible(master_path)
-}
-
-#' Register a section in the master catalog
-#'
-#' @description Registers a DuckLake section (with its own catalog) in the
-#' master discovery catalog, making it discoverable organisation-wide.
-#'
-#' @param section Section name (e.g., "trade", "labour")
-#' @param catalog_path Path to the section's DuckLake catalog file
-#' @param data_path Path to the section's data folder
-#' @param description Optional description of the section
-#' @param owner Optional owner/team name
-#' @param master_path Path to master catalog (uses default if not specified)
-#' @return Invisibly returns TRUE
-#'
-#' @examples
-#' \dontrun{
-#' db_register_section(
-#'   section = "trade",
-#'   catalog_path = "//CSO-NAS/DataLake/trade/catalog.sqlite",
-#'   data_path = "//CSO-NAS/DataLake/trade/data",
-#'   owner = "Trade Team"
-#' )
-#' }
-#' @export
-db_register_section <- function(section, catalog_path, data_path,
-                                 description = NULL, owner = NULL,
-                                 master_path = NULL) {
-  section <- .db_validate_name(section, "section")
-
-  master_con <- .db_master_connect(master_path)
-  on.exit(DBI::dbDisconnect(master_con))
-
-  .db_ensure_master_schema(master_con)
-
-  # Upsert section (convert NULL to NA for RSQLite compatibility)
-  DBI::dbExecute(master_con, "
-    INSERT OR REPLACE INTO sections
-    (section_name, catalog_path, data_path, description, owner, registered_at)
-    VALUES (?, ?, ?, ?, ?, datetime('now'))
-  ", params = list(
-    section, catalog_path, data_path,
-    if (is.null(description)) NA_character_ else description,
-    if (is.null(owner)) NA_character_ else owner
-  ))
-
-  message("Registered section '", section, "' in master catalog")
-  invisible(TRUE)
-}
-
-#' Unregister a section from the master catalog
-#'
-#' @description Removes a section from the master discovery catalog.
-#' This does not delete the section's data or catalog.
-#'
-#' @param section Section name
-#' @param master_path Path to master catalog (uses default if not specified)
-#' @return Invisibly returns TRUE
-#'
-#' @examples
-#' \dontrun{
-#' db_unregister_section("trade")
-#' }
-#' @export
-db_unregister_section <- function(section, master_path = NULL) {
-  section <- .db_validate_name(section, "section")
-
-  master_con <- .db_master_connect(master_path)
-  on.exit(DBI::dbDisconnect(master_con))
-
-  # Remove section and its tables
-DBI::dbExecute(master_con, "DELETE FROM tables WHERE section_name = ?",
-                 params = list(section))
-  DBI::dbExecute(master_con, "DELETE FROM sections WHERE section_name = ?",
-                 params = list(section))
-
-  message("Unregistered section '", section, "' from master catalog")
-  invisible(TRUE)
-}
-
-#' List registered sections
-#'
-#' @description Lists all sections registered in the master discovery catalog.
-#'
-#' @param master_path Path to master catalog (uses default if not specified)
-#' @return A data.frame with section information
-#'
-#' @examples
-#' \dontrun{
-#' db_list_registered_sections()
-#' }
-#' @export
-db_list_registered_sections <- function(master_path = NULL) {
-  master_con <- .db_master_connect(master_path)
-  on.exit(DBI::dbDisconnect(master_con))
-
-  .db_ensure_master_schema(master_con)
-
-  DBI::dbGetQuery(master_con, "
-    SELECT section_name, catalog_path, data_path, description, owner, registered_at
-    FROM sections
-    ORDER BY section_name
-  ")
-}
-
-#' Publish table metadata to master catalog (DuckLake mode)
-#' @noRd
-.db_publish_to_master <- function(schema, table) {
-  section <- .db_get("section")
-  if (is.null(section)) {
-    stop("No section set. Use db_lake_connect_section() or set section manually.",
-         call. = FALSE)
-  }
-
-  master_con <- .db_master_connect()
-  on.exit(DBI::dbDisconnect(master_con))
-
-  .db_ensure_master_schema(master_con)
-
-  # Get column info from DuckLake catalog
-  con <- .db_get_con()
-  catalog <- .db_get("catalog")
-
-  cols <- tryCatch({
-    DBI::dbGetQuery(con, glue::glue("
-      SELECT column_name, data_type
-      FROM information_schema.columns
-      WHERE table_catalog = {.db_sql_quote(catalog)}
-        AND table_schema = {.db_sql_quote(schema)}
-        AND table_name = {.db_sql_quote(table)}
-      ORDER BY ordinal_position
-    "))
-  }, error = function(e) data.frame())
-
-  # Get docs
-  docs <- tryCatch(db_get_docs(schema = schema, table = table),
-                   error = function(e) list())
-
-  # Get row count
-  row_count <- tryCatch({
-    DBI::dbGetQuery(con, glue::glue(
-      "SELECT COUNT(*) as n FROM {catalog}.{schema}.{table}"
-    ))$n[1]
-  }, error = function(e) NA_integer_)
-
-  # Upsert to master (convert NULL to NA for RSQLite compatibility)
-  DBI::dbExecute(master_con, "
-    INSERT OR REPLACE INTO tables
-    (section_name, schema_name, table_name, description, owner, tags,
-     columns_json, row_count, last_updated, synced_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-  ", params = list(
-    section, schema, table,
-    if (is.null(docs$description)) NA_character_ else docs$description,
-    if (is.null(docs$owner)) NA_character_ else docs$owner,
-    if (!is.null(docs$tags) && length(docs$tags) > 0) paste(docs$tags, collapse = ",") else NA_character_,
-    if (nrow(cols) > 0) as.character(jsonlite::toJSON(cols)) else NA_character_,
-    if (is.na(row_count)) NA_integer_ else as.integer(row_count),
-    format(Sys.time(), "%Y-%m-%d %H:%M:%S")
-  ))
-
-  invisible(TRUE)
-}
-
-#' Remove table from master catalog (DuckLake mode)
-#' @noRd
-.db_unpublish_from_master <- function(schema, table) {
-  section <- .db_get("section")
-  if (is.null(section)) {
-    stop("No section set. Use db_lake_connect_section() or set section manually.",
-         call. = FALSE)
-  }
-
-  master_con <- .db_master_connect()
-  on.exit(DBI::dbDisconnect(master_con))
-
-  DBI::dbExecute(master_con, "
-    DELETE FROM tables
-    WHERE section_name = ? AND schema_name = ? AND table_name = ?
-  ", params = list(section, schema, table))
-
-  invisible(TRUE)
-}
-
-#' Check if table is public in master catalog (DuckLake mode)
-#' @noRd
-.db_is_public_in_master <- function(schema, table) {
-  section <- .db_get("section")
-  if (is.null(section)) {
-    return(FALSE)
-  }
-
-  master_con <- tryCatch(.db_master_connect(), error = function(e) NULL)
-  if (is.null(master_con)) {
-    return(FALSE)
-  }
-  on.exit(DBI::dbDisconnect(master_con))
-
-  result <- tryCatch({
-    DBI::dbGetQuery(master_con, "
-      SELECT 1 FROM tables
-      WHERE section_name = ? AND schema_name = ? AND table_name = ?
-      LIMIT 1
-    ", params = list(section, schema, table))
-  }, error = function(e) data.frame())
-
-  nrow(result) > 0
-}
-
 
 # ==============================================================================
 # Metadata Table Setup (DuckLake)

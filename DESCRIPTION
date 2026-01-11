@@ -20,8 +20,7 @@ Imports:
     dplyr,
     glue,
     dbplyr,
-    jsonlite,
-    RSQLite
+    jsonlite
 Suggests:
     arrow,
     bslib,

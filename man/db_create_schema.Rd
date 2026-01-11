@@ -4,20 +4,33 @@
 \alias{db_create_schema}
 \title{Create a new schema in DuckLake}
 \usage{
-db_create_schema(schema)
+db_create_schema(schema, path = NULL)
 }
 \arguments{
 \item{schema}{Schema name to create}
+
+\item{path}{Optional data path for this schema. Files for tables in this
+schema will be stored under this path. Use this to enable folder-based
+access control (e.g., different teams have access to different paths).}
 }
 \value{
 Invisibly returns the schema name
 }
 \description{
-Create a new schema in DuckLake
+Creates a new schema in the DuckLake catalog. In DuckLake 0.2+,
+schemas can have custom data paths, enabling folder-based access control.
 }
 \examples{
 \dontrun{
 db_lake_connect()
-db_create_schema("trade")
+
+# Simple schema (uses default data path)
+db_create_schema("reference")
+
+# Schema with custom path for access control
+db_create_schema("trade", path = "//CSO-NAS/DataLake/trade/")
+db_create_schema("labour", path = "//CSO-NAS/DataLake/labour/")
+
+# Now folder ACLs on //CSO-NAS/DataLake/trade/ control access to trade schema
 }
 }

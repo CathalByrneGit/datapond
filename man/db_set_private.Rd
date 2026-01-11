@@ -2,34 +2,28 @@
 % Please edit documentation in R/docs.R
 \name{db_set_private}
 \alias{db_set_private}
-\title{Remove a dataset/table from the public catalog}
+\title{Remove a dataset from the public catalog (Hive mode only)}
 \usage{
-db_set_private(section = NULL, dataset = NULL, schema = "main", table = NULL)
+db_set_private(section, dataset)
 }
 \arguments{
-\item{section}{Section name (hive mode), or NULL in DuckLake mode}
+\item{section}{Section name}
 
-\item{dataset}{Dataset name (hive mode only)}
-
-\item{schema}{Schema name (DuckLake mode, default "main")}
-
-\item{table}{Table name (DuckLake mode only)}
+\item{dataset}{Dataset name}
 }
 \value{
 Invisibly returns TRUE
 }
 \description{
 Removes metadata from the public discovery catalog.
-The dataset/table and its data remain unchanged.
+The dataset and its data remain unchanged.
+
+This function is only available in hive mode. In DuckLake mode, use
+schema paths with folder ACLs to control access.
 }
 \examples{
 \dontrun{
-# Hive mode
 db_connect("//CSO-NAS/DataLake")
 db_set_private(section = "Trade", dataset = "Imports")
-
-# DuckLake mode
-db_lake_connect_section("trade")
-db_set_private(schema = "main", table = "imports")
 }
 }

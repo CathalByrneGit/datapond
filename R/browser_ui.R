@@ -207,46 +207,51 @@ db_browser_ui <- function(id, height = "500px") {
             )
           )
         } else {
-          # DuckLake mode UI
+          # DuckLake mode - access control via schema paths
           shiny::tagList(
-            shiny::fluidRow(
-              shiny::column(4,
-                shiny::actionButton(ns("refresh_public"), "Refresh Catalog",
-                                    icon = shiny::icon("sync"),
-                                    class = "btn-primary")
-              ),
-              shiny::column(4,
-                shiny::uiOutput(ns("current_section_display"))
+            shiny::div(
+              class = "alert alert-info",
+              shiny::icon("info-circle"),
+              shiny::tags$strong(" DuckLake Access Control"),
+              shiny::p(class = "mb-0 mt-2",
+                "In DuckLake mode, access control is managed through schema paths ",
+                "and folder-level permissions (ACLs)."
               )
             ),
             shiny::hr(),
-            shiny::h5("Public Tables"),
-            shiny::p(class = "text-muted",
-                     "Tables published to the master discovery catalog for organisation-wide discovery."),
-            DT::dataTableOutput(ns("public_catalog_table"), height = "300px"),
-            shiny::hr(),
-            shiny::h5("Registered Sections"),
-            shiny::p(class = "text-muted",
-                     "Sections registered in the master catalog."),
-            DT::dataTableOutput(ns("registered_sections_table"), height = "200px"),
-            shiny::hr(),
-            shiny::h5("Manage Public Status"),
-            shiny::p(class = "text-muted",
-                     "Select a table from the tree, then use these buttons to manage its public status."),
-            shiny::fluidRow(
-              shiny::column(6,
-                shiny::uiOutput(ns("public_status_display"))
+            shiny::h5("How Access Control Works"),
+            shiny::tags$ul(
+              shiny::tags$li(
+                shiny::tags$strong("Schema Paths: "),
+                "Each schema can have a custom data path using ",
+                shiny::tags$code("db_create_schema(name, path = '...')"),
+                ". Tables in that schema store their data in the specified folder."
               ),
-              shiny::column(3,
-                shiny::actionButton(ns("make_public"), "Make Public",
-                                    icon = shiny::icon("globe"),
-                                    class = "btn-success btn-sm")
+              shiny::tags$li(
+                shiny::tags$strong("Folder ACLs: "),
+                "Use your file system's access controls (Windows ACLs, POSIX permissions) ",
+                "on the schema data folders to control who can read/write data."
               ),
-              shiny::column(3,
-                shiny::actionButton(ns("make_private"), "Make Private",
-                                    icon = shiny::icon("lock"),
-                                    class = "btn-warning btn-sm")
+              shiny::tags$li(
+                shiny::tags$strong("Discovery: "),
+                "Use ", shiny::tags$code("db_dictionary()"), " and ",
+                shiny::tags$code("db_search()"), " for data discovery."
               )
+            ),
+            shiny::hr(),
+            shiny::h5("Example"),
+            shiny::tags$pre(
+              style = "background-color: #f8f9fa; padding: 10px; border-radius: 4px;",
+              '# Create schemas with custom paths
+db_create_schema("trade", path = "//server/data/trade/")
+db_create_schema("labour", path = "//server/data/labour/")
+
+# Folder ACLs on //server/data/trade/ control trade schema access
+# Folder ACLs on //server/data/labour/ control labour schema access
+
+# Check schema path
+db_get_schema_path("trade")
+#> "//server/data/trade/"'
             )
           )
         }
