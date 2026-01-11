@@ -808,6 +808,29 @@ organisation-wide visibility.</p>
 <span><span class="fu"><a href="../reference/db_switch_section.html">db_switch_section</a></span><span class="op">(</span><span class="st">"labour"</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level3">
+<h3 id="section-vs-schema-in-ducklake">Section vs Schema in DuckLake<a class="anchor" aria-label="anchor" href="#section-vs-schema-in-ducklake"></a>
+</h3>
+<p>In DuckLake mode, both <strong>section</strong> and
+<strong>schema</strong> exist but serve different purposes: | Concept |
+What It Is | Purpose | |———|————|———| | <strong>Section</strong> | A
+separate DuckLake catalog file | Ownership boundary - controls who can
+write/publish | | <strong>Schema</strong> | A namespace within a catalog
+| Logical grouping of related tables |</p>
+<p>A section might contain multiple schemas:</p>
+<pre><code>trade/catalog.sqlite          ← Section (owned by Trade Team)
+├── main.imports              ← schema.table
+├── main.exports
+├── staging.imports_draft     ← Different schema for work-in-progress
+└── reference.countries       ← Reference data schema</code></pre>
+<p><strong>Key difference</strong>: - <strong>Section</strong> = who
+owns it (security boundary, controlled by file permissions) -
+<strong>Schema</strong> = how it’s organised (logical boundary, no
+access control)</p>
+<p>Only the Trade Team can make <code>trade.main.imports</code> public
+because they own the <code>trade/</code> section. The schema is just for
+organisation within their catalog.</p>
+</div>
+<div class="section level3">
 <h3 id="unified-api">Unified API<a class="anchor" aria-label="anchor" href="#unified-api"></a>
 </h3>
 <p>The same functions work in both modes:</p>
@@ -857,7 +880,7 @@ organisation-wide visibility.</p>
 <div class="section level3">
 <h3 id="publishing-data-producer">Publishing Data (Producer)<a class="anchor" aria-label="anchor" href="#publishing-data-producer"></a>
 </h3>
-<div class="sourceCode" id="cb30"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb31"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/CathalByrneGit/datapond" class="external-link">datapond</a></span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Connect with SQLite catalog</span></span>
@@ -896,7 +919,7 @@ organisation-wide visibility.</p>
 <div class="section level3">
 <h3 id="consuming-data-consumer">Consuming Data (Consumer)<a class="anchor" aria-label="anchor" href="#consuming-data-consumer"></a>
 </h3>
-<div class="sourceCode" id="cb31"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb32"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/CathalByrneGit/datapond" class="external-link">datapond</a></span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Connect (read-only access is fine)</span></span>
