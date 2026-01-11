@@ -330,15 +330,30 @@ db_create_schema <- function(schema, path = NULL) {
     stop("No DuckLake catalog configured. Use db_lake_connect() first.", call. = FALSE)
   }
 
-  if (!is.null(path)) {
-    # DuckLake 0.2+ path-based schema for access control
-    sql <- glue::glue("CREATE SCHEMA IF NOT EXISTS {catalog}.{schema} WITH (path = '{path}')")
-  } else {
-    sql <- glue::glue("CREATE SCHEMA IF NOT EXISTS {catalog}.{schema}")
-  }
+  # Create the schema
+  sql <- glue::glue("CREATE SCHEMA IF NOT EXISTS {catalog}.{schema}")
   DBI::dbExecute(con, sql)
 
+  # If path is provided, update the ducklake metadata to set the custom path
+  # DuckLake 0.2+ stores path info in _ducklake_metadata.ducklake_schema
   if (!is.null(path)) {
+    # Normalize path and determine if it's absolute
+    path <- normalizePath(path, mustWork = FALSE)
+    is_absolute <- grepl("^(/|[A-Za-z]:)", path)
+
+    tryCatch({
+      # Update the schema's path in the metadata table
+      update_sql <- glue::glue("
+        UPDATE {catalog}._ducklake_metadata.ducklake_schema
+        SET path = '{path}',
+            path_is_relative = {if (is_absolute) 'false' else 'true'}
+        WHERE schema_name = '{schema}'
+      ")
+      DBI::dbExecute(con, update_sql)
+    }, error = function(e) {
+      warning("Could not set schema path (DuckLake 0.2+ required): ", e$message, call. = FALSE)
+    })
+
     message("Schema created: ", catalog, ".", schema, " (path: ", path, ")")
   } else {
     message("Schema created: ", catalog, ".", schema)
@@ -387,7 +402,7 @@ db_get_schema_path <- function(schema) {
     data.frame(path = character(0))
   })
 
-  if (nrow(result) == 0 || is.na(result$path[1])) {
+  if (nrow(result) == 0 || is.na(result$path[1]) || result$path[1] == "") {
     return(NULL)
   }
   result$path[1]
