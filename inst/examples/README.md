@@ -1,11 +1,11 @@
-# csolake Examples
+# datapond Examples
 
 This directory contains example scripts demonstrating package features.
 
 ## Running Examples
 
 ```r
-library(csolake)
+library(datapond)
 
 # List available examples
 run_example()
@@ -18,7 +18,7 @@ run_example("browser_demo_ducklake")
 Or source directly:
 
 ```r
-source(system.file("examples", "browser_demo_hive.R", package = "csolake"))
+source(system.file("examples", "browser_demo_hive.R", package = "datapond"))
 ```
 
 ## Available Examples

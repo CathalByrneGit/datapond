@@ -24,19 +24,19 @@ NULL
   if (!is.null(con)) {
     try(DBI::dbDisconnect(con, shutdown = TRUE), silent = TRUE)
   }
-  
+
   # Clear the environment
-  if (exists(".db_env", envir = asNamespace("csolake"), inherits = FALSE)) {
+  if (exists(".db_env", envir = asNamespace("datapond"), inherits = FALSE)) {
     rm(list = ls(envir = .db_env), envir = .db_env)
   }
-  
+
   invisible()
 }
 
 .onAttach <- function(libname, pkgname) {
 
   packageStartupMessage(
-    "csolake ", utils::packageVersion("csolake"), "\n",
+    "datapond ", utils::packageVersion("datapond"), "\n",
     "Use db_connect() for hive mode or db_lake_connect() for DuckLake mode."
   )
 }

@@ -3,12 +3,12 @@
 # Interactive demo of db_browser() with sample DuckLake data
 #
 # Run with:
-#   source(system.file("examples", "browser_demo_ducklake.R", package = "csolake"))
+#   source(system.file("examples", "browser_demo_ducklake.R", package = "datapond"))
 #
 # Or use the helper:
-#   csolake::run_example("browser_demo_ducklake")
+#   datapond::run_example("browser_demo_ducklake")
 
-library(csolake)
+library(datapond)
 
 # Create a temp directory for our test data lake
 lake_path <- file.path(tempdir(), "test_ducklake")
@@ -116,9 +116,9 @@ db_describe(
   tags = c("trade", "monthly", "imports")
 )
 
-db_describe_column(schema = "trade", table = "imports", 
+db_describe_column(schema = "trade", table = "imports",
                    column = "value",
-                   description = "Import value", 
+                   description = "Import value",
                    units = "EUR (thousands)")
 
 db_describe(

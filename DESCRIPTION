@@ -1,9 +1,9 @@
-Package: csolake
-Title: CSO Data Lake Infrastructure for R
+Package: datapond
+Title:  Local Data Lake Infrastructure for R
 Version: 0.1.0
 Authors@R: 
     person("Cathal", "Byrne", email = "cathal.byrne@cso.ie", role = c("aut", "cre"))
-Description: Provides a unified interface for working with CSO data infrastructure.
+Description: Provides a unified interface for working with local data infrastructure.
     Supports two storage backends: a hive-partitioned parquet lake (similar to 
     existing SAS storage) and DuckLake (with time travel capabilities). Facilitates
     data sharing between sections with built-in governance, access control via
@@ -32,6 +32,6 @@ Suggests:
     rmarkdown,
     withr
 Config/testthat/edition: 3
-URL: https://github.com/CathalByrneGit/csolake, https://cathalbyrnegit.github.io/csolake/
-BugReports: https://github.com/CathalByrneGit/csolake/issues
+URL: https://github.com/CathalByrneGit/datapond, https://cathalbyrnegit.github.io/datapond/
+BugReports: https://github.com/CathalByrneGit/datapond/issues
 VignetteBuilder: knitr

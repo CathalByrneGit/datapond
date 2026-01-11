@@ -6,77 +6,77 @@
 
 test_that("db_list_sections errors when not connected", {
   clean_db_env()
-  
+
   expect_error(db_list_sections(), "Not connected")
 })
 
 test_that("db_list_sections errors in DuckLake mode", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
   clean_db_env()
-  
+
   temp_dir <- tempdir()
   db_lake_connect(
     metadata_path = file.path(temp_dir, "test_mode.ducklake"),
     data_path = temp_dir
   )
-  
+
   expect_error(db_list_sections(), "DuckLake mode")
-  
+
   clean_db_env()
 })
 
 test_that("db_list_sections returns section folders", {
   clean_db_env()
-  
+
   temp_dir <- tempfile(pattern = "sections_test_")
   dir.create(temp_dir)
-  
+
   # Create some section folders
   dir.create(file.path(temp_dir, "Trade"))
   dir.create(file.path(temp_dir, "Labour"))
   dir.create(file.path(temp_dir, "Health"))
   dir.create(file.path(temp_dir, ".hidden"))  # Should be filtered out
-  
+
   db_connect(path = temp_dir)
-  
+
   sections <- db_list_sections()
-  
+
   expect_equal(sort(sections), c("Health", "Labour", "Trade"))
   expect_false(".hidden" %in% sections)
-  
+
   clean_db_env()
   unlink(temp_dir, recursive = TRUE)
 })
 
 test_that("db_list_sections handles empty directory", {
   clean_db_env()
-  
+
   temp_dir <- tempfile(pattern = "empty_sections_test_")
   dir.create(temp_dir)
-  
+
   db_connect(path = temp_dir)
-  
+
   sections <- db_list_sections()
-  
+
   expect_equal(length(sections), 0)
-  
+
   clean_db_env()
   unlink(temp_dir, recursive = TRUE)
 })
 
 test_that("db_list_sections errors for non-existent path", {
   clean_db_env()
-  
+
   # Connect with a path that will be deleted
   temp_dir <- tempfile(pattern = "delete_me_")
   dir.create(temp_dir)
   db_connect(path = temp_dir)
-  
+
   # Delete the path
   unlink(temp_dir, recursive = TRUE)
-  
+
   expect_error(db_list_sections(), "does not exist")
-  
+
   clean_db_env()
 })
 
@@ -86,42 +86,42 @@ test_that("db_list_sections errors for non-existent path", {
 
 test_that("db_list_datasets errors when not connected", {
   clean_db_env()
-  
+
   expect_error(db_list_datasets("Trade"), "Not connected")
 })
 
 test_that("db_list_datasets errors in DuckLake mode", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
   clean_db_env()
-  
+
   temp_dir <- tempdir()
   db_lake_connect(
     metadata_path = file.path(temp_dir, "test_mode2.ducklake"),
     data_path = temp_dir
   )
-  
+
   expect_error(db_list_datasets("Trade"), "DuckLake mode")
-  
+
   clean_db_env()
 })
 
 test_that("db_list_datasets validates section name", {
   clean_db_env()
   db_connect(path = tempdir())
-  
+
   expect_error(db_list_datasets(""), "non-empty")
   expect_error(db_list_datasets("Trade/Imports"), "invalid characters")
   expect_error(db_list_datasets("../etc"), "invalid characters")
-  
+
   clean_db_env()
 })
 
 test_that("db_list_datasets returns dataset folders", {
   clean_db_env()
-  
+
   temp_dir <- tempfile(pattern = "datasets_test_")
   dir.create(temp_dir)
-  
+
   # Create section with datasets
   section_path <- file.path(temp_dir, "Trade")
   dir.create(section_path)
@@ -129,28 +129,28 @@ test_that("db_list_datasets returns dataset folders", {
   dir.create(file.path(section_path, "Exports"))
   dir.create(file.path(section_path, ".hidden"))  # Should be filtered
   dir.create(file.path(section_path, "year=2024"))  # Partition folder, should be filtered
-  
+
   db_connect(path = temp_dir)
-  
+
   datasets <- db_list_datasets("Trade")
-  
+
   expect_equal(sort(datasets), c("Exports", "Imports"))
   expect_false(".hidden" %in% datasets)
   expect_false("year=2024" %in% datasets)
-  
+
   clean_db_env()
   unlink(temp_dir, recursive = TRUE)
 })
 
 test_that("db_list_datasets errors for non-existent section", {
   clean_db_env()
-  
+
   temp_dir <- tempfile(pattern = "no_section_test_")
   dir.create(temp_dir)
   db_connect(path = temp_dir)
-  
+
   expect_error(db_list_datasets("NonExistent"), "does not exist")
-  
+
   clean_db_env()
   unlink(temp_dir, recursive = TRUE)
 })
@@ -161,49 +161,49 @@ test_that("db_list_datasets errors for non-existent section", {
 
 test_that("db_dataset_exists errors when not connected", {
   clean_db_env()
-  
+
   expect_error(db_dataset_exists("Trade", "Imports"), "Not connected")
 })
 
 test_that("db_dataset_exists errors in DuckLake mode", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
   clean_db_env()
-  
+
   temp_dir <- tempdir()
   db_lake_connect(
     metadata_path = file.path(temp_dir, "test_mode3.ducklake"),
     data_path = temp_dir
   )
-  
+
   expect_error(db_dataset_exists("Trade", "Imports"), "DuckLake mode")
-  
+
   clean_db_env()
 })
 
 test_that("db_dataset_exists validates names", {
   clean_db_env()
   db_connect(path = tempdir())
-  
+
   expect_error(db_dataset_exists("", "test"), "non-empty")
   expect_error(db_dataset_exists("test", ""), "non-empty")
-  
+
   clean_db_env()
 })
 
 test_that("db_dataset_exists returns TRUE for existing dataset with parquet files", {
   skip_if_not_installed("arrow")
   clean_db_env()
-  
+
   temp_dir <- tempfile(pattern = "exists_test_")
   dir.create(temp_dir)
-  
+
   # Create dataset with parquet file
   dataset_path <- file.path(temp_dir, "Trade", "Imports")
   dir.create(dataset_path, recursive = TRUE)
-  
+
   db_connect(path = temp_dir)
-  con <- csolake:::.db_get_con()
-  
+  con <- datapond:::.db_get_con()
+
   # Write a parquet file
   df <- data.frame(id = 1:3)
   duckdb::duckdb_register(con, "df", df)
@@ -212,41 +212,41 @@ test_that("db_dataset_exists returns TRUE for existing dataset with parquet file
     file.path(dataset_path, "data.parquet")
   ))
   duckdb::duckdb_unregister(con, "df")
-  
+
   expect_true(db_dataset_exists("Trade", "Imports"))
-  
+
   clean_db_env()
   unlink(temp_dir, recursive = TRUE)
 })
 
 test_that("db_dataset_exists returns FALSE for empty directory", {
   clean_db_env()
-  
+
   temp_dir <- tempfile(pattern = "empty_dataset_test_")
   dir.create(temp_dir)
-  
+
   # Create empty dataset folder (no parquet files)
   dataset_path <- file.path(temp_dir, "Trade", "Imports")
   dir.create(dataset_path, recursive = TRUE)
-  
+
   db_connect(path = temp_dir)
-  
+
   expect_false(db_dataset_exists("Trade", "Imports"))
-  
+
   clean_db_env()
   unlink(temp_dir, recursive = TRUE)
 })
 
 test_that("db_dataset_exists returns FALSE for non-existent directory", {
   clean_db_env()
-  
+
   temp_dir <- tempfile(pattern = "nonexist_test_")
   dir.create(temp_dir)
-  
+
   db_connect(path = temp_dir)
-  
+
   expect_false(db_dataset_exists("Trade", "NonExistent"))
-  
+
   clean_db_env()
   unlink(temp_dir, recursive = TRUE)
 })
@@ -254,18 +254,18 @@ test_that("db_dataset_exists returns FALSE for non-existent directory", {
 test_that("db_dataset_exists finds parquet files in partition subfolders", {
   skip_if_not_installed("arrow")
   clean_db_env()
-  
+
   temp_dir <- tempfile(pattern = "partition_exists_test_")
   dir.create(temp_dir)
-  
+
   # Create partitioned dataset
   dataset_path <- file.path(temp_dir, "Trade", "Imports")
   partition_path <- file.path(dataset_path, "year=2024")
   dir.create(partition_path, recursive = TRUE)
-  
+
   db_connect(path = temp_dir)
-  con <- csolake:::.db_get_con()
-  
+  con <- datapond:::.db_get_con()
+
   # Write parquet file in partition subfolder
   df <- data.frame(id = 1:3, value = c(10, 20, 30))
   duckdb::duckdb_register(con, "df", df)
@@ -274,9 +274,9 @@ test_that("db_dataset_exists finds parquet files in partition subfolders", {
     file.path(partition_path, "data.parquet")
   ))
   duckdb::duckdb_unregister(con, "df")
-  
+
   expect_true(db_dataset_exists("Trade", "Imports"))
-  
+
   clean_db_env()
   unlink(temp_dir, recursive = TRUE)
 })
@@ -287,44 +287,44 @@ test_that("db_dataset_exists finds parquet files in partition subfolders", {
 
 test_that("db_list_schemas errors when not connected", {
   clean_db_env()
-  
+
   expect_error(db_list_schemas(), "Not connected")
 })
 
 test_that("db_list_schemas errors in hive mode", {
   clean_db_env()
   db_connect(path = "/test")
-  
+
   expect_error(db_list_schemas(), "hive mode")
-  
+
   clean_db_env()
 })
 
 test_that("db_list_schemas returns schema names", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
   clean_db_env()
-  
+
   temp_dir <- tempfile(pattern = "schemas_test_")
   dir.create(temp_dir)
-  
+
   db_lake_connect(
     catalog = "test",
     metadata_path = file.path(temp_dir, "catalog.ducklake"),
     data_path = temp_dir
   )
-  
-  con <- csolake:::.db_get_con()
-  
+
+  con <- datapond:::.db_get_con()
+
   # Create additional schemas
   DBI::dbExecute(con, "CREATE SCHEMA test.trade")
   DBI::dbExecute(con, "CREATE SCHEMA test.labour")
-  
+
   schemas <- db_list_schemas()
-  
+
   expect_true("main" %in% schemas)
   expect_true("trade" %in% schemas)
   expect_true("labour" %in% schemas)
-  
+
   clean_db_env()
   unlink(temp_dir, recursive = TRUE)
 })
@@ -335,59 +335,59 @@ test_that("db_list_schemas returns schema names", {
 
 test_that("db_list_tables errors when not connected", {
   clean_db_env()
-  
+
   expect_error(db_list_tables(), "Not connected")
 })
 
 test_that("db_list_tables errors in hive mode", {
   clean_db_env()
   db_connect(path = "/test")
-  
+
   expect_error(db_list_tables(), "hive mode")
-  
+
   clean_db_env()
 })
 
 test_that("db_list_tables validates schema name", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
   clean_db_env()
-  
+
   temp_dir <- tempdir()
   db_lake_connect(
     metadata_path = file.path(temp_dir, "test_val.ducklake"),
     data_path = temp_dir
   )
-  
+
   expect_error(db_list_tables(""), "non-empty")
   expect_error(db_list_tables("test/schema"), "invalid characters")
-  
+
   clean_db_env()
 })
 
 test_that("db_list_tables returns table names", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
   clean_db_env()
-  
+
   temp_dir <- tempfile(pattern = "tables_test_")
   dir.create(temp_dir)
-  
+
   db_lake_connect(
     catalog = "test",
     metadata_path = file.path(temp_dir, "catalog.ducklake"),
     data_path = temp_dir
   )
-  
-  con <- csolake:::.db_get_con()
-  
+
+  con <- datapond:::.db_get_con()
+
   # Create tables
   DBI::dbExecute(con, "CREATE TABLE test.main.products (id INTEGER)")
   DBI::dbExecute(con, "CREATE TABLE test.main.orders (id INTEGER)")
-  
+
   tables <- db_list_tables()
-  
+
   expect_true("products" %in% tables)
   expect_true("orders" %in% tables)
-  
+
   clean_db_env()
   unlink(temp_dir, recursive = TRUE)
 })
@@ -395,32 +395,32 @@ test_that("db_list_tables returns table names", {
 test_that("db_list_tables filters by schema", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
   clean_db_env()
-  
+
   temp_dir <- tempfile(pattern = "schema_filter_test_")
   dir.create(temp_dir)
-  
+
   db_lake_connect(
     catalog = "test",
     metadata_path = file.path(temp_dir, "catalog.ducklake"),
     data_path = temp_dir
   )
-  
-  con <- csolake:::.db_get_con()
-  
+
+  con <- datapond:::.db_get_con()
+
   # Create tables in different schemas
   DBI::dbExecute(con, "CREATE TABLE test.main.main_table (id INTEGER)")
   DBI::dbExecute(con, "CREATE SCHEMA test.other")
   DBI::dbExecute(con, "CREATE TABLE test.other.other_table (id INTEGER)")
-  
+
   main_tables <- db_list_tables("main")
   other_tables <- db_list_tables("other")
-  
+
   expect_true("main_table" %in% main_tables)
   expect_false("other_table" %in% main_tables)
-  
+
   expect_true("other_table" %in% other_tables)
   expect_false("main_table" %in% other_tables)
-  
+
   clean_db_env()
   unlink(temp_dir, recursive = TRUE)
 })
@@ -431,47 +431,47 @@ test_that("db_list_tables filters by schema", {
 
 test_that("db_list_views errors when not connected", {
   clean_db_env()
-  
+
   expect_error(db_list_views(), "Not connected")
 })
 
 test_that("db_list_views errors in hive mode", {
   clean_db_env()
   db_connect(path = "/test")
-  
+
   expect_error(db_list_views(), "hive mode")
-  
+
   clean_db_env()
 })
 
 test_that("db_list_views returns view names", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
   clean_db_env()
-  
+
   temp_dir <- tempfile(pattern = "views_test_")
   dir.create(temp_dir)
-  
+
   db_lake_connect(
     catalog = "test",
     metadata_path = file.path(temp_dir, "catalog.ducklake"),
     data_path = temp_dir
   )
-  
-  con <- csolake:::.db_get_con()
-  
+
+  con <- datapond:::.db_get_con()
+
   # Create table and views
   DBI::dbExecute(con, "CREATE TABLE test.main.products (id INTEGER, active BOOLEAN)")
-  DBI::dbExecute(con, "CREATE VIEW test.main.active_products AS 
+  DBI::dbExecute(con, "CREATE VIEW test.main.active_products AS
     SELECT * FROM test.main.products WHERE active = true")
-  DBI::dbExecute(con, "CREATE VIEW test.main.product_count AS 
+  DBI::dbExecute(con, "CREATE VIEW test.main.product_count AS
     SELECT COUNT(*) as n FROM test.main.products")
-  
+
   views <- db_list_views()
-  
+
   expect_true("active_products" %in% views)
   expect_true("product_count" %in% views)
   expect_false("products" %in% views)  # Table, not view
-  
+
   clean_db_env()
   unlink(temp_dir, recursive = TRUE)
 })
@@ -482,54 +482,54 @@ test_that("db_list_views returns view names", {
 
 test_that("db_table_exists errors when not connected", {
   clean_db_env()
-  
+
   expect_error(db_table_exists(table = "test"), "Not connected")
 })
 
 test_that("db_table_exists errors in hive mode", {
   clean_db_env()
   db_connect(path = "/test")
-  
+
   expect_error(db_table_exists(table = "test"), "hive mode")
-  
+
   clean_db_env()
 })
 
 test_that("db_table_exists validates names", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
   clean_db_env()
-  
+
   temp_dir <- tempdir()
   db_lake_connect(
     metadata_path = file.path(temp_dir, "test_val2.ducklake"),
     data_path = temp_dir
   )
-  
+
   expect_error(db_table_exists(table = ""), "non-empty")
   expect_error(db_table_exists(schema = "", table = "test"), "non-empty")
-  
+
   clean_db_env()
 })
 
 test_that("db_table_exists returns TRUE for existing table", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
   clean_db_env()
-  
+
   temp_dir <- tempfile(pattern = "table_exists_test_")
   dir.create(temp_dir)
-  
+
   db_lake_connect(
     catalog = "test",
     metadata_path = file.path(temp_dir, "catalog.ducklake"),
     data_path = temp_dir
   )
-  
-  con <- csolake:::.db_get_con()
+
+  con <- datapond:::.db_get_con()
   DBI::dbExecute(con, "CREATE TABLE test.main.products (id INTEGER)")
-  
+
   expect_true(db_table_exists(table = "products"))
   expect_false(db_table_exists(table = "nonexistent"))
-  
+
   clean_db_env()
   unlink(temp_dir, recursive = TRUE)
 })
@@ -537,23 +537,23 @@ test_that("db_table_exists returns TRUE for existing table", {
 test_that("db_table_exists respects schema parameter", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
   clean_db_env()
-  
+
   temp_dir <- tempfile(pattern = "schema_exists_test_")
   dir.create(temp_dir)
-  
+
   db_lake_connect(
     catalog = "test",
     metadata_path = file.path(temp_dir, "catalog.ducklake"),
     data_path = temp_dir
   )
-  
-  con <- csolake:::.db_get_con()
+
+  con <- datapond:::.db_get_con()
   DBI::dbExecute(con, "CREATE TABLE test.main.products (id INTEGER)")
   DBI::dbExecute(con, "CREATE SCHEMA test.other")
-  
+
   expect_true(db_table_exists(schema = "main", table = "products"))
   expect_false(db_table_exists(schema = "other", table = "products"))
-  
+
   clean_db_env()
   unlink(temp_dir, recursive = TRUE)
 })
@@ -564,53 +564,53 @@ test_that("db_table_exists respects schema parameter", {
 
 test_that("db_create_schema errors when not connected", {
   clean_db_env()
-  
+
   expect_error(db_create_schema("test"), "Not connected")
 })
 
 test_that("db_create_schema errors in hive mode", {
   clean_db_env()
   db_connect(path = "/test")
-  
+
   expect_error(db_create_schema("test"), "hive mode")
-  
+
   clean_db_env()
 })
 
 test_that("db_create_schema validates name", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
   clean_db_env()
-  
+
   temp_dir <- tempdir()
   db_lake_connect(
     metadata_path = file.path(temp_dir, "test_val3.ducklake"),
     data_path = temp_dir
   )
-  
+
   expect_error(db_create_schema(""), "non-empty")
   expect_error(db_create_schema("test/schema"), "invalid characters")
-  
+
   clean_db_env()
 })
 
 test_that("db_create_schema creates new schema", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
   clean_db_env()
-  
+
   temp_dir <- tempfile(pattern = "create_schema_test_")
   dir.create(temp_dir)
-  
+
   db_lake_connect(
     catalog = "test",
     metadata_path = file.path(temp_dir, "catalog.ducklake"),
     data_path = temp_dir
   )
-  
+
   expect_message(db_create_schema("trade"), "Schema created")
-  
+
   schemas <- db_list_schemas()
   expect_true("trade" %in% schemas)
-  
+
   clean_db_env()
   unlink(temp_dir, recursive = TRUE)
 })
@@ -618,20 +618,20 @@ test_that("db_create_schema creates new schema", {
 test_that("db_create_schema is idempotent", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
   clean_db_env()
-  
+
   temp_dir <- tempfile(pattern = "idempotent_schema_test_")
   dir.create(temp_dir)
-  
+
   db_lake_connect(
     catalog = "test",
     metadata_path = file.path(temp_dir, "catalog.ducklake"),
     data_path = temp_dir
   )
-  
+
   # Create twice - should not error
   expect_message(db_create_schema("trade"), "Schema created")
   expect_message(db_create_schema("trade"), "Schema created")
-  
+
   clean_db_env()
   unlink(temp_dir, recursive = TRUE)
 })
@@ -639,19 +639,19 @@ test_that("db_create_schema is idempotent", {
 test_that("db_create_schema returns schema name invisibly", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
   clean_db_env()
-  
+
   temp_dir <- tempfile(pattern = "return_schema_test_")
   dir.create(temp_dir)
-  
+
   db_lake_connect(
     catalog = "test",
     metadata_path = file.path(temp_dir, "catalog.ducklake"),
     data_path = temp_dir
   )
-  
+
   result <- db_create_schema("labour")
   expect_equal(result, "labour")
-  
+
   clean_db_env()
   unlink(temp_dir, recursive = TRUE)
 })

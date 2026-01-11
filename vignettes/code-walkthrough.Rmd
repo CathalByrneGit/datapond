@@ -15,14 +15,14 @@ knitr::opts_chunk$set(
 )
 ```
 
-This vignette explains how `csolake` works under the hood. It walks through each file in the package, explaining what the code does and why it's designed that way.
+This vignette explains how `datapond` works under the hood. It walks through each file in the package, explaining what the code does and why it's designed that way.
 
 ---
 
 ## Package Structure
 
 ```
-csolake/
+datapond/
 ├── DESCRIPTION          # Package metadata
 ├── NAMESPACE            # Exports and imports
 ├── LICENSE              # MIT license
@@ -789,7 +789,7 @@ db_diff <- function(schema, table, from_version, to_version, key_cols = NULL) {
 
 .onAttach <- function(libname, pkgname) {
   packageStartupMessage(
-    "csolake ", utils::packageVersion("csolake"), "\n",
+    "datapond ", utils::packageVersion("datapond"), "\n",
     "Use db_connect() for hive mode or db_lake_connect() for DuckLake mode."
   )
 }

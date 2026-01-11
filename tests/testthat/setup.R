@@ -6,22 +6,22 @@
 # ==============================================================================
 
 #' Clean up the package's internal connection state
-#' 
+#'
 #' This should be called between tests to ensure isolation
 clean_db_env <- function() {
-  env <- csolake:::.db_env
-  
+  env <- datapond:::.db_env
+
   # Disconnect if connected
   tryCatch({
-    if (exists("con", envir = env, inherits = FALSE) && 
+    if (exists("con", envir = env, inherits = FALSE) &&
         DBI::dbIsValid(env$con)) {
       DBI::dbDisconnect(env$con, shutdown = TRUE)
     }
   }, error = function(e) NULL)
-  
+
   # Clear all state
   rm(list = ls(envir = env), envir = env)
-  
+
   invisible(TRUE)
 }
 
@@ -37,12 +37,12 @@ ducklake_available <- function() {
 }
 
 #' Create a temporary directory for test data
-#' 
+#'
 #' @return List with temp_dir, metadata_path, and data_path
 create_test_lake <- function(prefix = "test") {
   temp_dir <- tempfile(pattern = paste0(prefix, "_lake_"))
   dir.create(temp_dir, recursive = TRUE)
-  
+
   list(
     temp_dir = temp_dir,
     metadata_path = file.path(temp_dir, "catalog.ducklake"),

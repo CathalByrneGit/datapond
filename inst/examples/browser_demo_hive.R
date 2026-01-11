@@ -3,12 +3,12 @@
 # Interactive demo of db_browser() with sample hive-partitioned data
 #
 # Run with:
-#   source(system.file("examples", "browser_demo_hive.R", package = "csolake"))
+#   source(system.file("examples", "browser_demo_hive.R", package = "datapond"))
 #
 # Or use the helper:
-#   csolake::run_example("browser_demo_hive")
+#   datapond::run_example("browser_demo_hive")
 
-library(csolake)
+library(datapond)
 
 # Create a temp directory for our test data lake
 lake_path <- file.path(tempdir(), "test_lake")

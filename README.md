@@ -1,7 +1,7 @@
 
 <!-- README.md is generated from README.Rmd. Please edit that file -->
 
-# csolake
+# datapond
 
 <!-- badges: start -->
 
@@ -9,7 +9,7 @@
 experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
 <!-- badges: end -->
 
-**csolake** provides a unified R interface for CSO’s internal data
+**datapond** is a simple and ligthweight data lake infrastructure for small to medium data requirements. Provides a unified R interface for duckdb and ducklake internal data
 infrastructure. It supports two storage backends:
 
 1.  **Hive-partitioned Parquet** - familiar folder-based structure
@@ -24,10 +24,10 @@ giving you fast analytical queries without needing a server.
 
 ``` r
 # Install from local source
-devtools::install("path/to/csolake")
+devtools::install("path/to/datapond")
 
 # Or load for development
-devtools::load_all("path/to/csolake")
+devtools::load_all("path/to/datapond")
 ```
 
 ## Quick Start
@@ -35,7 +35,7 @@ devtools::load_all("path/to/csolake")
 ### Hive Mode (Folder-based)
 
 ``` r
-library(csolake)
+library(datapond)
 
 # Connect to the data lake
 db_connect(path = "//CSO-NAS/DataLake")
@@ -82,7 +82,7 @@ db_disconnect()
 ### DuckLake Mode (Time Travel)
 
 ``` r
-library(csolake)
+library(datapond)
 
 # Connect to DuckLake with SQLite catalog (recommended for shared drives)
 db_lake_connect(
@@ -157,7 +157,7 @@ db_disconnect()
 ### Data Documentation & Discovery
 
 ``` r
-library(csolake)
+library(datapond)
 db_connect(path = "//CSO-NAS/DataLake")
 
 # Document your datasets
@@ -194,7 +194,7 @@ writexl::write_xlsx(dict, "data_dictionary.xlsx")
 ### Interactive Browser
 
 ``` r
-library(csolake)
+library(datapond)
 db_connect(path = "//CSO-NAS/DataLake")
 
 # Launch interactive browser

@@ -15,20 +15,20 @@
 #' ui <- fluidPage(
 #'   db_browser_ui("browser1")
 #' )
-#' 
+#'
 #' # In your Shiny app server:
 #' server <- function(input, output, session) {
 #'   db_browser_server("browser1")
 #' }
 #' }
 db_browser_ui <- function(id, height = "500px") {
-  
+
   ns <- shiny::NS(id)
-  
+
   # Get current mode for conditional UI
   curr_mode <- .db_get("mode")
   is_hive <- identical(curr_mode, "hive")
-  
+
   # Sidebar with tree view
   sidebar_content <- shiny::tagList(
     shiny::tags$h5(
@@ -37,22 +37,22 @@ db_browser_ui <- function(id, height = "500px") {
     ),
     shiny::uiOutput(ns("tree_view")),
     shiny::hr(),
-    shiny::actionButton(ns("refresh_tree"), "Refresh", 
+    shiny::actionButton(ns("refresh_tree"), "Refresh",
                         icon = shiny::icon("sync"),
                         class = "btn-sm btn-outline-secondary")
   )
-  
+
   sidebar <- bslib::sidebar(
     title = "Browse",
     id = ns("sidebar"),
     width = 280,
     sidebar_content
   )
-  
+
   # Main content with tabs
   main_content <- bslib::navset_card_tab(
     id = ns("main_tabs"),
-    
+
     # Preview tab
     bslib::nav_panel(
       title = "Preview",
@@ -62,14 +62,14 @@ db_browser_ui <- function(id, height = "500px") {
         shiny::uiOutput(ns("selected_info")),
         shiny::hr(),
         shiny::fluidRow(
-          shiny::column(4, 
-            shiny::numericInput(ns("preview_rows"), "Rows to show:", 
+          shiny::column(4,
+            shiny::numericInput(ns("preview_rows"), "Rows to show:",
                                 value = 100, min = 10, max = 10000, step = 10)
           ),
           shiny::column(4,
             shiny::actionButton(ns("load_preview"), "Load Preview",
                                 icon = shiny::icon("eye"),
-                                class = "btn-primary", 
+                                class = "btn-primary",
                                 style = "margin-top: 25px;")
           )
         ),
@@ -77,7 +77,7 @@ db_browser_ui <- function(id, height = "500px") {
         DT::dataTableOutput(ns("preview_table"), height = height)
       )
     ),
-    
+
     # Metadata tab
     bslib::nav_panel(
       title = "Metadata",
@@ -87,7 +87,7 @@ db_browser_ui <- function(id, height = "500px") {
         shiny::uiOutput(ns("metadata_display"))
       )
     ),
-    
+
     # Search tab
     bslib::nav_panel(
       title = "Search",
@@ -134,7 +134,7 @@ db_browser_ui <- function(id, height = "500px") {
         DT::dataTableOutput(ns("col_search_results"), height = "300px")
       )
     ),
-    
+
     # Dictionary tab
     bslib::nav_panel(
       title = "Dictionary",
@@ -159,7 +159,7 @@ db_browser_ui <- function(id, height = "500px") {
         DT::dataTableOutput(ns("dictionary_table"), height = height)
       )
     ),
-    
+
     # Info tab
     bslib::nav_panel(
       title = "Connection",
@@ -170,10 +170,10 @@ db_browser_ui <- function(id, height = "500px") {
       )
     )
   )
-  
+
   # Combine into page
   bslib::page_sidebar(
-    title = "csolake Browser",
+    title = "datapond Browser",
     sidebar = sidebar,
     main_content,
     theme = bslib::bs_theme(version = 5, bootswatch = "flatly")
