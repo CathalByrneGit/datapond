@@ -972,3 +972,170 @@ test_that("db_sync_catalog reports orphans without removing by default", {
   clean_db_env()
   unlink(temp_dir, recursive = TRUE)
 })
+
+# ==============================================================================
+# Tests for Master Discovery Catalog (DuckLake Multi-Catalog)
+# ==============================================================================
+
+test_that("db_setup_master creates SQLite database with schema", {
+  temp_dir <- tempfile(pattern = "master_setup_test_")
+  dir.create(temp_dir)
+  master_path <- file.path(temp_dir, "_master", "discovery.sqlite")
+
+  expect_message(
+    db_setup_master(master_path),
+    "Master discovery catalog created"
+  )
+
+  expect_true(file.exists(master_path))
+
+  # Check schema
+  con <- DBI::dbConnect(RSQLite::SQLite(), master_path)
+  on.exit(DBI::dbDisconnect(con))
+
+  tables <- DBI::dbListTables(con)
+  expect_true("sections" %in% tables)
+  expect_true("tables" %in% tables)
+
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_register_section adds section to master catalog", {
+  temp_dir <- tempfile(pattern = "register_section_test_")
+  dir.create(temp_dir)
+  master_path <- file.path(temp_dir, "_master", "discovery.sqlite")
+
+  # Set up master
+  db_setup_master(master_path)
+
+  # Register section
+  expect_message(
+    db_register_section(
+      section = "trade",
+      catalog_path = file.path(temp_dir, "trade", "catalog.sqlite"),
+      data_path = file.path(temp_dir, "trade", "data"),
+      description = "Trade statistics",
+      owner = "Trade Team",
+      master_path = master_path
+    ),
+    "Registered section 'trade'"
+  )
+
+  # Verify
+  sections <- db_list_registered_sections(master_path = master_path)
+  expect_equal(nrow(sections), 1)
+  expect_equal(sections$section_name[1], "trade")
+  expect_equal(sections$owner[1], "Trade Team")
+
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_unregister_section removes section from master catalog", {
+  temp_dir <- tempfile(pattern = "unregister_section_test_")
+  dir.create(temp_dir)
+  master_path <- file.path(temp_dir, "_master", "discovery.sqlite")
+
+  db_setup_master(master_path)
+  db_register_section(
+    section = "trade",
+    catalog_path = "test.sqlite",
+    data_path = "test",
+    master_path = master_path
+  )
+
+  expect_message(
+    db_unregister_section("trade", master_path = master_path),
+    "Unregistered section 'trade'"
+  )
+
+  sections <- db_list_registered_sections(master_path = master_path)
+  expect_equal(nrow(sections), 0)
+
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_list_registered_sections lists all sections", {
+  temp_dir <- tempfile(pattern = "list_sections_test_")
+  dir.create(temp_dir)
+  master_path <- file.path(temp_dir, "_master", "discovery.sqlite")
+
+  db_setup_master(master_path)
+
+  # Register multiple sections
+  for (sec in c("trade", "labour", "shared")) {
+    db_register_section(
+      section = sec,
+      catalog_path = paste0(sec, ".sqlite"),
+      data_path = sec,
+      master_path = master_path
+    )
+  }
+
+  sections <- db_list_registered_sections(master_path = master_path)
+  expect_equal(nrow(sections), 3)
+  expect_setequal(sections$section_name, c("trade", "labour", "shared"))
+
+  unlink(temp_dir, recursive = TRUE)
+})
+
+# ==============================================================================
+# Tests for Public Catalog Functions (DuckLake Mode)
+# ==============================================================================
+
+test_that("db_set_public in DuckLake mode requires section to be set", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempdir()
+  db_lake_connect(
+    metadata_path = file.path(temp_dir, "test_no_section.ducklake"),
+    data_path = temp_dir
+  )
+
+  expect_error(
+    db_set_public(schema = "main", table = "test"),
+    "No section set"
+  )
+
+  clean_db_env()
+})
+
+test_that("db_list_public in DuckLake mode returns empty when no master catalog", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempdir()
+
+  # Clear master catalog option
+  old_opt <- getOption("datapond.master_catalog")
+  options(datapond.master_catalog = NULL)
+  on.exit(options(datapond.master_catalog = old_opt), add = TRUE)
+
+  db_lake_connect(
+    metadata_path = file.path(temp_dir, "test_no_master.ducklake"),
+    data_path = temp_dir
+  )
+
+  result <- db_list_public()
+  expect_equal(nrow(result), 0)
+  expect_true("section" %in% names(result))
+  expect_true("schema" %in% names(result))
+
+  clean_db_env()
+})
+
+test_that("db_is_public in DuckLake mode returns FALSE when no section set", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempdir()
+
+  db_lake_connect(
+    metadata_path = file.path(temp_dir, "test_is_public.ducklake"),
+    data_path = temp_dir
+  )
+
+  expect_false(db_is_public(schema = "main", table = "test"))
+
+  clean_db_env()
+})

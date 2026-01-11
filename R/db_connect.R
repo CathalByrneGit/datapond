@@ -396,9 +396,159 @@ db_disconnect <- function() {
   con <- .db_get_con()
   if (is.null(con)) return(invisible(FALSE))
   DBI::dbDisconnect(con, shutdown = TRUE)
-  
+
   # Clear all stored state
   rm(list = ls(envir = .db_env), envir = .db_env)
-  
+
   invisible(TRUE)
+}
+
+
+#' Connect to a DuckLake section via master catalog
+#'
+#' @description Connects to a registered section by looking up its catalog
+#' and data paths from the master discovery catalog. This enables the
+#' `public` parameter on `db_describe()` to sync to the master catalog.
+#'
+#' @param section Section name (must be registered in master catalog)
+#' @param master_path Path to master catalog (uses default if not specified)
+#' @param duckdb_db DuckDB database file path. Use ":memory:" for in-memory.
+#' @param catalog DuckLake catalog name inside DuckDB
+#' @param catalog_type Type of catalog backend (auto-detected from path if not specified)
+#' @param threads Number of DuckDB threads (NULL leaves default)
+#' @param memory_limit e.g. "4GB" (NULL leaves default)
+#' @return DuckDB connection object
+#'
+#' @examples
+#' \dontrun{
+#' # Connect to a section registered in master catalog
+#' db_lake_connect_section("trade")
+#'
+#' # Now db_describe(public=TRUE) will sync to master catalog
+#' db_describe(table = "imports", description = "...", public = TRUE)
+#' }
+#' @export
+db_lake_connect_section <- function(section,
+                                     master_path = NULL,
+                                     duckdb_db = ":memory:",
+                                     catalog = NULL,
+                                     catalog_type = NULL,
+                                     threads = NULL,
+                                     memory_limit = NULL) {
+  section <- .db_validate_name(section, "section")
+
+  # Get master catalog path
+  if (is.null(master_path)) {
+    master_path <- getOption("datapond.master_catalog")
+    if (is.null(master_path)) {
+      stop("master_path not specified and datapond.master_catalog option not set.\n",
+           "Use db_setup_master() first, or specify master_path.", call. = FALSE)
+    }
+  }
+
+  if (!file.exists(master_path)) {
+    stop("Master catalog not found at: ", master_path, "\n",
+         "Use db_setup_master() to create it.", call. = FALSE)
+  }
+
+  # Look up section in master
+  master_con <- DBI::dbConnect(RSQLite::SQLite(), master_path)
+  on.exit(DBI::dbDisconnect(master_con))
+
+  section_info <- DBI::dbGetQuery(master_con, "
+    SELECT catalog_path, data_path FROM sections WHERE section_name = ?
+  ", params = list(section))
+
+  if (nrow(section_info) == 0) {
+    stop("Section '", section, "' not found in master catalog.\n",
+         "Use db_register_section() to register it.", call. = FALSE)
+  }
+
+  section_catalog_path <- section_info$catalog_path[1]
+  section_data_path <- section_info$data_path[1]
+
+  # Auto-detect catalog type from path extension
+  if (is.null(catalog_type)) {
+    if (grepl("\\.sqlite$", section_catalog_path, ignore.case = TRUE)) {
+      catalog_type <- "sqlite"
+    } else if (grepl("\\.ducklake$", section_catalog_path, ignore.case = TRUE)) {
+      catalog_type <- "duckdb"
+    } else if (grepl("^(postgres|host=)", section_catalog_path, ignore.case = TRUE)) {
+      catalog_type <- "postgres"
+    } else {
+      catalog_type <- "sqlite"  # default
+    }
+  }
+
+  # Use section name as catalog name if not specified
+  if (is.null(catalog)) {
+    catalog <- section
+  }
+
+  # Connect using db_lake_connect
+  con <- db_lake_connect(
+    duckdb_db = duckdb_db,
+    catalog = catalog,
+    catalog_type = catalog_type,
+    metadata_path = section_catalog_path,
+    data_path = section_data_path,
+    threads = threads,
+    memory_limit = memory_limit
+  )
+
+  # Store section for master catalog sync
+  assign("section", section, envir = .db_env)
+
+  # Store master path for later use
+  options(datapond.master_catalog = master_path)
+
+  message("Connected to section '", section, "'")
+  con
+}
+
+
+#' Get current section
+#'
+#' @description Returns the name of the currently connected section
+#' (DuckLake mode only).
+#'
+#' @return Section name or NULL if not connected to a section
+#'
+#' @examples
+#' \dontrun{
+#' db_lake_connect_section("trade")
+#' db_current_section()
+#' #> [1] "trade"
+#' }
+#' @export
+db_current_section <- function() {
+  .db_get("section")
+}
+
+
+#' Switch to a different section
+#'
+#' @description Disconnects from the current section and connects to a
+#' different one. Requires master catalog to be configured.
+#'
+#' @param section Section name to switch to
+#' @return DuckDB connection object (invisibly)
+#'
+#' @examples
+#' \dontrun{
+#' db_lake_connect_section("trade")
+#' db_switch_section("labour")
+#' }
+#' @export
+db_switch_section <- function(section) {
+  section <- .db_validate_name(section, "section")
+
+  master_path <- getOption("datapond.master_catalog")
+  if (is.null(master_path)) {
+    stop("No master catalog configured. Use db_lake_connect_section() first.",
+         call. = FALSE)
+  }
+
+  db_disconnect()
+  db_lake_connect_section(section, master_path = master_path)
 }
