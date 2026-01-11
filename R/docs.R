@@ -1553,12 +1553,16 @@ db_register_section <- function(section, catalog_path, data_path,
 
   .db_ensure_master_schema(master_con)
 
-  # Upsert section
+  # Upsert section (convert NULL to NA for RSQLite compatibility)
   DBI::dbExecute(master_con, "
     INSERT OR REPLACE INTO sections
     (section_name, catalog_path, data_path, description, owner, registered_at)
     VALUES (?, ?, ?, ?, ?, datetime('now'))
-  ", params = list(section, catalog_path, data_path, description, owner))
+  ", params = list(
+    section, catalog_path, data_path,
+    if (is.null(description)) NA_character_ else description,
+    if (is.null(owner)) NA_character_ else owner
+  ))
 
   message("Registered section '", section, "' in master catalog")
   invisible(TRUE)
@@ -1659,7 +1663,7 @@ db_list_registered_sections <- function(master_path = NULL) {
     ))$n[1]
   }, error = function(e) NA_integer_)
 
-  # Upsert to master
+  # Upsert to master (convert NULL to NA for RSQLite compatibility)
   DBI::dbExecute(master_con, "
     INSERT OR REPLACE INTO tables
     (section_name, schema_name, table_name, description, owner, tags,
@@ -1667,10 +1671,11 @@ db_list_registered_sections <- function(master_path = NULL) {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
   ", params = list(
     section, schema, table,
-    docs$description, docs$owner,
-    if (!is.null(docs$tags)) paste(docs$tags, collapse = ",") else NULL,
-    if (nrow(cols) > 0) jsonlite::toJSON(cols) else NULL,
-    row_count,
+    if (is.null(docs$description)) NA_character_ else docs$description,
+    if (is.null(docs$owner)) NA_character_ else docs$owner,
+    if (!is.null(docs$tags) && length(docs$tags) > 0) paste(docs$tags, collapse = ",") else NA_character_,
+    if (nrow(cols) > 0) as.character(jsonlite::toJSON(cols)) else NA_character_,
+    if (is.na(row_count)) NA_integer_ else as.integer(row_count),
     format(Sys.time(), "%Y-%m-%d %H:%M:%S")
   ))
 

@@ -498,7 +498,7 @@ test_that("db_set_public errors when not connected", {
   expect_error(db_set_public(section = "Trade", dataset = "Imports"), "Not connected")
 })
 
-test_that("db_set_public errors in DuckLake mode", {
+test_that("db_set_public requires table in DuckLake mode", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
   clean_db_env()
 
@@ -508,7 +508,8 @@ test_that("db_set_public errors in DuckLake mode", {
     data_path = temp_dir
   )
 
-  expect_error(db_set_public(section = "Trade", dataset = "Imports"), "only available in hive mode")
+  # In DuckLake mode, table parameter is required
+  expect_error(db_set_public(section = "Trade", dataset = "Imports"), "table is required")
 
   clean_db_env()
 })
