@@ -13,6 +13,72 @@
   file.path(base_path, section, dataset, "_metadata.json")
 }
 
+# ==============================================================================
+# Public Catalog Helpers (Hive Mode)
+# ==============================================================================
+
+#' Get path to the public catalog folder
+#' @noRd
+.db_catalog_path <- function() {
+  base_path <- .db_get("data_path")
+  file.path(base_path, "_catalog")
+}
+
+#' Get path to public metadata file for a dataset
+#' @noRd
+.db_public_metadata_path <- function(section, dataset) {
+  catalog_path <- .db_catalog_path()
+  file.path(catalog_path, section, paste0(dataset, ".json"))
+}
+
+#' Copy metadata to public catalog
+#' @noRd
+.db_publish_metadata <- function(section, dataset) {
+  # Source: dataset's _metadata.json
+  source_path <- .db_metadata_path(section, dataset)
+  if (!file.exists(source_path)) {
+    stop("No metadata exists for ", section, "/", dataset, ". Use db_describe() first.",
+         call. = FALSE)
+  }
+
+  # Destination: _catalog/section/dataset.json
+  dest_path <- .db_public_metadata_path(section, dataset)
+  dir.create(dirname(dest_path), recursive = TRUE, showWarnings = FALSE)
+
+  # Copy with additional catalog metadata
+  metadata <- .db_read_metadata(source_path)
+  metadata$catalog_published_at <- format(Sys.time(), "%Y-%m-%d %H:%M:%S")
+  metadata$section <- section
+  metadata$dataset <- dataset
+  metadata$public <- TRUE
+
+  jsonlite::write_json(metadata, dest_path, pretty = TRUE, auto_unbox = TRUE)
+  invisible(dest_path)
+}
+
+#' Remove metadata from public catalog
+#' @noRd
+.db_unpublish_metadata <- function(section, dataset) {
+  dest_path <- .db_public_metadata_path(section, dataset)
+  if (file.exists(dest_path)) {
+    file.remove(dest_path)
+  }
+  invisible(TRUE)
+}
+
+#' Sync public catalog entry if dataset is public
+#' @noRd
+.db_sync_public_catalog <- function(section, dataset) {
+  # Check if already public
+  public_path <- .db_public_metadata_path(section, dataset)
+  if (file.exists(public_path)) {
+    # Re-publish to sync
+    .db_publish_metadata(section, dataset)
+    return(TRUE)
+  }
+  invisible(FALSE)
+}
+
 #' Read metadata from JSON file
 #' @noRd
 .db_read_metadata <- function(path) {
@@ -52,10 +118,14 @@ dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
 # ==============================================================================
 
 #' Describe a dataset or table
-#' 
-#' @description Add documentation metadata to a dataset (hive mode) or table 
+#'
+#' @description Add documentation metadata to a dataset (hive mode) or table
 #' (DuckLake mode). Metadata includes description, owner, and tags.
-#' 
+#'
+#' In hive mode, you can set `public = TRUE` to publish the metadata to a
+#' shared catalog folder, making it discoverable organisation-wide without
+#' granting access to the underlying data.
+#'
 #' @param section Section name (hive mode only)
 #' @param dataset Dataset name (hive mode only)
 #' @param schema Schema name (DuckLake mode, default "main")
@@ -63,8 +133,11 @@ dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
 #' @param description Free-text description of the dataset/table
 #' @param owner Owner name or team responsible for this data
 #' @param tags Character vector of tags for categorization
+#' @param public Logical. If TRUE, publish metadata to the shared catalog folder.
+#'   If FALSE, remove from catalog. If NULL (default), keep current public status
+#'   and auto-sync if already public. (Hive mode only)
 #' @return Invisibly returns the metadata list
-#' 
+#'
 #' @examples
 #' \dontrun{
 #' # Hive mode
@@ -74,9 +147,10 @@ dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
 #'   dataset = "Imports",
 #'   description = "Monthly import values by country and commodity code",
 #'   owner = "Trade Section",
-#'   tags = c("trade", "monthly", "official")
+#'   tags = c("trade", "monthly", "official"),
+#'   public = TRUE
 #' )
-#' 
+#'
 #' # DuckLake mode
 #' db_lake_connect()
 #' db_describe(
@@ -88,38 +162,55 @@ dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
 #' @export
 db_describe <- function(section = NULL, dataset = NULL,
                         schema = "main", table = NULL,
-                        description = NULL, owner = NULL, tags = NULL) {
-  
+                        description = NULL, owner = NULL, tags = NULL,
+                        public = NULL) {
+
 
   con <- .db_get_con()
   if (is.null(con)) {
     stop("Not connected. Use db_connect() or db_lake_connect() first.", call. = FALSE)
   }
-  
+
   curr_mode <- .db_get("mode")
-  
+
   if (curr_mode == "hive") {
     # Hive mode - store in JSON sidecar file
     if (is.null(section) || is.null(dataset)) {
       stop("section and dataset are required in hive mode.", call. = FALSE)
     }
-    
+
     section <- .db_validate_name(section, "section")
     dataset <- .db_validate_name(dataset, "dataset")
-    
+
     meta_path <- .db_metadata_path(section, dataset)
     metadata <- .db_read_metadata(meta_path)
-    
+
     # Update fields (only if provided)
     if (!is.null(description)) metadata$description <- description
     if (!is.null(owner)) metadata$owner <- owner
     if (!is.null(tags)) metadata$tags <- as.character(tags)
-    
+
     .db_write_metadata(metadata, meta_path)
-    
-    message("Updated metadata for ", section, "/", dataset)
+
+    # Handle public catalog
+    if (isTRUE(public)) {
+      .db_publish_metadata(section, dataset)
+      message("Updated metadata for ", section, "/", dataset, " (published to catalog)")
+    } else if (isFALSE(public)) {
+      .db_unpublish_metadata(section, dataset)
+      message("Updated metadata for ", section, "/", dataset, " (removed from catalog)")
+    } else {
+      # NULL: auto-sync if already public
+      synced <- .db_sync_public_catalog(section, dataset)
+      if (synced) {
+        message("Updated metadata for ", section, "/", dataset, " (synced to catalog)")
+      } else {
+        message("Updated metadata for ", section, "/", dataset)
+      }
+    }
+
     invisible(metadata)
-    
+
   } else {
     # DuckLake mode - store in metadata table
     if (is.null(table)) {
@@ -167,9 +258,13 @@ db_describe <- function(section = NULL, dataset = NULL,
 
 
 #' Describe a column
-#' 
+#'
 #' @description Add documentation to a specific column in a dataset or table.
-#' 
+#'
+#' In hive mode, you can set `public = TRUE` to include the column documentation
+#' in the public catalog. The dataset must already be public (use
+#' `db_describe(public = TRUE)` first).
+#'
 #' @param section Section name (hive mode only)
 #' @param dataset Dataset name (hive mode only)
 #' @param schema Schema name (DuckLake mode, default "main")
@@ -178,8 +273,11 @@ db_describe <- function(section = NULL, dataset = NULL,
 #' @param description Description of what the column contains
 #' @param units Units of measurement (optional)
 #' @param notes Additional notes (optional)
+#' @param public Logical. If TRUE, sync column docs to public catalog (requires
+#'   dataset to already be public). If NULL (default), auto-sync if dataset is
+#'   already public. (Hive mode only)
 #' @return Invisibly returns the column metadata
-#' 
+#'
 #' @examples
 #' \dontrun{
 #' db_connect()
@@ -188,51 +286,72 @@ db_describe <- function(section = NULL, dataset = NULL,
 #'   dataset = "Imports",
 #'   column = "value",
 #'   description = "Import value in thousands",
-#'   units = "EUR (thousands)"
+#'   units = "EUR (thousands)",
+#'   public = TRUE
 #' )
 #' }
 #' @export
 db_describe_column <- function(section = NULL, dataset = NULL,
                                 schema = "main", table = NULL,
                                 column, description = NULL,
-                                units = NULL, notes = NULL) {
-  
+                                units = NULL, notes = NULL,
+                                public = NULL) {
+
   column <- .db_validate_name(column, "column")
-  
+
   con <- .db_get_con()
   if (is.null(con)) {
     stop("Not connected. Use db_connect() or db_lake_connect() first.", call. = FALSE)
   }
-  
+
   curr_mode <- .db_get("mode")
-  
+
   if (curr_mode == "hive") {
     if (is.null(section) || is.null(dataset)) {
       stop("section and dataset are required in hive mode.", call. = FALSE)
     }
-    
+
     section <- .db_validate_name(section, "section")
     dataset <- .db_validate_name(dataset, "dataset")
-    
+
     meta_path <- .db_metadata_path(section, dataset)
     metadata <- .db_read_metadata(meta_path)
-    
+
     # Initialize columns list if needed
     if (is.null(metadata$columns)) metadata$columns <- list()
-    
+
     # Update column metadata
     col_meta <- metadata$columns[[column]] %||% list()
     if (!is.null(description)) col_meta$description <- description
     if (!is.null(units)) col_meta$units <- units
     if (!is.null(notes)) col_meta$notes <- notes
-    
+
     metadata$columns[[column]] <- col_meta
-    
+
     .db_write_metadata(metadata, meta_path)
-    
-    message("Updated column metadata for ", section, "/", dataset, ".", column)
+
+    # Handle public catalog sync
+    is_public <- file.exists(.db_public_metadata_path(section, dataset))
+
+    if (isTRUE(public)) {
+      if (!is_public) {
+        stop("Dataset ", section, "/", dataset, " is not public. ",
+             "Use db_describe(public = TRUE) first.", call. = FALSE)
+      }
+      .db_publish_metadata(section, dataset)
+      message("Updated column metadata for ", section, "/", dataset, ".", column,
+              " (synced to catalog)")
+    } else if (is.null(public) && is_public) {
+      # Auto-sync if dataset is already public
+      .db_publish_metadata(section, dataset)
+      message("Updated column metadata for ", section, "/", dataset, ".", column,
+              " (synced to catalog)")
+    } else {
+      message("Updated column metadata for ", section, "/", dataset, ".", column)
+    }
+
     invisible(col_meta)
-    
+
   } else {
     if (is.null(table)) {
       stop("table is required in DuckLake mode.", call. = FALSE)
@@ -789,6 +908,275 @@ db_search_columns <- function(pattern) {
   matches[is.na(matches)] <- FALSE
   
   dict[matches, , drop = FALSE]
+}
+
+
+# ==============================================================================
+# Public Catalog Management (Hive Mode)
+# ==============================================================================
+
+#' Make a dataset discoverable in the public catalog
+#'
+#' @description Copies the dataset's metadata to the shared catalog folder,
+#' allowing users to discover the dataset without having access to the data.
+#' This is a convenience wrapper around `db_describe(public = TRUE)`.
+#'
+#' @param section Section name
+#' @param dataset Dataset name
+#' @return Invisibly returns the path to the public metadata file
+#'
+#' @examples
+#' \dontrun{
+#' db_connect("//CSO-NAS/DataLake")
+#' db_set_public(section = "Trade", dataset = "Imports")
+#' }
+#' @export
+db_set_public <- function(section, dataset) {
+  section <- .db_validate_name(section, "section")
+  dataset <- .db_validate_name(dataset, "dataset")
+
+  con <- .db_get_con()
+  if (is.null(con)) {
+    stop("Not connected. Use db_connect() first.", call. = FALSE)
+  }
+
+  curr_mode <- .db_get("mode")
+  if (curr_mode != "hive") {
+    stop("db_set_public() is only available in hive mode.", call. = FALSE)
+  }
+
+  path <- .db_publish_metadata(section, dataset)
+  message("Published ", section, "/", dataset, " to public catalog")
+  invisible(path)
+}
+
+
+#' Remove a dataset from the public catalog
+#'
+#' @description Removes the dataset's metadata from the shared catalog folder.
+#' The dataset and its data remain unchanged.
+#'
+#' @param section Section name
+#' @param dataset Dataset name
+#' @return Invisibly returns TRUE
+#'
+#' @examples
+#' \dontrun{
+#' db_connect("//CSO-NAS/DataLake")
+#' db_set_private(section = "Trade", dataset = "Imports")
+#' }
+#' @export
+db_set_private <- function(section, dataset) {
+  section <- .db_validate_name(section, "section")
+  dataset <- .db_validate_name(dataset, "dataset")
+
+  con <- .db_get_con()
+  if (is.null(con)) {
+    stop("Not connected. Use db_connect() first.", call. = FALSE)
+  }
+
+  curr_mode <- .db_get("mode")
+  if (curr_mode != "hive") {
+    stop("db_set_private() is only available in hive mode.", call. = FALSE)
+  }
+
+  .db_unpublish_metadata(section, dataset)
+  message("Removed ", section, "/", dataset, " from public catalog")
+  invisible(TRUE)
+}
+
+
+#' Check if a dataset is in the public catalog
+#'
+#' @description Check whether a dataset's metadata has been published to
+#' the shared catalog folder.
+#'
+#' @param section Section name
+#' @param dataset Dataset name
+#' @return Logical TRUE if public, FALSE otherwise
+#'
+#' @examples
+#' \dontrun{
+#' db_connect("//CSO-NAS/DataLake")
+#' db_is_public(section = "Trade", dataset = "Imports")
+#' }
+#' @export
+db_is_public <- function(section, dataset) {
+  section <- .db_validate_name(section, "section")
+  dataset <- .db_validate_name(dataset, "dataset")
+
+  con <- .db_get_con()
+  if (is.null(con)) {
+    stop("Not connected. Use db_connect() first.", call. = FALSE)
+  }
+
+  curr_mode <- .db_get("mode")
+  if (curr_mode != "hive") {
+    stop("db_is_public() is only available in hive mode.", call. = FALSE)
+  }
+
+  path <- .db_public_metadata_path(section, dataset)
+  file.exists(path)
+}
+
+
+#' List all datasets in the public catalog
+#'
+#' @description Lists all datasets that have been published to the public catalog.
+#' This works even if you don't have access to the underlying data folders,
+#' allowing organisation-wide data discovery.
+#'
+#' @param section Optional section to filter by
+#' @return A data.frame with section, dataset, description, owner, tags
+#'
+#' @examples
+#' \dontrun{
+#' db_connect("//CSO-NAS/DataLake")
+#'
+#' # List all public datasets
+#' db_list_public()
+#'
+#' # Filter by section
+#' db_list_public(section = "Trade")
+#' }
+#' @export
+db_list_public <- function(section = NULL) {
+  con <- .db_get_con()
+  if (is.null(con)) {
+    stop("Not connected. Use db_connect() first.", call. = FALSE)
+  }
+
+  curr_mode <- .db_get("mode")
+  if (curr_mode != "hive") {
+    stop("db_list_public() is only available in hive mode.", call. = FALSE)
+  }
+
+  catalog_path <- .db_catalog_path()
+
+  # Return empty if catalog doesn't exist
+ if (!dir.exists(catalog_path)) {
+    return(data.frame(
+      section = character(),
+      dataset = character(),
+      description = character(),
+      owner = character(),
+      tags = character(),
+      stringsAsFactors = FALSE
+    ))
+  }
+
+  # Find all JSON files in catalog
+  if (!is.null(section)) {
+    section <- .db_validate_name(section, "section")
+    pattern <- file.path(catalog_path, section, "*.json")
+  } else {
+    pattern <- file.path(catalog_path, "*", "*.json")
+  }
+
+  files <- Sys.glob(pattern)
+
+  if (length(files) == 0) {
+    return(data.frame(
+      section = character(),
+      dataset = character(),
+      description = character(),
+      owner = character(),
+      tags = character(),
+      stringsAsFactors = FALSE
+    ))
+  }
+
+  # Read each metadata file
+  results <- lapply(files, function(f) {
+    meta <- tryCatch(
+      jsonlite::fromJSON(f, simplifyVector = FALSE),
+      error = function(e) list()
+    )
+
+    data.frame(
+      section = meta$section %||% basename(dirname(f)),
+      dataset = meta$dataset %||% tools::file_path_sans_ext(basename(f)),
+      description = meta$description %||% NA_character_,
+      owner = meta$owner %||% NA_character_,
+      tags = paste(meta$tags %||% character(), collapse = ", "),
+      stringsAsFactors = FALSE
+    )
+  })
+
+  do.call(rbind, results)
+}
+
+
+#' Sync the public catalog with source metadata
+#'
+#' @description Scans the public catalog and updates entries from their source
+#' metadata files. Optionally removes entries where the source dataset no
+#' longer exists.
+#'
+#' @param remove_orphans Logical. If TRUE, remove catalog entries where the
+#'   source dataset no longer exists. Default FALSE.
+#' @return Invisibly returns a list with counts of synced, removed, and errors
+#'
+#' @examples
+#' \dontrun{
+#' db_connect("//CSO-NAS/DataLake")
+#' db_sync_catalog()
+#' db_sync_catalog(remove_orphans = TRUE)
+#' }
+#' @export
+db_sync_catalog <- function(remove_orphans = FALSE) {
+  con <- .db_get_con()
+  if (is.null(con)) {
+    stop("Not connected. Use db_connect() first.", call. = FALSE)
+  }
+
+  curr_mode <- .db_get("mode")
+  if (curr_mode != "hive") {
+    stop("db_sync_catalog() is only available in hive mode.", call. = FALSE)
+  }
+
+  catalog_path <- .db_catalog_path()
+
+  if (!dir.exists(catalog_path)) {
+    message("No public catalog exists yet.")
+    return(invisible(list(synced = 0, removed = 0, errors = 0)))
+  }
+
+  files <- Sys.glob(file.path(catalog_path, "*", "*.json"))
+
+  synced <- 0
+  removed <- 0
+  errors <- 0
+
+  for (f in files) {
+    section <- basename(dirname(f))
+    dataset <- tools::file_path_sans_ext(basename(f))
+
+    # Check if source exists
+    source_path <- .db_metadata_path(section, dataset)
+
+    if (!file.exists(source_path)) {
+      if (remove_orphans) {
+        file.remove(f)
+        message("Removed orphan: ", section, "/", dataset)
+        removed <- removed + 1
+      } else {
+        message("Orphan found (source missing): ", section, "/", dataset)
+      }
+    } else {
+      # Re-sync from source
+      tryCatch({
+        .db_publish_metadata(section, dataset)
+        synced <- synced + 1
+      }, error = function(e) {
+        message("Error syncing ", section, "/", dataset, ": ", e$message)
+        errors <<- errors + 1
+      })
+    }
+  }
+
+  message("Sync complete: ", synced, " synced, ", removed, " removed, ", errors, " errors")
+  invisible(list(synced = synced, removed = removed, errors = errors))
 }
 
 

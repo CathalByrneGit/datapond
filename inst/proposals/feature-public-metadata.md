@@ -1,8 +1,14 @@
-# Feature Proposal: Public Metadata Catalog for Hive Mode
+# Feature: Public Metadata Catalog for Hive Mode
+
+## Status: Implemented
+
+This feature has been implemented in `R/docs.R`, `R/browser_ui.R`, and `R/browser_server.R`.
+
+---
 
 ## Overview
 
-This proposal addresses the need for a **universal metadata viewer** in Hive mode while maintaining data security isolation. The core idea is to allow datasets to be marked as "public" (discoverable) without granting access to the underlying data.
+This feature enables a **universal metadata viewer** in Hive mode while maintaining data security isolation. Datasets can be marked as "public" (discoverable) without granting access to the underlying data.
 
 ---
 
@@ -15,18 +21,11 @@ In Hive mode, data security works perfectly via folder permissions. However, thi
 - A central data catalog/browser cannot show all available datasets
 - Users must "know" what to ask for rather than being able to browse
 
-**Goal**: Enable organisation-wide data discovery while maintaining data-level security.
+**Solution**: Copy metadata to a shared `_catalog/` folder that everyone can read, enabling organisation-wide data discovery while maintaining data-level security.
 
 ---
 
-## Proposed Solution
-
-### Concept
-
-Add a `public` parameter to `db_hive_write()` and related functions that:
-1. Copies the dataset's `_metadata.json` to a shared catalog folder
-2. Allows users to discover datasets via the catalog without data access
-3. Provides functions to manage public/private status
+## Implementation
 
 ### Catalog Folder Structure
 
@@ -36,9 +35,8 @@ Add a `public` parameter to `db_hive_write()` and related functions that:
 │   ├── Trade/
 │   │   ├── Imports.json                ← Copy of metadata (public)
 │   │   └── Exports.json                ← Copy of metadata (public)
-│   ├── Labour/
-│   │   └── Employment.json             ← Copy of metadata (public)
-│   └── _catalog_index.json             ← Optional: aggregated index
+│   └── Labour/
+│       └── Employment.json             ← Copy of metadata (public)
 │
 ├── Trade/                              ← Actual data (restricted access)
 │   ├── Imports/
@@ -52,344 +50,136 @@ Add a `public` parameter to `db_hive_write()` and related functions that:
 
 ---
 
-## API Design
+## API
 
-### Option 1: Parameter on Write Functions
+### Primary: Using db_describe()
+
+The recommended way to manage public status is through the `public` parameter on `db_describe()`:
 
 ```r
-# Mark dataset as public when writing
-db_hive_write(
-  data,
+# Make a dataset public when documenting it
+db_describe(
   section = "Trade",
   dataset = "Imports",
-  partition_by = c("year", "month"),
-  public = TRUE                          # NEW PARAMETER
+  description = "Monthly import values by country and commodity code",
+  owner = "Trade Section",
+  tags = c("trade", "monthly", "official"),
+  public = TRUE
 )
 
-# Preview also shows public status
-db_preview_hive_write(
-  data,
+# Remove from public catalog
+db_describe(
   section = "Trade",
   dataset = "Imports",
-  public = TRUE
+  public = FALSE
+)
+
+# Update metadata (auto-syncs if already public)
+db_describe(
+  section = "Trade",
+  dataset = "Imports",
+  description = "Updated description"
+  # public = NULL (default) - keeps current status and syncs if public
 )
 ```
 
-### Option 2: Separate Management Functions
+### Column Documentation
+
+Column documentation also supports the `public` parameter, but requires the dataset to already be public:
 
 ```r
-# Make an existing dataset public (copy JSON to catalog)
+# Document a column and sync to public catalog
+db_describe_column(
+  section = "Trade",
+  dataset = "Imports",
+  column = "value",
+  description = "Import value in thousands",
+  units = "EUR (thousands)",
+  public = TRUE  # Only works if dataset is already public
+)
+
+# Auto-sync: if dataset is public, column docs are synced automatically
+db_describe_column(
+  section = "Trade",
+  dataset = "Imports",
+  column = "country_code",
+  description = "ISO 3166-1 alpha-2 country code"
+  # public = NULL (default) - auto-syncs if dataset is public
+)
+```
+
+### Convenience Functions
+
+Explicit functions for managing public status:
+
+```r
+# Make an existing dataset public
 db_set_public(section = "Trade", dataset = "Imports")
 
-# Make a dataset private (remove JSON from catalog)
+# Make a dataset private (remove from catalog)
 db_set_private(section = "Trade", dataset = "Imports")
 
 # Check if a dataset is public
 db_is_public(section = "Trade", dataset = "Imports")
+#> [1] TRUE
 
-# List all public datasets (reads from catalog folder)
+# List all public datasets
 db_list_public()
+#>   section   dataset                    description         owner          tags
+#> 1   Trade   Imports  Monthly import values by...   Trade Section  trade, monthly
+
+# Filter by section
+db_list_public(section = "Trade")
 ```
 
-### Option 3: Describe Function Extension
+### Catalog Maintenance
 
 ```r
-# Update metadata and optionally publish to catalog
-db_describe(
-  section = "Trade",
-  dataset = "Imports",
-  description = "Monthly import values",
-  owner = "Trade Section",
-  public = TRUE                          # NEW PARAMETER
-)
+# Sync all public catalog entries with their sources
+db_sync_catalog()
+#> Sync complete: 5 synced, 0 removed, 0 errors
+
+# Remove orphan entries (where source dataset was deleted)
+db_sync_catalog(remove_orphans = TRUE)
+#> Removed orphan: Archive/OldData
+#> Sync complete: 4 synced, 1 removed, 0 errors
 ```
-
-### Recommended Approach
-
-Combine Options 1 and 2:
-- `public` parameter on `db_hive_write()` for convenience
-- Explicit `db_set_public()` / `db_set_private()` for existing datasets
-- `db_list_public()` for catalog browsing
-
----
-
-## Implementation Details
-
-### Internal Helper Functions
-
-```r
-#' Get path to public catalog folder
-#' @noRd
-.db_catalog_path <- function() {
- base_path <- .db_get("data_path")
- file.path(base_path, "_catalog")
-}
-
-#' Get path to public metadata file for a dataset
-#' @noRd
-.db_public_metadata_path <- function(section, dataset) {
- catalog_path <- .db_catalog_path()
- file.path(catalog_path, section, paste0(dataset, ".json"))
-}
-
-#' Copy metadata to public catalog
-#' @noRd
-.db_publish_metadata <- function(section, dataset) {
- # Source: dataset's _metadata.json
- source_path <- .db_metadata_path(section, dataset)
- if (!file.exists(source_path)) {
-   stop("No metadata exists for ", section, "/", dataset, ". Use db_describe() first.")
- }
-
- # Destination: _catalog/section/dataset.json
- dest_path <- .db_public_metadata_path(section, dataset)
- dir.create(dirname(dest_path), recursive = TRUE, showWarnings = FALSE)
-
- # Copy with additional catalog metadata
- metadata <- .db_read_metadata(source_path)
- metadata$catalog_published_at <- format(Sys.time(), "%Y-%m-%d %H:%M:%S")
- metadata$section <- section
- metadata$dataset <- dataset
-
- jsonlite::write_json(metadata, dest_path, pretty = TRUE, auto_unbox = TRUE)
- invisible(dest_path)
-}
-
-#' Remove metadata from public catalog
-#' @noRd
-.db_unpublish_metadata <- function(section, dataset) {
- dest_path <- .db_public_metadata_path(section, dataset)
- if (file.exists(dest_path)) {
-   file.remove(dest_path)
- }
- invisible(TRUE)
-}
-```
-
-### Public Functions
-
-```r
-#' Make a dataset discoverable in the public catalog
-#'
-#' @description Copies the dataset's metadata to the shared catalog folder,
-#' allowing users to discover the dataset without having access to the data.
-#'
-#' @param section Section name
-#' @param dataset Dataset name
-#' @return Invisibly returns the path to the public metadata file
-#' @export
-db_set_public <- function(section, dataset) {
- section <- .db_validate_name(section, "section")
- dataset <- .db_validate_name(dataset, "dataset")
-
- .db_ensure_mode("hive")
-
- path <- .db_publish_metadata(section, dataset)
- message("Published ", section, "/", dataset, " to public catalog")
- invisible(path)
-}
-
-#' Remove a dataset from the public catalog
-#'
-#' @description Removes the dataset's metadata from the shared catalog folder.
-#' The dataset and its data remain unchanged.
-#'
-#' @param section Section name
-#' @param dataset Dataset name
-#' @return Invisibly returns TRUE
-#' @export
-db_set_private <- function(section, dataset) {
- section <- .db_validate_name(section, "section")
- dataset <- .db_validate_name(dataset, "dataset")
-
- .db_ensure_mode("hive")
-
- .db_unpublish_metadata(section, dataset)
- message("Removed ", section, "/", dataset, " from public catalog")
- invisible(TRUE)
-}
-
-#' Check if a dataset is in the public catalog
-#'
-#' @param section Section name
-#' @param dataset Dataset name
-#' @return Logical TRUE/FALSE
-#' @export
-db_is_public <- function(section, dataset) {
- section <- .db_validate_name(section, "section")
- dataset <- .db_validate_name(dataset, "dataset")
-
- .db_ensure_mode("hive")
-
- path <- .db_public_metadata_path(section, dataset)
- file.exists(path)
-}
-
-#' List all datasets in the public catalog
-#'
-#' @description Lists all datasets that have been published to the public catalog.
-#' This works even if you don't have access to the underlying data folders.
-#'
-#' @param section Optional section to filter by
-#' @return A data frame with section, dataset, description, owner, tags
-#' @export
-db_list_public <- function(section = NULL) {
- .db_ensure_mode("hive")
-
- catalog_path <- .db_catalog_path()
- if (!dir.exists(catalog_path)) {
-   return(data.frame(
-     section = character(),
-     dataset = character(),
-     description = character(),
-     owner = character(),
-     tags = character(),
-     stringsAsFactors = FALSE
-   ))
- }
-
- # Find all JSON files in catalog
- pattern <- if (!is.null(section)) {
-   file.path(catalog_path, section, "*.json")
- } else {
-   file.path(catalog_path, "*", "*.json")
- }
-
- files <- Sys.glob(pattern)
-
- if (length(files) == 0) {
-   return(data.frame(
-     section = character(),
-     dataset = character(),
-     description = character(),
-     owner = character(),
-     tags = character(),
-     stringsAsFactors = FALSE
-   ))
- }
-
- # Read each metadata file
- results <- lapply(files, function(f) {
-   meta <- jsonlite::fromJSON(f, simplifyVector = FALSE)
-   data.frame(
-     section = meta$section %||% basename(dirname(f)),
-     dataset = meta$dataset %||% tools::file_path_sans_ext(basename(f)),
-     description = meta$description %||% NA_character_,
-     owner = meta$owner %||% NA_character_,
-     tags = paste(meta$tags %||% character(), collapse = ", "),
-     stringsAsFactors = FALSE
-   )
- })
-
- do.call(rbind, results)
-}
-```
-
-### Modified db_hive_write
-
-```r
-db_hive_write <- function(data,
-                         section,
-                         dataset,
-                         partition_by = NULL,
-                         mode = c("overwrite", "append", "ignore", "replace_partitions"),
-                         compression = "zstd",
-                         public = FALSE) {    # NEW PARAMETER
-
- # ... existing implementation ...
-
- # After successful write, handle public catalog
- if (isTRUE(public)) {
-   # Check if metadata exists, create minimal if not
-   meta_path <- .db_metadata_path(section, dataset)
-   if (!file.exists(meta_path)) {
-     .db_write_metadata(list(
-       description = NULL,
-       owner = NULL,
-       tags = character()
-     ), meta_path)
-   }
-   .db_publish_metadata(section, dataset)
-   message("Published to public catalog")
- }
-
- invisible(qpath)
-}
-```
-
----
-
-## Sync Considerations
-
-### Keeping Catalog in Sync
-
-The public catalog is a **copy** of metadata, which could become stale. Options:
-
-#### Option A: Manual Sync (Simple)
-- Users explicitly call `db_set_public()` to update
-- Clear responsibility, no magic
-- Metadata might drift from source
-
-#### Option B: Auto-Sync on Describe (Recommended)
-- When `db_describe()` is called, automatically update public copy if exists
-- Keeps catalog current with minimal user action
-
-```r
-db_describe <- function(..., public = NULL) {
- # ... existing implementation ...
-
- # If already public or explicitly setting public, sync to catalog
- if (isTRUE(public) || (is.null(public) && db_is_public(section, dataset))) {
-   .db_publish_metadata(section, dataset)
- }
-}
-```
-
-#### Option C: Scheduled Sync
-- Background job that syncs all public datasets
-- More complex, requires external scheduling
-
-### Handling Deleted Datasets
-
-When a dataset is deleted:
-- Should its public metadata be removed?
-- Or kept as "archived" marker?
-
-**Recommendation**: Add a `db_sync_catalog()` function that:
-1. Checks all public metadata entries
-2. Removes entries where source dataset no longer exists
-3. Optionally updates entries that are stale
 
 ---
 
 ## Browser Integration
 
-### db_browser() Updates
+The `db_browser()` Shiny app includes a **Public Catalog** tab (hive mode only) with:
 
-The Shiny browser should:
-1. Add a "Public Catalog" tab showing `db_list_public()` results
-2. Allow toggling public status from the UI (if user has write access)
-3. Show "Public" badge on datasets that are in the catalog
+1. **Public Datasets Table**: View all datasets in the public catalog
+2. **Refresh Button**: Reload the catalog list
+3. **Sync All Button**: Sync all public entries with source metadata
+4. **Public Status Display**: Shows whether selected dataset is public/private
+5. **Make Public/Private Buttons**: Quick actions to toggle public status
 
-### Search Integration
-
-`db_search()` should optionally search the public catalog:
-
-```r
-db_search <- function(pattern, field = "name", include_public = TRUE) {
- # ... existing search of accessible datasets ...
-
- if (include_public) {
-   # Also search public catalog (even for inaccessible datasets)
-   public_matches <- .db_search_public_catalog(pattern, field)
-   # Merge results, marking which are accessible vs discoverable-only
- }
-}
-```
+Additionally:
+- The **Metadata** tab shows a "Public" badge for public datasets
+- The metadata card displays public status
 
 ---
 
-## Security Implications
+## Auto-Sync Behaviour
+
+The system automatically syncs public metadata in these situations:
+
+| Action | Behaviour |
+|--------|-----------|
+| `db_describe(public = TRUE)` | Publishes to catalog |
+| `db_describe(public = FALSE)` | Removes from catalog |
+| `db_describe()` (no public param) | Syncs if already public |
+| `db_describe_column(public = TRUE)` | Syncs if dataset is public (error if not) |
+| `db_describe_column()` (no public param) | Syncs if dataset is public |
+
+This ensures the public catalog stays current without manual intervention.
+
+---
+
+## Security Model
 
 ### What This Enables
 - Users can discover ALL public datasets organisation-wide
@@ -412,72 +202,84 @@ db_search <- function(pattern, field = "name", include_public = TRUE) {
 
 ---
 
-## Migration Path
+## Internal Implementation
 
-### For Existing Datasets
+### Helper Functions (in R/docs.R)
 
 ```r
-# One-time migration: publish all datasets that have documentation
-db_connect("//CSO-NAS/DataLake")
+.db_catalog_path()              # Get path to _catalog folder
+.db_public_metadata_path()      # Get path to public JSON file
+.db_publish_metadata()          # Copy metadata to catalog
+.db_unpublish_metadata()        # Remove from catalog
+.db_sync_public_catalog()       # Sync if already public
+```
 
-for (section in db_list_sections()) {
- for (dataset in db_list_datasets(section)) {
-   docs <- db_get_docs(section, dataset)
-   if (!is.null(docs$description)) {
-     db_set_public(section, dataset)
-   }
- }
+### Public JSON Format
+
+When metadata is published, additional fields are added:
+
+```json
+{
+  "description": "Monthly import values by country and commodity code",
+  "owner": "Trade Section",
+  "tags": ["trade", "monthly", "official"],
+  "columns": {
+    "value": {
+      "description": "Import value in thousands",
+      "units": "EUR (thousands)"
+    }
+  },
+  "created_at": "2025-01-10 10:00:00",
+  "updated_at": "2025-01-11 14:30:00",
+  "section": "Trade",
+  "dataset": "Imports",
+  "public": true,
+  "catalog_published_at": "2025-01-11 14:30:00"
 }
 ```
 
 ---
 
-## Open Questions
+## Migration Guide
 
-1. **Naming**: `public` vs `discoverable` vs `cataloged`?
-2. **Granularity**: Should column-level docs also be in public catalog?
-3. **Versioning**: Should catalog track metadata history?
-4. **Access requests**: Should the system facilitate access requests to owners?
-5. **Catalog index**: Generate `_catalog_index.json` for faster browsing?
+### Making Existing Datasets Public
 
----
+```r
+db_connect("//CSO-NAS/DataLake")
 
-## Alternatives Considered
+# Option 1: One at a time
+db_set_public("Trade", "Imports")
+db_set_public("Trade", "Exports")
 
-### Alternative 1: Centralized Database
-Store all metadata in a SQLite/PostgreSQL database that everyone can query.
-
-**Pros**: Single source of truth, queryable
-**Cons**: Introduces database dependency, more complex setup
-
-### Alternative 2: Metadata in README files
-Create README.md files in each section folder.
-
-**Pros**: Human-readable, works with Git
-**Cons**: Not programmatically queryable, doesn't solve discovery
-
-### Alternative 3: External Data Catalog Tool
-Use an external tool like DataHub, Amundsen, or OpenMetadata.
-
-**Pros**: Full-featured, industry standard
-**Cons**: Significant infrastructure, overkill for simple needs
+# Option 2: Bulk publish all documented datasets
+for (section in db_list_sections()) {
+  for (dataset in db_list_datasets(section)) {
+    docs <- tryCatch(db_get_docs(section, dataset), error = function(e) list())
+    if (!is.null(docs$description)) {
+      db_set_public(section, dataset)
+    }
+  }
+}
+```
 
 ---
 
-## Implementation Priority
+## Functions Added
 
-### Phase 1 (MVP)
-- [ ] `db_set_public()` / `db_set_private()`
-- [ ] `db_is_public()`
-- [ ] `db_list_public()`
-- [ ] `public` parameter on `db_describe()`
+| Function | Description |
+|----------|-------------|
+| `db_set_public()` | Publish dataset metadata to catalog |
+| `db_set_private()` | Remove dataset metadata from catalog |
+| `db_is_public()` | Check if dataset is in catalog |
+| `db_list_public()` | List all public datasets |
+| `db_sync_catalog()` | Sync/cleanup the public catalog |
 
-### Phase 2
-- [ ] `public` parameter on `db_hive_write()`
-- [ ] Auto-sync on `db_describe()`
-- [ ] Browser integration
+## Functions Modified
 
-### Phase 3
-- [ ] `db_sync_catalog()`
-- [ ] Search integration
-- [ ] Access request workflow
+| Function | Change |
+|----------|--------|
+| `db_describe()` | Added `public` parameter |
+| `db_describe_column()` | Added `public` parameter with table-must-be-public check |
+| `db_browser_ui()` | Added "Public Catalog" tab |
+| `db_browser_server()` | Added public catalog handlers |
+| `.render_metadata_card()` | Added public badge display |

@@ -160,6 +160,51 @@ db_browser_ui <- function(id, height = "500px") {
       )
     ),
 
+    # Public Catalog tab (hive mode only)
+    if (is_hive) bslib::nav_panel(
+      title = "Public Catalog",
+      icon = shiny::icon("globe"),
+      shiny::div(
+        style = "padding: 10px;",
+        shiny::fluidRow(
+          shiny::column(4,
+            shiny::actionButton(ns("refresh_public"), "Refresh Catalog",
+                                icon = shiny::icon("sync"),
+                                class = "btn-primary")
+          ),
+          shiny::column(4,
+            shiny::actionButton(ns("sync_catalog"), "Sync All",
+                                icon = shiny::icon("cloud-upload-alt"),
+                                class = "btn-outline-secondary")
+          )
+        ),
+        shiny::hr(),
+        shiny::h5("Public Datasets"),
+        shiny::p(class = "text-muted",
+                 "Datasets published to the shared catalog for organisation-wide discovery."),
+        DT::dataTableOutput(ns("public_catalog_table"), height = "400px"),
+        shiny::hr(),
+        shiny::h5("Manage Public Status"),
+        shiny::p(class = "text-muted",
+                 "Select a dataset from the tree, then use these buttons to manage its public status."),
+        shiny::fluidRow(
+          shiny::column(6,
+            shiny::uiOutput(ns("public_status_display"))
+          ),
+          shiny::column(3,
+            shiny::actionButton(ns("make_public"), "Make Public",
+                                icon = shiny::icon("globe"),
+                                class = "btn-success btn-sm")
+          ),
+          shiny::column(3,
+            shiny::actionButton(ns("make_private"), "Make Private",
+                                icon = shiny::icon("lock"),
+                                class = "btn-warning btn-sm")
+          )
+        )
+      )
+    ),
+
     # Info tab
     bslib::nav_panel(
       title = "Connection",
