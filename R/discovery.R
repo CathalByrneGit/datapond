@@ -420,3 +420,65 @@ db_get_schema_path <- function(schema) {
 
   path
 }
+
+
+#' Get the data path for a table
+#'
+#' @description Returns the data path configured for a DuckLake table.
+#'   Returns NULL if the table uses the default path (relative to schema).
+#' @param schema Schema name
+#' @param table Table name
+#' @return The path string, or NULL if using default
+#' @examples
+#' \dontrun{
+#' db_lake_connect()
+#' db_get_table_path("trade", "imports")
+#' }
+#' @export
+db_get_table_path <- function(schema, table) {
+
+  schema <- .db_validate_name(schema, "schema")
+  table <- .db_validate_name(table, "table")
+
+  con <- .db_get_con()
+  if (is.null(con)) {
+    stop("Not connected. Use db_lake_connect() first.", call. = FALSE)
+  }
+
+  curr_mode <- .db_get("mode")
+  if (!is.null(curr_mode) && curr_mode != "ducklake") {
+    stop("Connected in hive mode. Table paths are only available for DuckLake.", call. = FALSE)
+  }
+
+  catalog <- .db_get("catalog")
+
+  # Query the DuckLake metadata for table path
+
+  # Metadata schema is __ducklake_metadata_{catalog}
+  metadata_schema <- paste0("__ducklake_metadata_", catalog)
+  result <- tryCatch({
+    DBI::dbGetQuery(con, glue::glue("
+      SELECT t.path
+      FROM {metadata_schema}.ducklake_table t
+      JOIN {metadata_schema}.ducklake_schema s ON t.schema_id = s.schema_id
+      WHERE s.schema_name = '{schema}' AND t.table_name = '{table}'
+    "))
+  }, error = function(e) {
+    # Table may not exist or metadata table may differ
+    data.frame(path = character(0))
+  })
+
+  if (nrow(result) == 0 || is.na(result$path[1]) || result$path[1] == "") {
+    return(NULL)
+  }
+
+  path <- result$path[1]
+
+  # DuckLake sets default path to {table_name}/ - treat as NULL (no custom path)
+  default_path <- paste0(table, "/")
+  if (path == default_path) {
+    return(NULL)
+  }
+
+  path
+}
