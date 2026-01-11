@@ -883,35 +883,31 @@ organisation within their catalog.</p>
 <div class="sourceCode" id="cb31"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/CathalByrneGit/datapond" class="external-link">datapond</a></span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Connect with SQLite catalog</span></span>
-<span><span class="fu"><a href="../reference/db_lake_connect.html">db_lake_connect</a></span><span class="op">(</span></span>
-<span>  catalog_type <span class="op">=</span> <span class="st">"sqlite"</span>,</span>
-<span>  metadata_path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/catalog.sqlite"</span>,</span>
-<span>  data_path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/data"</span></span>
-<span><span class="op">)</span></span>
+<span><span class="co"># Connect to your section (paths come from master catalog)</span></span>
+<span><span class="fu"><a href="../reference/db_lake_connect_section.html">db_lake_connect_section</a></span><span class="op">(</span><span class="st">"trade"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Prepare your data</span></span>
 <span><span class="va">imports_q1</span> <span class="op">&lt;-</span> <span class="fu">prepare_imports_data</span><span class="op">(</span><span class="va">raw_files</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Preview what will happen</span></span>
-<span><span class="fu"><a href="../reference/db_preview_lake_write.html">db_preview_lake_write</a></span><span class="op">(</span><span class="va">imports_q1</span>, schema <span class="op">=</span> <span class="st">"trade"</span>, table <span class="op">=</span> <span class="st">"imports"</span>, mode <span class="op">=</span> <span class="st">"append"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/db_preview_lake_write.html">db_preview_lake_write</a></span><span class="op">(</span><span class="va">imports_q1</span>, schema <span class="op">=</span> <span class="st">"main"</span>, table <span class="op">=</span> <span class="st">"imports"</span>, mode <span class="op">=</span> <span class="st">"append"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Publish with a meaningful commit message</span></span>
 <span><span class="fu"><a href="../reference/db_lake_write.html">db_lake_write</a></span><span class="op">(</span></span>
 <span>  <span class="va">imports_q1</span>,</span>
-<span>  schema <span class="op">=</span> <span class="st">"trade"</span>,</span>
+<span>  schema <span class="op">=</span> <span class="st">"main"</span>,</span>
 <span>  table <span class="op">=</span> <span class="st">"imports"</span>,</span>
 <span>  mode <span class="op">=</span> <span class="st">"append"</span>,</span>
 <span>  commit_author <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Sys.info.html" class="external-link">Sys.info</a></span><span class="op">(</span><span class="op">)</span><span class="op">[</span><span class="st">"user"</span><span class="op">]</span>,</span>
 <span>  commit_message <span class="op">=</span> <span class="st">"Q1 2025 imports data - final"</span></span>
 <span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Document your dataset</span></span>
+<span><span class="co"># Document and make discoverable</span></span>
 <span><span class="fu"><a href="../reference/db_describe.html">db_describe</a></span><span class="op">(</span></span>
-<span>  schema <span class="op">=</span> <span class="st">"trade"</span>,</span>
 <span>  table <span class="op">=</span> <span class="st">"imports"</span>,</span>
 <span>  description <span class="op">=</span> <span class="st">"Monthly import values by country and HS code"</span>,</span>
-<span>  owner <span class="op">=</span> <span class="st">"Trade Section"</span></span>
+<span>  owner <span class="op">=</span> <span class="st">"Trade Section"</span>,</span>
+<span>  public <span class="op">=</span> <span class="cn">TRUE</span>  <span class="co"># Publish to master catalog for discovery</span></span>
 <span><span class="op">)</span></span>
 <span></span>
 <span><span class="fu"><a href="../reference/db_disconnect.html">db_disconnect</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
@@ -922,25 +918,21 @@ organisation within their catalog.</p>
 <div class="sourceCode" id="cb32"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/CathalByrneGit/datapond" class="external-link">datapond</a></span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Connect (read-only access is fine)</span></span>
-<span><span class="fu"><a href="../reference/db_lake_connect.html">db_lake_connect</a></span><span class="op">(</span></span>
-<span>  catalog_type <span class="op">=</span> <span class="st">"sqlite"</span>,</span>
-<span>  metadata_path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/catalog.sqlite"</span>,</span>
-<span>  data_path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/data"</span></span>
-<span><span class="op">)</span></span>
+<span><span class="co"># Connect to a section (read-only access is fine)</span></span>
+<span><span class="fu"><a href="../reference/db_lake_connect_section.html">db_lake_connect_section</a></span><span class="op">(</span><span class="st">"trade"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Discover what's available</span></span>
 <span><span class="fu"><a href="../reference/db_list_schemas.html">db_list_schemas</a></span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="fu"><a href="../reference/db_list_tables.html">db_list_tables</a></span><span class="op">(</span><span class="st">"trade"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/db_list_tables.html">db_list_tables</a></span><span class="op">(</span><span class="st">"main"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Search for relevant data</span></span>
 <span><span class="fu"><a href="../reference/db_search.html">db_search</a></span><span class="op">(</span><span class="st">"imports"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Check documentation</span></span>
-<span><span class="fu"><a href="../reference/db_get_docs.html">db_get_docs</a></span><span class="op">(</span>schema <span class="op">=</span> <span class="st">"trade"</span>, table <span class="op">=</span> <span class="st">"imports"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/db_get_docs.html">db_get_docs</a></span><span class="op">(</span>table <span class="op">=</span> <span class="st">"imports"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Read and analyse</span></span>
-<span><span class="va">imports</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/db_lake_read.html">db_lake_read</a></span><span class="op">(</span>schema <span class="op">=</span> <span class="st">"trade"</span>, table <span class="op">=</span> <span class="st">"imports"</span><span class="op">)</span></span>
+<span><span class="va">imports</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/db_lake_read.html">db_lake_read</a></span><span class="op">(</span>table <span class="op">=</span> <span class="st">"imports"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">imports</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/stats/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">year</span> <span class="op">==</span> <span class="fl">2025</span>, <span class="va">quarter</span> <span class="op">==</span> <span class="fl">1</span><span class="op">)</span> <span class="op">|&gt;</span></span>
