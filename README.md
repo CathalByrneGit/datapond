@@ -191,6 +191,78 @@ dict <- db_dictionary()
 writexl::write_xlsx(dict, "data_dictionary.xlsx")
 ```
 
+### Public Catalog (Organisation-wide Discovery)
+
+Make metadata discoverable across the organisation while keeping data secure
+via folder permissions.
+
+``` r
+library(datapond)
+db_connect(path = "//CSO-NAS/DataLake")
+
+# Document and make discoverable in one step
+db_describe(
+  section = "Trade",
+  dataset = "Imports",
+  description = "Monthly import values",
+  owner = "Trade Section",
+  public = TRUE  # Copies metadata to shared _catalog/ folder
+)
+
+# Or use convenience functions
+db_set_public(section = "Trade", dataset = "Imports")
+db_set_private(section = "Trade", dataset = "Imports")
+db_is_public(section = "Trade", dataset = "Imports")
+
+# Anyone can discover what data exists (even without data access)
+db_list_public()
+#>   section dataset     description          owner
+#> 1   Trade Imports Monthly import values Trade Section
+#> 2  Labour Employment Employment statistics Labour Section
+
+# Sync catalog after manual metadata changes
+db_sync_catalog()
+```
+
+### Multi-Catalog DuckLake (Enterprise Setup)
+
+For larger organisations with multiple sections, use a master discovery
+catalog:
+
+``` r
+library(datapond)
+
+# Admin: Set up master catalog (one-time)
+db_setup_master("//CSO-NAS/DataLake/_master/discovery.sqlite")
+
+# Register sections
+db_register_section(
+  section = "trade",
+  catalog_path = "//CSO-NAS/DataLake/trade/catalog.sqlite",
+  data_path = "//CSO-NAS/DataLake/trade/data",
+  owner = "Trade Team"
+)
+
+# User: Connect to a section
+db_lake_connect_section("trade")
+
+# Work with data
+imports <- db_lake_read(table = "imports")
+
+# Document and publish (same API as Hive mode!)
+db_describe(
+  table = "imports",
+  description = "Monthly import statistics",
+  public = TRUE  # Syncs to master catalog
+)
+
+# Discover all public tables across all sections
+db_list_public()
+
+# Switch sections
+db_switch_section("labour")
+```
+
 ### Interactive Browser
 
 ``` r
@@ -336,6 +408,28 @@ systems needed.
 | `db_dictionary()`      | Both | Generate full data dictionary                 |
 | `db_search()`          | Both | Search by name, description, owner, or tags   |
 | `db_search_columns()`  | Both | Find columns by name across all datasets      |
+
+### Public Catalog
+
+| Function | Mode | Description |
+|----|----|----|
+| `db_set_public()` | Both | Make metadata discoverable organisation-wide |
+| `db_set_private()` | Both | Remove from public catalog |
+| `db_is_public()` | Both | Check if in public catalog |
+| `db_list_public()` | Both | List all discoverable datasets/tables |
+| `db_sync_catalog()` | Both | Sync public catalog with source metadata |
+
+### Multi-Catalog (DuckLake)
+
+| Function | Description |
+|----|----|
+| `db_setup_master()` | Create master discovery catalog |
+| `db_register_section()` | Register a section in master catalog |
+| `db_unregister_section()` | Remove section from master catalog |
+| `db_list_registered_sections()` | List all registered sections |
+| `db_lake_connect_section()` | Connect to section via master catalog |
+| `db_current_section()` | Get current section name |
+| `db_switch_section()` | Switch to a different section |
 
 ### Metadata & Maintenance
 

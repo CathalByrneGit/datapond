@@ -544,6 +544,153 @@ For PostgreSQL catalogs, you'd also need database credentials - but the Parquet 
 
 ---
 
+## Public Catalog: Organisation-wide Discovery
+
+A common challenge: **How do people discover what data exists without having access to all of it?**
+
+In Hive mode, if you can't access the Trade folder, you can't see what datasets Trade has. `datapond` solves this with a **public catalog** - a shared location for metadata only.
+
+### How It Works
+
+```
+//CSO-NAS/DataLake/
+├── _catalog/             ← Everyone can read this folder
+│   ├── Trade/
+│   │   ├── Imports.json  ← Metadata only (description, owner, columns)
+│   │   └── Exports.json
+│   └── Labour/
+│       └── Employment.json
+├── Trade/                ← Only Trade section can access
+│   └── Imports/
+│       ├── _metadata.json ← Source metadata
+│       └── year=2024/
+│           └── data.parquet
+└── Labour/               ← Only Labour section can access
+    └── Employment/
+```
+
+### Publishing to the Public Catalog
+
+```{r}
+# Make a dataset discoverable
+db_describe(
+  section = "Trade",
+  dataset = "Imports",
+  description = "Monthly import values by country",
+  owner = "Trade Section",
+  public = TRUE  # Copies metadata to _catalog/Trade/Imports.json
+)
+
+# Or use the convenience function
+db_set_public(section = "Trade", dataset = "Imports")
+```
+
+### Discovering Data
+
+```{r}
+# Anyone can see what datasets exist (even without data access)
+db_list_public()
+#>   section dataset            description        owner
+#> 1   Trade Imports Monthly import values  Trade Section
+#> 2  Labour Employment    Employment stats Labour Section
+
+# Find datasets by keyword
+db_search("monthly", field = "description")
+```
+
+### Security Model
+
+| Location | Contains | Who Can Access |
+|----------|----------|----------------|
+| `_catalog/` | Metadata only (JSON) | Everyone (read) |
+| `Trade/` | Actual data (Parquet) | Trade section only |
+
+**The data stays secure** - the public catalog only contains descriptions, not the actual data values.
+
+---
+
+## Multi-Catalog DuckLake
+
+For larger organisations, each section may have its own DuckLake catalog. A **master discovery catalog** provides organisation-wide visibility.
+
+### Architecture
+
+```
+//CSO-NAS/DataLake/
+├── _master/
+│   └── discovery.sqlite     ← Master catalog (everyone reads)
+├── trade/
+│   ├── catalog.sqlite       ← Trade's DuckLake catalog
+│   └── data/                ← Trade's Parquet files
+├── labour/
+│   ├── catalog.sqlite       ← Labour's DuckLake catalog
+│   └── data/
+└── shared/
+    ├── catalog.sqlite
+    └── data/
+```
+
+### Setting Up (Admin)
+
+```{r}
+# Create master catalog
+db_setup_master("//CSO-NAS/DataLake/_master/discovery.sqlite")
+
+# Register each section
+db_register_section(
+  section = "trade",
+  catalog_path = "//CSO-NAS/DataLake/trade/catalog.sqlite",
+  data_path = "//CSO-NAS/DataLake/trade/data",
+  owner = "Trade Team"
+)
+
+db_register_section(
+  section = "labour",
+  catalog_path = "//CSO-NAS/DataLake/labour/catalog.sqlite",
+  data_path = "//CSO-NAS/DataLake/labour/data",
+  owner = "Labour Team"
+)
+```
+
+### Using Sections (User)
+
+```{r}
+# Connect to a section (looks up paths from master)
+db_lake_connect_section("trade")
+
+# Work with data
+imports <- db_lake_read(table = "imports")
+
+# Document and make discoverable (same API!)
+db_describe(
+  table = "imports",
+  description = "Monthly import statistics",
+  public = TRUE  # Syncs to master catalog
+)
+
+# Discover across all sections
+db_list_public()
+#>   section schema    table           description
+#> 1   trade   main  imports Monthly import stats
+#> 2  labour   main employment    Employment data
+
+# Switch to another section
+db_switch_section("labour")
+```
+
+### Unified API
+
+The same functions work in both modes:
+
+| Function | Hive Mode | DuckLake Mode |
+|----------|-----------|---------------|
+| `db_describe(public=TRUE)` | Copies to `_catalog/` | Syncs to master SQLite |
+| `db_set_public()` | Same | Same |
+| `db_list_public()` | Lists `_catalog/` | Queries master |
+| `db_sync_catalog()` | Syncs JSON files | Syncs master entries |
+
+---
+
 ## Putting It Together
 
 Here's how a typical workflow might look:
@@ -637,6 +784,9 @@ db_disconnect()
 | **ACID** | Atomicity, Consistency, Isolation, Durability - database reliability guarantees |
 | **Upsert** | Update existing rows + insert new rows in one operation |
 | **Data dictionary** | Documentation of all datasets, their columns, types, and descriptions |
+| **Public catalog** | Shared location for metadata, enabling discovery without data access |
+| **Master catalog** | Central SQLite database tracking all sections in multi-catalog DuckLake |
+| **Section** | An organisational unit (e.g., Trade, Labour) with its own data and catalog |
 
 ---
 

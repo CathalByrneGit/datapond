@@ -487,3 +487,656 @@ test_that("db_search_columns finds columns across datasets", {
   clean_db_env()
   unlink(temp_dir, recursive = TRUE)
 })
+
+# ==============================================================================
+# Tests for Public Catalog Functions (Hive Mode)
+# ==============================================================================
+
+test_that("db_set_public errors when not connected", {
+  clean_db_env()
+
+  expect_error(db_set_public(section = "Trade", dataset = "Imports"), "Not connected")
+})
+
+test_that("db_set_public requires table in DuckLake mode", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempdir()
+  db_lake_connect(
+    metadata_path = file.path(temp_dir, "test_public.ducklake"),
+    data_path = temp_dir
+  )
+
+  # In DuckLake mode, table parameter is required
+  expect_error(db_set_public(section = "Trade", dataset = "Imports"), "table is required")
+
+  clean_db_env()
+})
+
+test_that("db_set_public publishes metadata to catalog folder", {
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "public_test_")
+  dir.create(temp_dir)
+
+  # Create dataset folder and metadata
+  dataset_path <- file.path(temp_dir, "Trade", "Imports")
+  dir.create(dataset_path, recursive = TRUE)
+
+  db_connect(path = temp_dir)
+
+  # First create metadata
+  db_describe(
+    section = "Trade",
+    dataset = "Imports",
+    description = "Monthly import values",
+    owner = "Trade Section"
+  )
+
+  # Make public
+  expect_message(
+    db_set_public(section = "Trade", dataset = "Imports"),
+    "Published"
+  )
+
+  # Check catalog file exists
+  catalog_path <- file.path(temp_dir, "_catalog", "Trade", "Imports.json")
+  expect_true(file.exists(catalog_path))
+
+  # Check catalog contents
+  catalog_meta <- jsonlite::fromJSON(catalog_path)
+  expect_equal(catalog_meta$description, "Monthly import values")
+  expect_equal(catalog_meta$section, "Trade")
+  expect_equal(catalog_meta$dataset, "Imports")
+  expect_true(catalog_meta$public)
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_set_public errors when no metadata exists", {
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "public_nometa_test_")
+  dir.create(temp_dir)
+
+  # Create dataset folder without metadata
+  dataset_path <- file.path(temp_dir, "Trade", "Imports")
+  dir.create(dataset_path, recursive = TRUE)
+
+  db_connect(path = temp_dir)
+
+  expect_error(
+    db_set_public(section = "Trade", dataset = "Imports"),
+    "No metadata exists"
+  )
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_set_private removes metadata from catalog", {
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "private_test_")
+  dir.create(temp_dir)
+
+  dataset_path <- file.path(temp_dir, "Trade", "Imports")
+  dir.create(dataset_path, recursive = TRUE)
+
+  db_connect(path = temp_dir)
+
+  # Create metadata and make public
+  db_describe(section = "Trade", dataset = "Imports", description = "Test")
+  db_set_public(section = "Trade", dataset = "Imports")
+
+  catalog_path <- file.path(temp_dir, "_catalog", "Trade", "Imports.json")
+  expect_true(file.exists(catalog_path))
+
+  # Make private
+  expect_message(
+    db_set_private(section = "Trade", dataset = "Imports"),
+    "Removed"
+  )
+
+  expect_false(file.exists(catalog_path))
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_is_public returns correct status", {
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "is_public_test_")
+  dir.create(temp_dir)
+
+  dataset_path <- file.path(temp_dir, "Trade", "Imports")
+  dir.create(dataset_path, recursive = TRUE)
+
+  db_connect(path = temp_dir)
+
+  # Create metadata
+  db_describe(section = "Trade", dataset = "Imports", description = "Test")
+
+  # Initially not public
+ expect_false(db_is_public(section = "Trade", dataset = "Imports"))
+
+  # Make public
+  db_set_public(section = "Trade", dataset = "Imports")
+  expect_true(db_is_public(section = "Trade", dataset = "Imports"))
+
+  # Make private again
+  db_set_private(section = "Trade", dataset = "Imports")
+  expect_false(db_is_public(section = "Trade", dataset = "Imports"))
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_list_public returns empty data.frame when no public datasets", {
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "list_public_empty_test_")
+  dir.create(temp_dir)
+
+  db_connect(path = temp_dir)
+
+  result <- db_list_public()
+
+  expect_s3_class(result, "data.frame")
+  expect_equal(nrow(result), 0)
+  expect_true("section" %in% names(result))
+  expect_true("dataset" %in% names(result))
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_list_public lists all public datasets", {
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "list_public_test_")
+  dir.create(temp_dir)
+
+  # Create multiple datasets
+  for (ds in c("Imports", "Exports")) {
+    dir.create(file.path(temp_dir, "Trade", ds), recursive = TRUE)
+  }
+  dir.create(file.path(temp_dir, "Labour", "Employment"), recursive = TRUE)
+
+  db_connect(path = temp_dir)
+
+  # Document and publish some datasets
+  db_describe(section = "Trade", dataset = "Imports", description = "Trade imports", owner = "Trade")
+  db_describe(section = "Trade", dataset = "Exports", description = "Trade exports", owner = "Trade")
+  db_describe(section = "Labour", dataset = "Employment", description = "Employment data", owner = "Labour")
+
+  db_set_public(section = "Trade", dataset = "Imports")
+  db_set_public(section = "Labour", dataset = "Employment")
+  # Exports NOT made public
+
+  result <- db_list_public()
+
+  expect_equal(nrow(result), 2)
+  expect_true("Imports" %in% result$dataset)
+  expect_true("Employment" %in% result$dataset)
+  expect_false("Exports" %in% result$dataset)
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_list_public filters by section", {
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "list_public_filter_test_")
+  dir.create(temp_dir)
+
+  dir.create(file.path(temp_dir, "Trade", "Imports"), recursive = TRUE)
+  dir.create(file.path(temp_dir, "Labour", "Employment"), recursive = TRUE)
+
+  db_connect(path = temp_dir)
+
+  db_describe(section = "Trade", dataset = "Imports", description = "Trade data")
+  db_describe(section = "Labour", dataset = "Employment", description = "Labour data")
+
+  db_set_public(section = "Trade", dataset = "Imports")
+  db_set_public(section = "Labour", dataset = "Employment")
+
+  result <- db_list_public(section = "Trade")
+
+  expect_equal(nrow(result), 1)
+  expect_equal(result$dataset, "Imports")
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+# ==============================================================================
+# Tests for db_describe() with public parameter
+# ==============================================================================
+
+test_that("db_describe with public=TRUE publishes to catalog", {
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "describe_public_test_")
+  dir.create(temp_dir)
+
+  dataset_path <- file.path(temp_dir, "Trade", "Imports")
+  dir.create(dataset_path, recursive = TRUE)
+
+  db_connect(path = temp_dir)
+
+  expect_message(
+    db_describe(
+      section = "Trade",
+      dataset = "Imports",
+      description = "Monthly imports",
+      public = TRUE
+    ),
+    "published to catalog"
+  )
+
+  expect_true(db_is_public(section = "Trade", dataset = "Imports"))
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_describe with public=FALSE removes from catalog", {
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "describe_private_test_")
+  dir.create(temp_dir)
+
+  dataset_path <- file.path(temp_dir, "Trade", "Imports")
+  dir.create(dataset_path, recursive = TRUE)
+
+  db_connect(path = temp_dir)
+
+  # First make public
+  db_describe(section = "Trade", dataset = "Imports", description = "Test", public = TRUE)
+  expect_true(db_is_public(section = "Trade", dataset = "Imports"))
+
+  # Then make private
+  expect_message(
+    db_describe(section = "Trade", dataset = "Imports", public = FALSE),
+    "removed from catalog"
+  )
+
+  expect_false(db_is_public(section = "Trade", dataset = "Imports"))
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_describe auto-syncs when dataset is already public", {
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "describe_sync_test_")
+  dir.create(temp_dir)
+
+  dataset_path <- file.path(temp_dir, "Trade", "Imports")
+  dir.create(dataset_path, recursive = TRUE)
+
+  db_connect(path = temp_dir)
+
+  # Make public
+  db_describe(section = "Trade", dataset = "Imports", description = "Original", public = TRUE)
+
+  # Update without specifying public parameter
+  expect_message(
+    db_describe(section = "Trade", dataset = "Imports", description = "Updated"),
+    "synced to catalog"
+  )
+
+  # Check catalog has updated description
+  catalog_path <- file.path(temp_dir, "_catalog", "Trade", "Imports.json")
+  catalog_meta <- jsonlite::fromJSON(catalog_path)
+  expect_equal(catalog_meta$description, "Updated")
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+# ==============================================================================
+# Tests for db_describe_column() with public parameter
+# ==============================================================================
+
+test_that("db_describe_column auto-syncs when dataset is public", {
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "col_sync_test_")
+  dir.create(temp_dir)
+
+  dataset_path <- file.path(temp_dir, "Trade", "Imports")
+  dir.create(dataset_path, recursive = TRUE)
+
+  db_connect(path = temp_dir)
+
+  # Make dataset public
+  db_describe(section = "Trade", dataset = "Imports", description = "Test", public = TRUE)
+
+  # Add column docs (should auto-sync)
+  expect_message(
+    db_describe_column(
+      section = "Trade",
+      dataset = "Imports",
+      column = "value",
+      description = "Import value"
+    ),
+    "synced to catalog"
+  )
+
+  # Check catalog has column docs
+  catalog_path <- file.path(temp_dir, "_catalog", "Trade", "Imports.json")
+  catalog_meta <- jsonlite::fromJSON(catalog_path, simplifyVector = FALSE)
+  expect_equal(catalog_meta$columns$value$description, "Import value")
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_describe_column with public=TRUE errors when dataset not public", {
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "col_not_public_test_")
+  dir.create(temp_dir)
+
+  dataset_path <- file.path(temp_dir, "Trade", "Imports")
+  dir.create(dataset_path, recursive = TRUE)
+
+  db_connect(path = temp_dir)
+
+  # Create metadata but don't make public
+  db_describe(section = "Trade", dataset = "Imports", description = "Test")
+
+  # Try to add column docs with public=TRUE
+  expect_error(
+    db_describe_column(
+      section = "Trade",
+      dataset = "Imports",
+      column = "value",
+      description = "Test",
+      public = TRUE
+    ),
+    "is not public"
+  )
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+# ==============================================================================
+# Tests for db_sync_catalog()
+# ==============================================================================
+
+test_that("db_sync_catalog updates all public entries", {
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "sync_catalog_test_")
+  dir.create(temp_dir)
+
+  dataset_path <- file.path(temp_dir, "Trade", "Imports")
+  dir.create(dataset_path, recursive = TRUE)
+
+  db_connect(path = temp_dir)
+
+  # Create and publish
+  db_describe(section = "Trade", dataset = "Imports", description = "Original", public = TRUE)
+
+  # Manually modify source metadata
+  meta_path <- file.path(dataset_path, "_metadata.json")
+  meta <- jsonlite::fromJSON(meta_path, simplifyVector = FALSE)
+  meta$description <- "Modified"
+  jsonlite::write_json(meta, meta_path, pretty = TRUE, auto_unbox = TRUE)
+
+  # Sync catalog
+  result <- db_sync_catalog()
+
+  expect_equal(result$synced, 1)
+  expect_equal(result$errors, 0)
+
+  # Check catalog is updated
+  catalog_path <- file.path(temp_dir, "_catalog", "Trade", "Imports.json")
+  catalog_meta <- jsonlite::fromJSON(catalog_path)
+  expect_equal(catalog_meta$description, "Modified")
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_sync_catalog removes orphans when requested", {
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "sync_orphan_test_")
+  dir.create(temp_dir)
+
+  dataset_path <- file.path(temp_dir, "Trade", "Imports")
+  dir.create(dataset_path, recursive = TRUE)
+
+  db_connect(path = temp_dir)
+
+  # Create and publish
+  db_describe(section = "Trade", dataset = "Imports", description = "Test", public = TRUE)
+
+  # Manually delete source metadata (simulating deleted dataset)
+  unlink(file.path(dataset_path, "_metadata.json"))
+
+  # Sync with remove_orphans = TRUE
+  expect_message(
+    result <- db_sync_catalog(remove_orphans = TRUE),
+    "Removed orphan"
+  )
+
+  expect_equal(result$removed, 1)
+
+  # Catalog entry should be gone
+  catalog_path <- file.path(temp_dir, "_catalog", "Trade", "Imports.json")
+  expect_false(file.exists(catalog_path))
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_sync_catalog reports orphans without removing by default", {
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "sync_report_test_")
+  dir.create(temp_dir)
+
+  dataset_path <- file.path(temp_dir, "Trade", "Imports")
+  dir.create(dataset_path, recursive = TRUE)
+
+  db_connect(path = temp_dir)
+
+  # Create and publish
+  db_describe(section = "Trade", dataset = "Imports", description = "Test", public = TRUE)
+
+  # Delete source metadata
+  unlink(file.path(dataset_path, "_metadata.json"))
+
+  # Sync without remove_orphans
+  expect_message(
+    result <- db_sync_catalog(),
+    "Orphan found"
+  )
+
+  expect_equal(result$removed, 0)
+
+  # Catalog entry should still exist
+  catalog_path <- file.path(temp_dir, "_catalog", "Trade", "Imports.json")
+  expect_true(file.exists(catalog_path))
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+# ==============================================================================
+# Tests for Master Discovery Catalog (DuckLake Multi-Catalog)
+# ==============================================================================
+
+test_that("db_setup_master creates SQLite database with schema", {
+  temp_dir <- tempfile(pattern = "master_setup_test_")
+  dir.create(temp_dir)
+  master_path <- file.path(temp_dir, "_master", "discovery.sqlite")
+
+  expect_message(
+    db_setup_master(master_path),
+    "Master discovery catalog created"
+  )
+
+  expect_true(file.exists(master_path))
+
+  # Check schema
+  con <- DBI::dbConnect(RSQLite::SQLite(), master_path)
+  on.exit(DBI::dbDisconnect(con))
+
+  tables <- DBI::dbListTables(con)
+  expect_true("sections" %in% tables)
+  expect_true("tables" %in% tables)
+
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_register_section adds section to master catalog", {
+  temp_dir <- tempfile(pattern = "register_section_test_")
+  dir.create(temp_dir)
+  master_path <- file.path(temp_dir, "_master", "discovery.sqlite")
+
+  # Set up master
+  db_setup_master(master_path)
+
+  # Register section
+  expect_message(
+    db_register_section(
+      section = "trade",
+      catalog_path = file.path(temp_dir, "trade", "catalog.sqlite"),
+      data_path = file.path(temp_dir, "trade", "data"),
+      description = "Trade statistics",
+      owner = "Trade Team",
+      master_path = master_path
+    ),
+    "Registered section 'trade'"
+  )
+
+  # Verify
+  sections <- db_list_registered_sections(master_path = master_path)
+  expect_equal(nrow(sections), 1)
+  expect_equal(sections$section_name[1], "trade")
+  expect_equal(sections$owner[1], "Trade Team")
+
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_unregister_section removes section from master catalog", {
+  temp_dir <- tempfile(pattern = "unregister_section_test_")
+  dir.create(temp_dir)
+  master_path <- file.path(temp_dir, "_master", "discovery.sqlite")
+
+  db_setup_master(master_path)
+  db_register_section(
+    section = "trade",
+    catalog_path = "test.sqlite",
+    data_path = "test",
+    master_path = master_path
+  )
+
+  expect_message(
+    db_unregister_section("trade", master_path = master_path),
+    "Unregistered section 'trade'"
+  )
+
+  sections <- db_list_registered_sections(master_path = master_path)
+  expect_equal(nrow(sections), 0)
+
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_list_registered_sections lists all sections", {
+  temp_dir <- tempfile(pattern = "list_sections_test_")
+  dir.create(temp_dir)
+  master_path <- file.path(temp_dir, "_master", "discovery.sqlite")
+
+  db_setup_master(master_path)
+
+  # Register multiple sections
+  for (sec in c("trade", "labour", "shared")) {
+    db_register_section(
+      section = sec,
+      catalog_path = paste0(sec, ".sqlite"),
+      data_path = sec,
+      master_path = master_path
+    )
+  }
+
+  sections <- db_list_registered_sections(master_path = master_path)
+  expect_equal(nrow(sections), 3)
+  expect_setequal(sections$section_name, c("trade", "labour", "shared"))
+
+  unlink(temp_dir, recursive = TRUE)
+})
+
+# ==============================================================================
+# Tests for Public Catalog Functions (DuckLake Mode)
+# ==============================================================================
+
+test_that("db_set_public in DuckLake mode requires section to be set", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempdir()
+  db_lake_connect(
+    metadata_path = file.path(temp_dir, "test_no_section.ducklake"),
+    data_path = temp_dir
+  )
+
+  expect_error(
+    db_set_public(schema = "main", table = "test"),
+    "No section set"
+  )
+
+  clean_db_env()
+})
+
+test_that("db_list_public in DuckLake mode returns empty when no master catalog", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempdir()
+
+  # Clear master catalog option
+  old_opt <- getOption("datapond.master_catalog")
+  options(datapond.master_catalog = NULL)
+  on.exit(options(datapond.master_catalog = old_opt), add = TRUE)
+
+  db_lake_connect(
+    metadata_path = file.path(temp_dir, "test_no_master.ducklake"),
+    data_path = temp_dir
+  )
+
+  result <- db_list_public()
+  expect_equal(nrow(result), 0)
+  expect_true("section" %in% names(result))
+  expect_true("schema" %in% names(result))
+
+  clean_db_env()
+})
+
+test_that("db_is_public in DuckLake mode returns FALSE when no section set", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempdir()
+
+  db_lake_connect(
+    metadata_path = file.path(temp_dir, "test_is_public.ducklake"),
+    data_path = temp_dir
+  )
+
+  expect_false(db_is_public(schema = "main", table = "test"))
+
+  clean_db_env()
+})

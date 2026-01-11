@@ -542,7 +542,7 @@ db_dictionary <- function(section = NULL, schema = NULL, include_columns = TRUE)
 db_search <- function(pattern, field = c("all", "name", "description", "owner", "tags")) {
   # Get full dictionary (without columns for speed)
   dict <- db_dictionary(include_columns = FALSE)
-  
+
   # Filter by pattern match
   matches <- switch(field,
     all = grepl(pattern, dict$name) | grepl(pattern, dict$description) | ...,
@@ -550,10 +550,135 @@ db_search <- function(pattern, field = c("all", "name", "description", "owner", 
     description = grepl(pattern, dict$description),
     ...
   )
-  
+
   dict[matches, ]
 }
 ```
+
+### Public Catalog Functions
+
+The public catalog enables organisation-wide data discovery without requiring access to the actual data.
+
+#### Hive Mode: `_catalog/` Folder
+
+```{r}
+# Get path to public catalog
+.db_catalog_path <- function() {
+  file.path(.db_get("data_path"), "_catalog")
+}
+
+# Publish metadata to public catalog
+.db_publish_metadata <- function(section, dataset) {
+  source_path <- .db_metadata_path(section, dataset)
+  dest_path <- .db_public_metadata_path(section, dataset)
+
+  # Copy metadata with public flag
+  metadata <- .db_read_metadata(source_path)
+  metadata$public <- TRUE
+  metadata$catalog_published_at <- Sys.time()
+
+  dir.create(dirname(dest_path), recursive = TRUE, showWarnings = FALSE)
+  jsonlite::write_json(metadata, dest_path, pretty = TRUE, auto_unbox = TRUE)
+}
+```
+
+#### DuckLake Mode: Master SQLite Catalog
+
+```{r}
+# Connect to master catalog
+.db_master_connect <- function(master_path = NULL) {
+  if (is.null(master_path)) {
+    master_path <- .db_master_path()  # From option or default
+  }
+  DBI::dbConnect(RSQLite::SQLite(), master_path)
+}
+
+# Publish to master catalog
+.db_publish_to_master <- function(schema, table) {
+  section <- .db_get("section")
+  master_con <- .db_master_connect()
+
+  # Get column info and docs from DuckLake catalog
+  cols <- DBI::dbGetQuery(con, "SELECT ... FROM information_schema.columns")
+  docs <- db_get_docs(schema = schema, table = table)
+
+  # Upsert to master
+  DBI::dbExecute(master_con, "
+    INSERT OR REPLACE INTO tables
+    (section_name, schema_name, table_name, description, owner, ...)
+    VALUES (?, ?, ?, ?, ?, ...)
+  ")
+}
+```
+
+### Unified API Pattern
+
+Both modes use the same user-facing functions:
+
+```{r}
+db_set_public <- function(section = NULL, dataset = NULL,
+                          schema = "main", table = NULL) {
+  curr_mode <- .db_get("mode")
+
+  if (curr_mode == "hive") {
+    .db_publish_metadata(section, dataset)
+  } else {
+    .db_publish_to_master(schema, table)
+  }
+}
+```
+
+**Key points:**
+
+- Same API regardless of mode
+- Mode detection determines which backend to use
+- `db_describe(public = TRUE)` integrates publishing with documentation
+
+---
+
+## `R/db_connect.R` - Section Management
+
+For multi-catalog DuckLake, sections are registered in a master catalog:
+
+```{r}
+db_register_section <- function(section, catalog_path, data_path, ...) {
+  master_con <- .db_master_connect()
+
+  # Ensure schema exists
+  .db_ensure_master_schema(master_con)
+
+  # Upsert section
+  DBI::dbExecute(master_con, "
+    INSERT OR REPLACE INTO sections
+    (section_name, catalog_path, data_path, ...)
+    VALUES (?, ?, ?, ...)
+  ")
+}
+
+db_lake_connect_section <- function(section, master_path = NULL, ...) {
+  # Look up section in master
+  master_con <- DBI::dbConnect(RSQLite::SQLite(), master_path)
+  section_info <- DBI::dbGetQuery(master_con, "
+    SELECT catalog_path, data_path FROM sections WHERE section_name = ?
+  ")
+
+  # Connect using looked-up paths
+  con <- db_lake_connect(
+    metadata_path = section_info$catalog_path,
+    data_path = section_info$data_path,
+    ...
+  )
+
+  # Store section for master catalog sync
+  assign("section", section, envir = .db_env)
+}
+```
+
+**Key points:**
+
+- Master catalog is SQLite (read by everyone, write by admins)
+- `db_lake_connect_section()` looks up paths automatically
+- Section stored in `.db_env` enables `db_describe(public=TRUE)` to sync
 
 ---
 

@@ -247,11 +247,266 @@ db_browser_server <- function(id, height = "500px") {
     # =========================================================================
     # Connection Info Tab
     # =========================================================================
-    
+
     output$connection_info <- shiny::renderPrint({
       db_status()
     })
-    
+
+    # =========================================================================
+    # Public Catalog Tab (Both Modes)
+    # =========================================================================
+
+    # Reactive to track catalog refresh
+    public_catalog_refresh <- shiny::reactiveVal(0)
+
+    # Refresh button
+    shiny::observeEvent(input$refresh_public, {
+      public_catalog_refresh(public_catalog_refresh() + 1)
+    })
+
+    if (is_hive) {
+      # ---- Hive Mode ----
+
+      # Public catalog data
+      public_catalog_data <- shiny::reactive({
+        public_catalog_refresh()  # Trigger refresh
+        tryCatch({
+          db_list_public()
+        }, error = function(e) {
+          data.frame(
+            section = character(),
+            dataset = character(),
+            description = character(),
+            owner = character(),
+            tags = character()
+          )
+        })
+      })
+
+      output$public_catalog_table <- DT::renderDataTable({
+        DT::datatable(
+          public_catalog_data(),
+          options = list(pageLength = 15, scrollX = TRUE),
+          rownames = FALSE,
+          selection = "single"
+        )
+      })
+
+      # Sync catalog button
+      shiny::observeEvent(input$sync_catalog, {
+        tryCatch({
+          result <- db_sync_catalog()
+          shiny::showNotification(
+            paste0("Sync complete: ", result$synced, " synced"),
+            type = "message"
+          )
+          public_catalog_refresh(public_catalog_refresh() + 1)
+        }, error = function(e) {
+          shiny::showNotification(
+            paste0("Sync error: ", e$message),
+            type = "error"
+          )
+        })
+      })
+
+      # Display public status of selected dataset
+      output$public_status_display <- shiny::renderUI({
+        if (is.null(rv$selected_section) || is.null(rv$selected_dataset)) {
+          return(shiny::tags$em("No dataset selected"))
+        }
+
+        is_public <- tryCatch(
+          db_is_public(section = rv$selected_section, dataset = rv$selected_dataset),
+          error = function(e) FALSE
+        )
+
+        shiny::tags$div(
+          shiny::tags$strong(paste0(rv$selected_section, "/", rv$selected_dataset, ": ")),
+          if (is_public) {
+            shiny::tags$span(
+              class = "badge bg-success",
+              shiny::icon("globe"), " Public"
+            )
+          } else {
+            shiny::tags$span(
+              class = "badge bg-secondary",
+              shiny::icon("lock"), " Private"
+            )
+          }
+        )
+      })
+
+      # Make public button
+      shiny::observeEvent(input$make_public, {
+        shiny::req(rv$selected_section, rv$selected_dataset)
+
+        tryCatch({
+          db_set_public(section = rv$selected_section, dataset = rv$selected_dataset)
+          shiny::showNotification(
+            paste0("Published ", rv$selected_section, "/", rv$selected_dataset, " to catalog"),
+            type = "message"
+          )
+          public_catalog_refresh(public_catalog_refresh() + 1)
+        }, error = function(e) {
+          shiny::showNotification(
+            paste0("Error: ", e$message),
+            type = "error"
+          )
+        })
+      })
+
+      # Make private button
+      shiny::observeEvent(input$make_private, {
+        shiny::req(rv$selected_section, rv$selected_dataset)
+
+        tryCatch({
+          db_set_private(section = rv$selected_section, dataset = rv$selected_dataset)
+          shiny::showNotification(
+            paste0("Removed ", rv$selected_section, "/", rv$selected_dataset, " from catalog"),
+            type = "message"
+          )
+          public_catalog_refresh(public_catalog_refresh() + 1)
+        }, error = function(e) {
+          shiny::showNotification(
+            paste0("Error: ", e$message),
+            type = "error"
+          )
+        })
+      })
+
+    } else {
+      # ---- DuckLake Mode ----
+
+      # Current section display
+      output$current_section_display <- shiny::renderUI({
+        section <- tryCatch(db_current_section(), error = function(e) NULL)
+        if (is.null(section)) {
+          shiny::tags$span(
+            class = "badge bg-warning",
+            shiny::icon("exclamation-triangle"), " No section set"
+          )
+        } else {
+          shiny::tags$span(
+            class = "badge bg-info",
+            shiny::icon("database"), " Section: ", section
+          )
+        }
+      })
+
+      # Public catalog data from master catalog
+      public_catalog_data <- shiny::reactive({
+        public_catalog_refresh()  # Trigger refresh
+        tryCatch({
+          db_list_public()
+        }, error = function(e) {
+          data.frame(
+            section = character(),
+            schema = character(),
+            table = character(),
+            description = character(),
+            owner = character()
+          )
+        })
+      })
+
+      output$public_catalog_table <- DT::renderDataTable({
+        DT::datatable(
+          public_catalog_data(),
+          options = list(pageLength = 10, scrollX = TRUE),
+          rownames = FALSE,
+          selection = "single"
+        )
+      })
+
+      # Registered sections
+      registered_sections_data <- shiny::reactive({
+        public_catalog_refresh()  # Trigger refresh
+        tryCatch({
+          db_list_registered_sections()
+        }, error = function(e) {
+          data.frame(
+            section_name = character(),
+            description = character(),
+            owner = character()
+          )
+        })
+      })
+
+      output$registered_sections_table <- DT::renderDataTable({
+        DT::datatable(
+          registered_sections_data(),
+          options = list(pageLength = 5, scrollX = TRUE),
+          rownames = FALSE,
+          selection = "single"
+        )
+      })
+
+      # Display public status of selected table
+      output$public_status_display <- shiny::renderUI({
+        if (is.null(rv$selected_schema) || is.null(rv$selected_table)) {
+          return(shiny::tags$em("No table selected"))
+        }
+
+        is_public <- tryCatch(
+          db_is_public(schema = rv$selected_schema, table = rv$selected_table),
+          error = function(e) FALSE
+        )
+
+        shiny::tags$div(
+          shiny::tags$strong(paste0(rv$selected_schema, ".", rv$selected_table, ": ")),
+          if (is_public) {
+            shiny::tags$span(
+              class = "badge bg-success",
+              shiny::icon("globe"), " Public"
+            )
+          } else {
+            shiny::tags$span(
+              class = "badge bg-secondary",
+              shiny::icon("lock"), " Private"
+            )
+          }
+        )
+      })
+
+      # Make public button (DuckLake)
+      shiny::observeEvent(input$make_public, {
+        shiny::req(rv$selected_schema, rv$selected_table)
+
+        tryCatch({
+          db_set_public(schema = rv$selected_schema, table = rv$selected_table)
+          shiny::showNotification(
+            paste0("Published ", rv$selected_schema, ".", rv$selected_table, " to master catalog"),
+            type = "message"
+          )
+          public_catalog_refresh(public_catalog_refresh() + 1)
+        }, error = function(e) {
+          shiny::showNotification(
+            paste0("Error: ", e$message),
+            type = "error"
+          )
+        })
+      })
+
+      # Make private button (DuckLake)
+      shiny::observeEvent(input$make_private, {
+        shiny::req(rv$selected_schema, rv$selected_table)
+
+        tryCatch({
+          db_set_private(schema = rv$selected_schema, table = rv$selected_table)
+          shiny::showNotification(
+            paste0("Removed ", rv$selected_schema, ".", rv$selected_table, " from master catalog"),
+            type = "message"
+          )
+          public_catalog_refresh(public_catalog_refresh() + 1)
+        }, error = function(e) {
+          shiny::showNotification(
+            paste0("Error: ", e$message),
+            type = "error"
+          )
+        })
+      })
+    }
+
   })
 }
 
@@ -414,14 +669,26 @@ db_browser_server <- function(id, height = "500px") {
 #' Render metadata card
 #' @noRd
 .render_metadata_card <- function(meta, is_hive, rv, ns) {
-  
+
   # Title
   if (is_hive) {
     title <- paste0(rv$selected_section, "/", rv$selected_dataset)
+
+    # Check public status
+    is_public <- tryCatch(
+      db_is_public(section = rv$selected_section, dataset = rv$selected_dataset),
+      error = function(e) FALSE
+    )
   } else {
     title <- paste0(rv$selected_schema, ".", rv$selected_table)
+
+    # Check public status in DuckLake mode
+    is_public <- tryCatch(
+      db_is_public(schema = rv$selected_schema, table = rv$selected_table),
+      error = function(e) FALSE
+    )
   }
-  
+
   # Basic info
   desc <- meta$description %||% "(No description)"
   owner <- meta$owner %||% "(No owner)"
@@ -456,12 +723,22 @@ db_browser_server <- function(id, height = "500px") {
     shiny::tags$p(shiny::tags$em("No column documentation"))
   }
   
+  # Public badge
+  public_badge <- if (is_public) {
+    shiny::tags$span(
+      class = "badge bg-success ms-2",
+      shiny::icon("globe"), " Public"
+    )
+  } else {
+    NULL
+  }
+
   # Build card
   shiny::tags$div(
     class = "card",
     shiny::tags$div(
       class = "card-header",
-      shiny::tags$h4(title)
+      shiny::tags$h4(title, public_badge)
     ),
     shiny::tags$div(
       class = "card-body",
