@@ -1,7 +1,7 @@
 # browser_demo_ducklake.R
 # ========================
 # Interactive demo of db_browser() with sample DuckLake data
-# Demonstrates multi-catalog architecture with master discovery catalog
+# Demonstrates path-based access control with schema paths
 #
 # Run with:
 #   source(system.file("examples", "browser_demo_ducklake.R", package = "datapond"))
@@ -14,67 +14,61 @@ library(datapond)
 # Create a temp directory for our test data lake
 lake_path <- file.path(tempdir(), "test_ducklake")
 if (dir.exists(lake_path)) unlink(lake_path, recursive = TRUE)
-dir.create(lake_path)
+dir.create(lake_path, recursive = TRUE)
 
 cat("Setting up DuckLake at:", lake_path, "\n\n")
 
 # =============================================================================
-# Set up Master Discovery Catalog (organisation-wide)
+# Set up DuckLake catalog
 # =============================================================================
-# The master catalog is a lightweight SQLite database that indexes public
-# tables across all section catalogs for organisation-wide discovery.
+# Single catalog file with schemas that have custom data paths.
+# In production, folder ACLs on each schema path control access.
 
-master_path <- file.path(lake_path, "_master", "discovery.sqlite")
-db_setup_master(master_path)
-cat("✓ Master discovery catalog created\n")
+catalog_path <- file.path(lake_path, "catalog.sqlite")
+data_path <- file.path(lake_path, "data")
+dir.create(data_path, recursive = TRUE, showWarnings = FALSE)
 
-# Set as default for this session
-options(datapond.master_catalog = master_path)
-
-# =============================================================================
-# Create section directories and connect
-# =============================================================================
-# Each section has its own DuckLake catalog. First create the catalog,
-# then register with master.
-
-# Create directories for the section
-section_catalog <- file.path(lake_path, "demo", "catalog.ducklake")
-section_data <- file.path(lake_path, "demo", "data")
-dir.create(dirname(section_catalog), recursive = TRUE, showWarnings = FALSE)
-dir.create(section_data, recursive = TRUE, showWarnings = FALSE)
-
-# Connect to create the catalog (this creates the .ducklake file)
+# Connect to DuckLake
 db_lake_connect(
   catalog = "demo",
-  metadata_path = section_catalog,
-  data_path = section_data
+  catalog_type = "sqlite",
+  metadata_path = catalog_path,
+  data_path = data_path
 )
-cat("✓ Section catalog created\n")
-
-# Store section name for public catalog operations
-assign("section", "demo", envir = datapond:::.db_env)
-
-# Register section in master catalog for discovery
-db_register_section(
-  section = "demo",
-  catalog_path = section_catalog,
-  data_path = section_data,
-  description = "Demo section with sample data",
-  owner = "Demo Team",
-  master_path = master_path
-)
-cat("✓ Section 'demo' registered in master catalog\n")
+cat("DuckLake catalog created\n")
 
 # =============================================================================
-# Create schemas and tables
+# Create schemas with custom paths (for access control)
 # =============================================================================
+# Each schema has its own data folder. In production, you'd set folder ACLs
+# on each path to control who can read/write to that schema.
 
-db_create_schema("trade")
-db_create_schema("labour")
-db_create_schema("health")
-db_create_schema("reference")
+trade_path <- file.path(data_path, "trade")
+labour_path <- file.path(data_path, "labour")
+health_path <- file.path(data_path, "health")
+shared_path <- file.path(data_path, "shared")
 
-cat("✓ Created schemas\n")
+# Create directories
+dir.create(trade_path, recursive = TRUE, showWarnings = FALSE)
+dir.create(labour_path, recursive = TRUE, showWarnings = FALSE)
+dir.create(health_path, recursive = TRUE, showWarnings = FALSE)
+dir.create(shared_path, recursive = TRUE, showWarnings = FALSE)
+
+# Create schemas with paths
+db_create_schema("trade", path = trade_path)
+db_create_schema("labour", path = labour_path)
+db_create_schema("health", path = health_path)
+db_create_schema("reference", path = shared_path)
+
+cat("Created schemas with custom paths\n")
+cat("  trade:     ", trade_path, "\n")
+cat("  labour:    ", labour_path, "\n")
+cat("  health:    ", health_path, "\n")
+cat("  reference: ", shared_path, "\n\n")
+
+# =============================================================================
+# Create sample tables
+# =============================================================================
 
 # trade.imports
 imports <- data.frame(
@@ -88,7 +82,7 @@ imports <- data.frame(
 
 db_lake_write(imports, schema = "trade", table = "imports",
               commit_author = "demo", commit_message = "Initial load")
-cat("✓ Created trade.imports\n")
+cat("Created trade.imports\n")
 
 # trade.exports
 exports <- data.frame(
@@ -102,7 +96,7 @@ exports <- data.frame(
 
 db_lake_write(exports, schema = "trade", table = "exports",
               commit_author = "demo", commit_message = "Initial load")
-cat("✓ Created trade.exports\n")
+cat("Created trade.exports\n")
 
 # labour.employment
 employment <- data.frame(
@@ -116,7 +110,7 @@ employment <- data.frame(
 
 db_lake_write(employment, schema = "labour", table = "employment",
               commit_author = "demo", commit_message = "Initial load")
-cat("✓ Created labour.employment\n")
+cat("Created labour.employment\n")
 
 # health.hospitals
 hospitals <- data.frame(
@@ -130,7 +124,7 @@ hospitals <- data.frame(
 
 db_lake_write(hospitals, schema = "health", table = "hospitals",
               commit_author = "demo", commit_message = "Initial load")
-cat("✓ Created health.hospitals\n")
+cat("Created health.hospitals\n")
 
 # reference.countries
 countries <- data.frame(
@@ -141,7 +135,7 @@ countries <- data.frame(
 
 db_lake_write(countries, schema = "reference", table = "countries",
               commit_author = "demo", commit_message = "Initial load")
-cat("✓ Created reference.countries\n")
+cat("Created reference.countries\n")
 
 # =============================================================================
 # Add documentation
@@ -194,54 +188,7 @@ db_describe(
   tags = c("reference", "lookup")
 )
 
-cat("✓ Documentation added\n")
-
-# =============================================================================
-# Publish tables to Master Catalog
-# =============================================================================
-# Only data owners (with section access) can publish tables.
-# Published metadata is synced to the master catalog for discovery.
-
-cat("\nPublishing to master catalog...\n")
-
-# Publish selected tables (using public=TRUE in db_describe)
-db_describe(
-  schema = "trade",
-  table = "imports",
-  public = TRUE  # Syncs to master discovery catalog
-)
-cat("✓ trade.imports published\n")
-
-db_describe(
-  schema = "trade",
-  table = "exports",
-  public = TRUE
-)
-cat("✓ trade.exports published\n")
-
-db_describe(
-  schema = "reference",
-  table = "countries",
-  public = TRUE
-)
-cat("✓ reference.countries published\n")
-
-# Labour and health tables remain private
-cat("  labour.employment - private (internal only)\n")
-cat("  health.hospitals - private (internal only)\n")
-
-# Show public catalog contents
-cat("\nPublic tables in master catalog:\n")
-public_tables <- db_list_public()
-if (nrow(public_tables) > 0) {
-  print(public_tables[, c("section", "schema", "table", "description")])
-} else {
-  cat("  (none)\n")
-}
-
-# Show registered sections
-cat("\nRegistered sections:\n")
-print(db_list_registered_sections())
+cat("Documentation added\n")
 
 # =============================================================================
 # Show what we created
@@ -252,13 +199,15 @@ cat("=" |> rep(60) |> paste(collapse = ""), "\n")
 cat("DUCKLAKE TEST DATA READY\n")
 cat("=" |> rep(60) |> paste(collapse = ""), "\n\n")
 
-cat("Current section: ", db_current_section(), "\n")
-
-cat("Schemas and tables:\n")
+cat("Schemas and their data paths:\n")
 for (sch in db_list_schemas()) {
   if (startsWith(sch, "_")) next  # skip metadata schema
+  path <- db_get_schema_path(sch)
   tables <- db_list_tables(sch)
   cat(sprintf("  %s (%d tables)\n", sch, length(tables)))
+  if (!is.null(path)) {
+    cat(sprintf("    path: %s\n", path))
+  }
   for (tbl in tables) {
     cat(sprintf("    - %s\n", tbl))
   }
@@ -271,12 +220,31 @@ cat("\nConnection status:\n")
 db_status()
 
 # =============================================================================
+# Demonstrate access control concept
+# =============================================================================
+
+cat("\n")
+cat("=" |> rep(60) |> paste(collapse = ""), "\n")
+cat("ACCESS CONTROL VIA SCHEMA PATHS\n")
+cat("=" |> rep(60) |> paste(collapse = ""), "\n\n")
+
+cat("In production, you would set folder ACLs on each schema's data path:\n\n")
+cat("  Schema      Path                          ACL Example\n")
+cat("  ---------   ---------------------------   ---------------------------\n")
+cat("  trade       ", trade_path, "    Trade Team: read/write\n")
+cat("  labour      ", labour_path, "   Labour Team: read/write\n")
+cat("  health      ", health_path, "   Health Team: read/write\n")
+cat("  reference   ", shared_path, "   Everyone: read\n")
+cat("\n")
+cat("This enables fine-grained access control using familiar folder permissions.\n")
+
+# =============================================================================
 # Launch browser
 # =============================================================================
 
 cat("\n")
 cat("Launching browser...\n")
-cat("Try the 'Public Catalog' tab to see published tables and sections!\n")
+cat("Check the 'Public Catalog' tab for information about access control.\n")
 cat("(Close the browser window to return to R)\n\n")
 
 db_browser()
@@ -284,6 +252,5 @@ db_browser()
 # Cleanup
 cat("\nCleaning up...\n")
 db_disconnect()
-options(datapond.master_catalog = NULL)
 unlink(lake_path, recursive = TRUE)
 cat("Done!\n")
