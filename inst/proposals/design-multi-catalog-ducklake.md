@@ -191,28 +191,76 @@ db_lake_table_info(section = "trade", schema = "main", table = "imports")
 #> 3  value  DOUBLE  Import value (EUR)
 ```
 
-### Sync to Master
+### Publishing to Master (via db_describe)
+
+The API uses the same `public` parameter pattern as Hive mode for consistency:
 
 ```r
-# Sync current section's metadata to master
-db_sync_to_master()
-#> Synced 3 tables from 'trade' to master catalog
+# Make a table public (syncs to master discovery catalog)
+db_describe(
+  schema = "main",
+  table = "imports",
+  description = "Monthly import statistics",
+  owner = "Trade Team",
+  tags = c("trade", "monthly"),
+  public = TRUE
+)
 
-# Sync happens automatically on write (optional)
-db_lake_write(data, table = "imports", sync_master = TRUE)
+# Remove from master discovery catalog
+db_describe(
+  schema = "main",
+  table = "imports",
+  public = FALSE
+)
 
-# Full refresh of master from all accessible sections
-db_refresh_master()
+# Update description (auto-syncs if already public)
+db_describe(
+  schema = "main",
+  table = "imports",
+  description = "Updated description"
+  # public = NULL (default) - keeps current status and syncs if public
+)
+
+# Convenience functions (same as Hive mode)
+db_set_public(schema = "main", table = "imports")
+db_set_private(schema = "main", table = "imports")
+db_is_public(schema = "main", table = "imports")
+db_list_public()  # Lists all public tables from master
+```
+
+### Catalog Maintenance
+
+```r
+# Sync all public entries with their source metadata
+db_sync_catalog()
+#> Sync complete: 5 synced, 0 removed, 0 errors
+
+# Remove orphan entries (where source table was deleted)
+db_sync_catalog(remove_orphans = TRUE)
 ```
 
 ---
 
 ## Implementation Details
 
+### Unified Public Parameter Approach
+
+The key insight is that DuckLake mode should use the **same API pattern** as Hive mode. The `public` parameter on `db_describe()` controls whether metadata is published to the discovery catalog:
+
+| Mode | Source Metadata | Public Catalog | Sync Trigger |
+|------|-----------------|----------------|--------------|
+| Hive | `_metadata.json` in dataset folder | JSON in `_catalog/` folder | `db_describe(public=TRUE)` |
+| DuckLake | DuckDB catalog tables | SQLite master database | `db_describe(public=TRUE)` |
+
+This means:
+- **No separate sync functions needed** - `db_describe()` handles it
+- **Consistent API** across both modes
+- **Auto-sync behaviour** works the same way
+
 ### Helper Functions
 
 ```r
-# Get master catalog connection
+# Get master catalog connection (DuckLake mode)
 .db_master_connect <- function(master_path = NULL) {
   if (is.null(master_path)) {
     master_path <- getOption("datapond.master_catalog",
@@ -221,19 +269,15 @@ db_refresh_master()
   DBI::dbConnect(RSQLite::SQLite(), master_path)
 }
 
-# Sync a table's metadata to master
-.db_sync_table_to_master <- function(section, schema, table, master_con = NULL) {
-  own_con <- is.null(master_con)
-  if (own_con) {
-    master_con <- .db_master_connect()
-    on.exit(DBI::dbDisconnect(master_con))
-  }
+# Publish table metadata to master (called by db_describe when public=TRUE)
+.db_publish_to_master <- function(schema, table) {
+  section <- .db_get("section")
+  master_con <- .db_master_connect()
+  on.exit(DBI::dbDisconnect(master_con))
 
-  # Get metadata from section catalog
+  # Get column info from DuckLake catalog
   con <- .db_get_con()
   catalog <- .db_get("catalog")
-
-  # Get table info
   cols <- DBI::dbGetQuery(con, glue::glue("
     SELECT column_name, data_type
     FROM information_schema.columns
@@ -242,7 +286,7 @@ db_refresh_master()
       AND table_name = '{table}'
   "))
 
-  # Get docs if available
+  # Get docs
   docs <- tryCatch(db_get_docs(schema = schema, table = table), error = function(e) list())
 
   # Get row count
@@ -251,39 +295,46 @@ db_refresh_master()
   }, error = function(e) NA_integer_)
 
   # Upsert to master
+
   DBI::dbExecute(master_con, "
     INSERT OR REPLACE INTO tables
     (section_name, schema_name, table_name, description, owner, tags, columns_json, row_count, last_updated, synced_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
   ", params = list(
-    section,
-    schema,
-    table,
-    docs$description,
-    docs$owner,
-    paste(docs$tags, collapse = ","),
-    jsonlite::toJSON(cols),
-    row_count,
-    Sys.time()
+    section, schema, table,
+    docs$description, docs$owner, paste(docs$tags, collapse = ","),
+    jsonlite::toJSON(cols), row_count, Sys.time()
   ))
+}
+
+# Remove table from master (called by db_describe when public=FALSE)
+.db_unpublish_from_master <- function(schema, table) {
+  section <- .db_get("section")
+  master_con <- .db_master_connect()
+  on.exit(DBI::dbDisconnect(master_con))
+
+  DBI::dbExecute(master_con, "
+    DELETE FROM tables
+    WHERE section_name = ? AND schema_name = ? AND table_name = ?
+  ", params = list(section, schema, table))
 }
 ```
 
-### Modified db_lake_write
+### Modified db_describe (DuckLake mode)
 
 ```r
-db_lake_write <- function(..., sync_master = getOption("datapond.auto_sync_master", FALSE)) {
-  # ... existing write logic ...
+db_describe <- function(schema = "main", table = NULL, ..., public = NULL) {
+  # ... existing documentation logic ...
 
-  # Optionally sync to master
-  if (sync_master) {
-    section <- .db_get("section")
-    if (!is.null(section)) {
-      tryCatch({
-        .db_sync_table_to_master(section, schema, table)
-      }, error = function(e) {
-        warning("Failed to sync to master: ", e$message)
-      })
+  # Handle public parameter (same logic as Hive mode)
+  if (isTRUE(public)) {
+    .db_publish_to_master(schema, table)
+  } else if (isFALSE(public)) {
+    .db_unpublish_from_master(schema, table)
+  } else if (is.null(public)) {
+    # Auto-sync if already public
+    if (.db_is_public_in_master(schema, table)) {
+      .db_publish_to_master(schema, table)
     }
   }
 }
@@ -370,19 +421,20 @@ db_lake_connect(
 - [ ] Master catalog schema creation
 - [ ] `db_lake_connect_section()` using master
 
-**Phase 2: Discovery**
-- [ ] `db_lake_discover()` - list all tables from master
-- [ ] `db_lake_search_all()` - search across sections
-- [ ] `db_lake_table_info()` - detailed info from master
+**Phase 2: Public Catalog (Unified API)**
+- [ ] Extend `db_describe()` with `public` parameter for DuckLake mode
+- [ ] Extend `db_set_public()` / `db_set_private()` for DuckLake mode
+- [ ] Extend `db_is_public()` for DuckLake mode
+- [ ] Extend `db_list_public()` to read from master catalog
+- [ ] Extend `db_sync_catalog()` for DuckLake mode
 
-**Phase 3: Sync**
-- [ ] `db_sync_to_master()` - manual sync
-- [ ] `sync_master` parameter on `db_lake_write()`
-- [ ] `db_refresh_master()` - full refresh
+**Phase 3: Discovery**
+- [ ] `db_lake_discover()` - alias for `db_list_public()` in DuckLake mode
+- [ ] Search functionality across sections
 
 **Phase 4: Browser Integration**
 - [ ] Section selector in browser
-- [ ] "All Sections" discovery view
+- [ ] "All Sections" discovery view (reuse Public Catalog tab)
 - [ ] Switch section from browser
 
 ---
@@ -412,9 +464,9 @@ db_register_section(
   owner = "Trade Team"
 )
 
-# User: Discover what's available
-db_lake_discover()
-#> Shows all tables from master (even ones you can't access)
+# User: Discover what's available (same function as Hive mode!)
+db_list_public()
+#> Shows all public tables from master (even ones you can't access)
 
 # User: Connect to section you have access to
 db_lake_connect_section("trade")
@@ -425,8 +477,16 @@ imports |>
   filter(year == 2024) |>
   collect()
 
-# Write data (optionally syncs to master)
-db_lake_write(new_data, table = "imports", sync_master = TRUE)
+# Write data
+db_lake_write(new_data, table = "imports")
+
+# Document and make public (same API as Hive mode!)
+db_describe(
+  table = "imports",
+  description = "Monthly import statistics",
+  owner = "Trade Team",
+  public = TRUE
+)
 
 # Switch to another section
 db_switch_section("shared")
@@ -435,16 +495,27 @@ countries <- db_lake_read(table = "countries")
 
 ---
 
-## Relationship to Public Catalog (Hive Mode)
+## Unified API with Hive Mode
 
-The master discovery catalog for DuckLake serves a similar purpose to the `_catalog/` folder for Hive mode:
+The key design principle is that DuckLake mode uses the **same API** as Hive mode for public metadata management. This provides a consistent developer experience regardless of storage backend:
 
-| Aspect | Hive Public Catalog | DuckLake Master Catalog |
-|--------|---------------------|------------------------|
-| Storage | JSON files in `_catalog/` | SQLite database |
-| Scope | Per-dataset opt-in | Per-section registration |
-| Sync | Via `db_describe(public=TRUE)` | Via `db_sync_to_master()` |
-| Discovery | `db_list_public()` | `db_lake_discover()` |
-| Search | `db_search()` with public | `db_lake_search_all()` |
+| Function | Hive Mode | DuckLake Mode |
+|----------|-----------|---------------|
+| `db_describe(public=TRUE)` | Copies JSON to `_catalog/` | Writes to master SQLite |
+| `db_describe(public=FALSE)` | Removes from `_catalog/` | Removes from master SQLite |
+| `db_set_public()` | Convenience wrapper | Convenience wrapper |
+| `db_set_private()` | Convenience wrapper | Convenience wrapper |
+| `db_is_public()` | Checks `_catalog/` exists | Checks master table |
+| `db_list_public()` | Lists `_catalog/` contents | Queries master SQLite |
+| `db_sync_catalog()` | Syncs all public JSON files | Syncs all master entries |
+
+### Storage Comparison
+
+| Aspect | Hive Mode | DuckLake Mode |
+|--------|-----------|---------------|
+| Source metadata | `_metadata.json` per dataset | DuckDB catalog tables |
+| Public catalog storage | JSON files in `_catalog/` folder | SQLite database in `_master/` |
+| Folder structure | Mirrors section/dataset hierarchy | Flat table with section column |
+| Access control | Folder ACLs on `_catalog/` | File ACL on `discovery.sqlite` |
 
 Both solve the same fundamental problem: **enabling organisation-wide data discovery while maintaining data-level access control**.
