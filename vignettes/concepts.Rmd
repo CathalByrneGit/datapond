@@ -681,6 +681,7 @@ db_switch_section("labour")
 ### Section vs Schema in DuckLake
 
 In DuckLake mode, both **section** and **schema** exist but serve different purposes:
+
 | Concept | What It Is | Purpose |
 |---------|------------|---------|
 | **Section** | A separate DuckLake catalog file | Ownership boundary - controls who can write/publish |
