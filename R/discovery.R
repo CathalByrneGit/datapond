@@ -35,9 +35,9 @@ db_list_sections <- function() {
   
   # List directories only (sections are folders)
   all_items <- list.dirs(base_path, full.names = FALSE, recursive = FALSE)
-  
-  # Filter out any hidden folders
-  all_items[!grepl("^\\.", all_items)]
+
+ # Filter out hidden folders and system folders (like _catalog)
+  all_items[!grepl("^[\\._]", all_items)]
 }
 
 

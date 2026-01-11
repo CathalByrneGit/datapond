@@ -32,23 +32,38 @@ cat("✓ Master discovery catalog created\n")
 options(datapond.master_catalog = master_path)
 
 # =============================================================================
-# Register section and connect
+# Create section directories and connect
 # =============================================================================
-# Each section has its own DuckLake catalog. Register it with the master.
+# Each section has its own DuckLake catalog. First create the catalog,
+# then register with master.
 
+# Create directories for the section
+section_catalog <- file.path(lake_path, "demo", "catalog.ducklake")
+section_data <- file.path(lake_path, "demo", "data")
+dir.create(dirname(section_catalog), recursive = TRUE, showWarnings = FALSE)
+dir.create(section_data, recursive = TRUE, showWarnings = FALSE)
+
+# Connect to create the catalog (this creates the .ducklake file)
+db_lake_connect(
+  catalog = "demo",
+  metadata_path = section_catalog,
+  data_path = section_data
+)
+cat("✓ Section catalog created\n")
+
+# Store section name for public catalog operations
+assign("section", "demo", envir = datapond:::.db_env)
+
+# Register section in master catalog for discovery
 db_register_section(
-
   section = "demo",
-  catalog_path = file.path(lake_path, "demo", "catalog.ducklake"),
-  data_path = file.path(lake_path, "demo", "data"),
+  catalog_path = section_catalog,
+  data_path = section_data,
   description = "Demo section with sample data",
   owner = "Demo Team",
   master_path = master_path
 )
-cat("✓ Section 'demo' registered\n")
-
-# Connect using section lookup (gets paths from master catalog)
-db_lake_connect_section("demo", master_path = master_path)
+cat("✓ Section 'demo' registered in master catalog\n")
 
 # =============================================================================
 # Create schemas and tables
