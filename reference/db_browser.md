@@ -26,8 +26,8 @@ Opens the browser app. Returns NULL invisibly.
 ## See also
 
 Other shiny:
-[`db_browser_server()`](https://cathalbyrnegit.github.io/csolake/reference/db_browser_server.md),
-[`db_browser_ui()`](https://cathalbyrnegit.github.io/csolake/reference/db_browser_ui.md)
+[`db_browser_server()`](https://cathalbyrnegit.github.io/datapond/reference/db_browser_server.md),
+[`db_browser_ui()`](https://cathalbyrnegit.github.io/datapond/reference/db_browser_ui.md)
 
 ## Examples
 

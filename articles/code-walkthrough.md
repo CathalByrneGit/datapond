@@ -1,6 +1,6 @@
 # Code Walkthrough
 
-This vignette explains how `csolake` works under the hood. It walks
+This vignette explains how `datapond` works under the hood. It walks
 through each file in the package, explaining what the code does and why
 it’s designed that way.
 
@@ -8,7 +8,7 @@ it’s designed that way.
 
 ## Package Structure
 
-    csolake/
+    datapond/
     ├── DESCRIPTION          # Package metadata
     ├── NAMESPACE            # Exports and imports
     ├── LICENSE              # MIT license
@@ -797,7 +797,7 @@ db_diff <- function(schema, table, from_version, to_version, key_cols = NULL) {
 
 .onAttach <- function(libname, pkgname) {
   packageStartupMessage(
-    "csolake ", utils::packageVersion("csolake"), "\n",
+    "datapond ", utils::packageVersion("datapond"), "\n",
     "Use db_connect() for hive mode or db_lake_connect() for DuckLake mode."
   )
 }
@@ -828,10 +828,10 @@ lake.
 
 The browser uses the **Shiny module** pattern, which allows it to be: 1.
 Used standalone via
-[`db_browser()`](https://cathalbyrnegit.github.io/csolake/reference/db_browser.md)
+[`db_browser()`](https://cathalbyrnegit.github.io/datapond/reference/db_browser.md)
 2. Embedded in other Shiny apps via
-[`db_browser_ui()`](https://cathalbyrnegit.github.io/csolake/reference/db_browser_ui.md) +
-[`db_browser_server()`](https://cathalbyrnegit.github.io/csolake/reference/db_browser_server.md)
+[`db_browser_ui()`](https://cathalbyrnegit.github.io/datapond/reference/db_browser_ui.md) +
+[`db_browser_server()`](https://cathalbyrnegit.github.io/datapond/reference/db_browser_server.md)
 
 ``` r
 # Standalone usage
@@ -987,18 +987,18 @@ Try answering these questions:
 1.  Why do we use `.db_get_con()` instead of accessing `.db_env$con`
     directly?
 2.  What happens if
-    [`db_lake_write()`](https://cathalbyrnegit.github.io/csolake/reference/db_lake_write.md)
+    [`db_lake_write()`](https://cathalbyrnegit.github.io/datapond/reference/db_lake_write.md)
     fails halfway through?
 3.  Why does
-    [`db_hive_read()`](https://cathalbyrnegit.github.io/csolake/reference/db_hive_read.md)
+    [`db_hive_read()`](https://cathalbyrnegit.github.io/datapond/reference/db_hive_read.md)
     return a lazy table instead of collected data?
 4.  How does `replace_partitions` mode know which folders to delete?
 5.  What’s the difference between `update_cols = NULL` and
     `update_cols = character(0)` in
-    [`db_upsert()`](https://cathalbyrnegit.github.io/csolake/reference/db_upsert.md)?
+    [`db_upsert()`](https://cathalbyrnegit.github.io/datapond/reference/db_upsert.md)?
 6.  Why would you choose SQLite over DuckDB as a catalog backend?
 7.  How does
-    [`db_preview_upsert()`](https://cathalbyrnegit.github.io/csolake/reference/db_preview_upsert.md)
+    [`db_preview_upsert()`](https://cathalbyrnegit.github.io/datapond/reference/db_preview_upsert.md)
     know how many rows will be updated vs inserted?
 8.  Where is documentation metadata stored in hive mode vs DuckLake
     mode?

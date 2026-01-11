@@ -1,7 +1,7 @@
 # Preview an upsert operation
 
 Shows what would happen if you ran
-[`db_upsert()`](https://cathalbyrnegit.github.io/csolake/reference/db_upsert.md) -
+[`db_upsert()`](https://cathalbyrnegit.github.io/datapond/reference/db_upsert.md) -
 how many rows would be inserted vs updated.
 
 ## Usage

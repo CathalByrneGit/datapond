@@ -1,12 +1,12 @@
 # Data Lake Concepts
 
-This vignette explains the core concepts behind `csolake` - what data
+This vignette explains the core concepts behind `datapond` - what data
 lakes are, how hive partitioning works, and what DuckLake brings to the
 table. No prior knowledge assumed.
 
 ## The Problem We’re Solving
 
-At CSO, different sections need to share data:
+Within an organisation, different sections need to share data:
 
 - **Trade** produces import/export figures that **National Accounts**
   needs
@@ -21,7 +21,7 @@ access control. It works, but has limitations:
 - Large files are slow to query (must read the whole thing)
 - No schema enforcement (columns can change without warning)
 
-`csolake` addresses these issues while keeping the familiar
+`datapond` addresses these issues while keeping the familiar
 folder-and-permissions model that IT already supports.
 
 ------------------------------------------------------------------------
@@ -115,7 +115,7 @@ Bad partition columns:
 **Rule of thumb**: Aim for partition folders containing 100MB - 1GB of
 data each.
 
-### How csolake Uses Hive Partitioning
+### How datapond Uses Hive Partitioning
 
 ``` r
 # Write with partitioning
@@ -200,7 +200,7 @@ db_lake_connect(
 - Metadata stored in a `.sqlite` file on the network drive
 - **Multiple readers + single writer** with automatic retry
 - Still just a file - no server needed
-- Good for: **shared network drives, most CSO use cases**
+- Good for: **shared network drives, most use cases**
 
 **How SQLite handles concurrency:**
 
@@ -233,7 +233,7 @@ db_lake_connect(
                           └─ Yes → PostgreSQL
                           └─ No → SQLite
 
-**For most CSO use cases, start with SQLite.** It’s still just a file
+**For most use cases, start with SQLite.** It’s still just a file
 (familiar, works with IT permissions), but handles multiple users
 gracefully.
 
@@ -302,7 +302,7 @@ DuckLake handles schema changes gracefully:
 In DuckLake, **schemas** are like folders for tables. They help organise
 related tables together.
 
-    catalog (cso)
+    catalog (datapond)
     ├── main (default schema)
     │   └── reference_tables
     ├── trade
@@ -334,12 +334,12 @@ db_list_tables("trade")
 
 ### Schemas vs Sections
 
-| Hive Mode                                                                                      | DuckLake Mode                                                                                |
-|------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------|
-| Section (folder)                                                                               | Schema                                                                                       |
-| Dataset (subfolder)                                                                            | Table                                                                                        |
-| [`db_list_sections()`](https://cathalbyrnegit.github.io/csolake/reference/db_list_sections.md) | [`db_list_schemas()`](https://cathalbyrnegit.github.io/csolake/reference/db_list_schemas.md) |
-| `db_list_datasets("Trade")`                                                                    | `db_list_tables("trade")`                                                                    |
+| Hive Mode                                                                                       | DuckLake Mode                                                                                 |
+|-------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------|
+| Section (folder)                                                                                | Schema                                                                                        |
+| Dataset (subfolder)                                                                             | Table                                                                                         |
+| [`db_list_sections()`](https://cathalbyrnegit.github.io/datapond/reference/db_list_sections.md) | [`db_list_schemas()`](https://cathalbyrnegit.github.io/datapond/reference/db_list_schemas.md) |
+| `db_list_datasets("Trade")`                                                                     | `db_list_tables("trade")`                                                                     |
 
 They serve the same organisational purpose - grouping related data
 together.
@@ -348,8 +348,8 @@ together.
 
 ## Data Documentation
 
-Good data governance requires documentation. `csolake` provides built-in
-tools to document your datasets and generate a data dictionary.
+Good data governance requires documentation. `datapond` provides
+built-in tools to document your datasets and generate a data dictionary.
 
 ### Documenting Datasets
 
@@ -502,8 +502,8 @@ incoming data
 
 ## Access Control
 
-Both modes use **file system permissions** - the same model CSO already
-uses.
+Both modes use **file system permissions** - the same model commonly
+used.
 
 ### Hive Mode Access
 
@@ -542,7 +542,7 @@ Here’s how a typical workflow might look:
 ### Publishing Data (Producer)
 
 ``` r
-library(csolake)
+library(datapond)
 
 # Connect with SQLite catalog
 db_lake_connect(
@@ -581,7 +581,7 @@ db_disconnect()
 ### Consuming Data (Consumer)
 
 ``` r
-library(csolake)
+library(datapond)
 
 # Connect (read-only access is fine)
 db_lake_connect(
@@ -634,7 +634,7 @@ db_disconnect()
 ## Next Steps
 
 - See
-  [`vignette("code-walkthrough")`](https://cathalbyrnegit.github.io/csolake/articles/code-walkthrough.md)
+  [`vignette("code-walkthrough")`](https://cathalbyrnegit.github.io/datapond/articles/code-walkthrough.md)
   for detailed explanation of how the package code works
 - Try the examples in the README to get hands-on experience
 - Start with Hive mode if migrating from SAS, move to DuckLake when

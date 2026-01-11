@@ -1,7 +1,7 @@
 # Preview a DuckLake write operation
 
 Shows what would happen if you ran
-[`db_lake_write()`](https://cathalbyrnegit.github.io/csolake/reference/db_lake_write.md)
+[`db_lake_write()`](https://cathalbyrnegit.github.io/datapond/reference/db_lake_write.md)
 without actually writing any data.
 
 ## Usage

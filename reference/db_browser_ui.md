@@ -1,7 +1,7 @@
 # Shiny module UI for db_browser()
 
 Use `db_browser_ui()` and
-[`db_browser_server()`](https://cathalbyrnegit.github.io/csolake/reference/db_browser_server.md)
+[`db_browser_server()`](https://cathalbyrnegit.github.io/datapond/reference/db_browser_server.md)
 to include the data lake browser as a Shiny module in your own app.
 
 ## Usage
@@ -27,8 +27,8 @@ A Shiny UI element
 ## See also
 
 Other shiny:
-[`db_browser()`](https://cathalbyrnegit.github.io/csolake/reference/db_browser.md),
-[`db_browser_server()`](https://cathalbyrnegit.github.io/csolake/reference/db_browser_server.md)
+[`db_browser()`](https://cathalbyrnegit.github.io/datapond/reference/db_browser.md),
+[`db_browser_server()`](https://cathalbyrnegit.github.io/datapond/reference/db_browser_server.md)
 
 ## Examples
 

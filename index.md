@@ -1,7 +1,9 @@
-# csolake
+# datapond
 
-**csolake** provides a unified R interface for CSO’s internal data
-infrastructure. It supports two storage backends:
+**datapond** is a simple and ligthweight data lake infrastructure for
+small to medium data requirements. Provides a unified R interface for
+duckdb and ducklake internal data infrastructure. It supports two
+storage backends:
 
 1.  **Hive-partitioned Parquet** - familiar folder-based structure
     (similar to existing SAS storage)
@@ -15,10 +17,10 @@ giving you fast analytical queries without needing a server.
 
 ``` r
 # Install from local source
-devtools::install("path/to/csolake")
+devtools::install("path/to/datapond")
 
 # Or load for development
-devtools::load_all("path/to/csolake")
+devtools::load_all("path/to/datapond")
 ```
 
 ## Quick Start
@@ -26,7 +28,7 @@ devtools::load_all("path/to/csolake")
 ### Hive Mode (Folder-based)
 
 ``` r
-library(csolake)
+library(datapond)
 
 # Connect to the data lake
 db_connect(path = "//CSO-NAS/DataLake")
@@ -73,7 +75,7 @@ db_disconnect()
 ### DuckLake Mode (Time Travel)
 
 ``` r
-library(csolake)
+library(datapond)
 
 # Connect to DuckLake with SQLite catalog (recommended for shared drives)
 db_lake_connect(
@@ -148,7 +150,7 @@ db_disconnect()
 ### Data Documentation & Discovery
 
 ``` r
-library(csolake)
+library(datapond)
 db_connect(path = "//CSO-NAS/DataLake")
 
 # Document your datasets
@@ -185,7 +187,7 @@ writexl::write_xlsx(dict, "data_dictionary.xlsx")
 ### Interactive Browser
 
 ``` r
-library(csolake)
+library(datapond)
 db_connect(path = "//CSO-NAS/DataLake")
 
 # Launch interactive browser
@@ -274,83 +276,83 @@ systems needed.
 
 ### Connection
 
-| Function                                                                                     | Description                                                         |
-|----------------------------------------------------------------------------------------------|---------------------------------------------------------------------|
-| [`db_connect()`](https://cathalbyrnegit.github.io/csolake/reference/db_connect.md)           | Connect in hive mode                                                |
-| [`db_lake_connect()`](https://cathalbyrnegit.github.io/csolake/reference/db_lake_connect.md) | Connect in DuckLake mode (supports duckdb/sqlite/postgres catalogs) |
-| [`db_disconnect()`](https://cathalbyrnegit.github.io/csolake/reference/db_disconnect.md)     | Close connection                                                    |
-| [`db_status()`](https://cathalbyrnegit.github.io/csolake/reference/db_status.md)             | Show connection info (including catalog type)                       |
+| Function                                                                                      | Description                                                         |
+|-----------------------------------------------------------------------------------------------|---------------------------------------------------------------------|
+| [`db_connect()`](https://cathalbyrnegit.github.io/datapond/reference/db_connect.md)           | Connect in hive mode                                                |
+| [`db_lake_connect()`](https://cathalbyrnegit.github.io/datapond/reference/db_lake_connect.md) | Connect in DuckLake mode (supports duckdb/sqlite/postgres catalogs) |
+| [`db_disconnect()`](https://cathalbyrnegit.github.io/datapond/reference/db_disconnect.md)     | Close connection                                                    |
+| [`db_status()`](https://cathalbyrnegit.github.io/datapond/reference/db_status.md)             | Show connection info (including catalog type)                       |
 
 ### Reading Data
 
-| Function                                                                               | Mode     | Description                            |
-|----------------------------------------------------------------------------------------|----------|----------------------------------------|
-| [`db_hive_read()`](https://cathalbyrnegit.github.io/csolake/reference/db_hive_read.md) | Hive     | Read partitioned parquet dataset       |
-| [`db_lake_read()`](https://cathalbyrnegit.github.io/csolake/reference/db_lake_read.md) | DuckLake | Read table (with optional time travel) |
+| Function                                                                                | Mode     | Description                            |
+|-----------------------------------------------------------------------------------------|----------|----------------------------------------|
+| [`db_hive_read()`](https://cathalbyrnegit.github.io/datapond/reference/db_hive_read.md) | Hive     | Read partitioned parquet dataset       |
+| [`db_lake_read()`](https://cathalbyrnegit.github.io/datapond/reference/db_lake_read.md) | DuckLake | Read table (with optional time travel) |
 
 ### Writing Data
 
-| Function                                                                                 | Mode     | Description                                                     |
-|------------------------------------------------------------------------------------------|----------|-----------------------------------------------------------------|
-| [`db_hive_write()`](https://cathalbyrnegit.github.io/csolake/reference/db_hive_write.md) | Hive     | Write partitioned parquet (overwrite/append/replace_partitions) |
-| [`db_lake_write()`](https://cathalbyrnegit.github.io/csolake/reference/db_lake_write.md) | DuckLake | Write table (overwrite/append)                                  |
-| [`db_upsert()`](https://cathalbyrnegit.github.io/csolake/reference/db_upsert.md)         | DuckLake | MERGE operation (update + insert)                               |
+| Function                                                                                  | Mode     | Description                                                     |
+|-------------------------------------------------------------------------------------------|----------|-----------------------------------------------------------------|
+| [`db_hive_write()`](https://cathalbyrnegit.github.io/datapond/reference/db_hive_write.md) | Hive     | Write partitioned parquet (overwrite/append/replace_partitions) |
+| [`db_lake_write()`](https://cathalbyrnegit.github.io/datapond/reference/db_lake_write.md) | DuckLake | Write table (overwrite/append)                                  |
+| [`db_upsert()`](https://cathalbyrnegit.github.io/datapond/reference/db_upsert.md)         | DuckLake | MERGE operation (update + insert)                               |
 
 ### Preview Operations
 
-| Function                                                                                                 | Mode     | Description                                 |
-|----------------------------------------------------------------------------------------------------------|----------|---------------------------------------------|
-| [`db_preview_hive_write()`](https://cathalbyrnegit.github.io/csolake/reference/db_preview_hive_write.md) | Hive     | Preview write impact before executing       |
-| [`db_preview_lake_write()`](https://cathalbyrnegit.github.io/csolake/reference/db_preview_lake_write.md) | DuckLake | Preview write impact before executing       |
-| [`db_preview_upsert()`](https://cathalbyrnegit.github.io/csolake/reference/db_preview_upsert.md)         | DuckLake | Preview inserts vs updates before executing |
+| Function                                                                                                  | Mode     | Description                                 |
+|-----------------------------------------------------------------------------------------------------------|----------|---------------------------------------------|
+| [`db_preview_hive_write()`](https://cathalbyrnegit.github.io/datapond/reference/db_preview_hive_write.md) | Hive     | Preview write impact before executing       |
+| [`db_preview_lake_write()`](https://cathalbyrnegit.github.io/datapond/reference/db_preview_lake_write.md) | DuckLake | Preview write impact before executing       |
+| [`db_preview_upsert()`](https://cathalbyrnegit.github.io/datapond/reference/db_preview_upsert.md)         | DuckLake | Preview inserts vs updates before executing |
 
 ### Discovery
 
-| Function                                                                                         | Mode     | Description                |
-|--------------------------------------------------------------------------------------------------|----------|----------------------------|
-| [`db_list_sections()`](https://cathalbyrnegit.github.io/csolake/reference/db_list_sections.md)   | Hive     | List top-level sections    |
-| [`db_list_datasets()`](https://cathalbyrnegit.github.io/csolake/reference/db_list_datasets.md)   | Hive     | List datasets in a section |
-| [`db_dataset_exists()`](https://cathalbyrnegit.github.io/csolake/reference/db_dataset_exists.md) | Hive     | Check if dataset exists    |
-| [`db_list_schemas()`](https://cathalbyrnegit.github.io/csolake/reference/db_list_schemas.md)     | DuckLake | List schemas               |
-| [`db_list_tables()`](https://cathalbyrnegit.github.io/csolake/reference/db_list_tables.md)       | DuckLake | List tables in schema      |
-| [`db_list_views()`](https://cathalbyrnegit.github.io/csolake/reference/db_list_views.md)         | DuckLake | List views in schema       |
-| [`db_table_exists()`](https://cathalbyrnegit.github.io/csolake/reference/db_table_exists.md)     | DuckLake | Check if table exists      |
-| [`db_create_schema()`](https://cathalbyrnegit.github.io/csolake/reference/db_create_schema.md)   | DuckLake | Create a new schema        |
+| Function                                                                                          | Mode     | Description                |
+|---------------------------------------------------------------------------------------------------|----------|----------------------------|
+| [`db_list_sections()`](https://cathalbyrnegit.github.io/datapond/reference/db_list_sections.md)   | Hive     | List top-level sections    |
+| [`db_list_datasets()`](https://cathalbyrnegit.github.io/datapond/reference/db_list_datasets.md)   | Hive     | List datasets in a section |
+| [`db_dataset_exists()`](https://cathalbyrnegit.github.io/datapond/reference/db_dataset_exists.md) | Hive     | Check if dataset exists    |
+| [`db_list_schemas()`](https://cathalbyrnegit.github.io/datapond/reference/db_list_schemas.md)     | DuckLake | List schemas               |
+| [`db_list_tables()`](https://cathalbyrnegit.github.io/datapond/reference/db_list_tables.md)       | DuckLake | List tables in schema      |
+| [`db_list_views()`](https://cathalbyrnegit.github.io/datapond/reference/db_list_views.md)         | DuckLake | List views in schema       |
+| [`db_table_exists()`](https://cathalbyrnegit.github.io/datapond/reference/db_table_exists.md)     | DuckLake | Check if table exists      |
+| [`db_create_schema()`](https://cathalbyrnegit.github.io/datapond/reference/db_create_schema.md)   | DuckLake | Create a new schema        |
 
 ### Documentation & Search
 
-| Function                                                                                           | Mode | Description                                   |
-|----------------------------------------------------------------------------------------------------|------|-----------------------------------------------|
-| [`db_describe()`](https://cathalbyrnegit.github.io/csolake/reference/db_describe.md)               | Both | Add description, owner, tags to dataset/table |
-| [`db_describe_column()`](https://cathalbyrnegit.github.io/csolake/reference/db_describe_column.md) | Both | Document a column (description, units, notes) |
-| [`db_get_docs()`](https://cathalbyrnegit.github.io/csolake/reference/db_get_docs.md)               | Both | Retrieve documentation for a dataset/table    |
-| [`db_dictionary()`](https://cathalbyrnegit.github.io/csolake/reference/db_dictionary.md)           | Both | Generate full data dictionary                 |
-| [`db_search()`](https://cathalbyrnegit.github.io/csolake/reference/db_search.md)                   | Both | Search by name, description, owner, or tags   |
-| [`db_search_columns()`](https://cathalbyrnegit.github.io/csolake/reference/db_search_columns.md)   | Both | Find columns by name across all datasets      |
+| Function                                                                                            | Mode | Description                                   |
+|-----------------------------------------------------------------------------------------------------|------|-----------------------------------------------|
+| [`db_describe()`](https://cathalbyrnegit.github.io/datapond/reference/db_describe.md)               | Both | Add description, owner, tags to dataset/table |
+| [`db_describe_column()`](https://cathalbyrnegit.github.io/datapond/reference/db_describe_column.md) | Both | Document a column (description, units, notes) |
+| [`db_get_docs()`](https://cathalbyrnegit.github.io/datapond/reference/db_get_docs.md)               | Both | Retrieve documentation for a dataset/table    |
+| [`db_dictionary()`](https://cathalbyrnegit.github.io/datapond/reference/db_dictionary.md)           | Both | Generate full data dictionary                 |
+| [`db_search()`](https://cathalbyrnegit.github.io/datapond/reference/db_search.md)                   | Both | Search by name, description, owner, or tags   |
+| [`db_search_columns()`](https://cathalbyrnegit.github.io/datapond/reference/db_search_columns.md)   | Both | Find columns by name across all datasets      |
 
 ### Metadata & Maintenance
 
-| Function                                                                                 | Mode     | Description                 |
-|------------------------------------------------------------------------------------------|----------|-----------------------------|
-| [`db_snapshots()`](https://cathalbyrnegit.github.io/csolake/reference/db_snapshots.md)   | DuckLake | List all snapshots          |
-| [`db_catalog()`](https://cathalbyrnegit.github.io/csolake/reference/db_catalog.md)       | DuckLake | Table info and stats        |
-| [`db_table_cols()`](https://cathalbyrnegit.github.io/csolake/reference/db_table_cols.md) | DuckLake | Get column names            |
-| [`db_diff()`](https://cathalbyrnegit.github.io/csolake/reference/db_diff.md)             | DuckLake | Compare snapshots           |
-| [`db_rollback()`](https://cathalbyrnegit.github.io/csolake/reference/db_rollback.md)     | DuckLake | Restore to previous version |
-| [`db_vacuum()`](https://cathalbyrnegit.github.io/csolake/reference/db_vacuum.md)         | DuckLake | Clean up old snapshots      |
-| [`db_query()`](https://cathalbyrnegit.github.io/csolake/reference/db_query.md)           | Both     | Run arbitrary SQL           |
+| Function                                                                                  | Mode     | Description                 |
+|-------------------------------------------------------------------------------------------|----------|-----------------------------|
+| [`db_snapshots()`](https://cathalbyrnegit.github.io/datapond/reference/db_snapshots.md)   | DuckLake | List all snapshots          |
+| [`db_catalog()`](https://cathalbyrnegit.github.io/datapond/reference/db_catalog.md)       | DuckLake | Table info and stats        |
+| [`db_table_cols()`](https://cathalbyrnegit.github.io/datapond/reference/db_table_cols.md) | DuckLake | Get column names            |
+| [`db_diff()`](https://cathalbyrnegit.github.io/datapond/reference/db_diff.md)             | DuckLake | Compare snapshots           |
+| [`db_rollback()`](https://cathalbyrnegit.github.io/datapond/reference/db_rollback.md)     | DuckLake | Restore to previous version |
+| [`db_vacuum()`](https://cathalbyrnegit.github.io/datapond/reference/db_vacuum.md)         | DuckLake | Clean up old snapshots      |
+| [`db_query()`](https://cathalbyrnegit.github.io/datapond/reference/db_query.md)           | Both     | Run arbitrary SQL           |
 
 ### Interactive Tools
 
-| Function                                                                           | Description                                         |
-|------------------------------------------------------------------------------------|-----------------------------------------------------|
-| [`db_browser()`](https://cathalbyrnegit.github.io/csolake/reference/db_browser.md) | Launch interactive Shiny browser for exploring data |
+| Function                                                                            | Description                                         |
+|-------------------------------------------------------------------------------------|-----------------------------------------------------|
+| [`db_browser()`](https://cathalbyrnegit.github.io/datapond/reference/db_browser.md) | Launch interactive Shiny browser for exploring data |
 
 ## Learn More
 
-- [`vignette("concepts")`](https://cathalbyrnegit.github.io/csolake/articles/concepts.md) -
+- [`vignette("concepts")`](https://cathalbyrnegit.github.io/datapond/articles/concepts.md) -
   Background on data lakes, hive partitioning, and DuckLake
-- [`vignette("code-walkthrough")`](https://cathalbyrnegit.github.io/csolake/articles/code-walkthrough.md) -
+- [`vignette("code-walkthrough")`](https://cathalbyrnegit.github.io/datapond/articles/code-walkthrough.md) -
   Detailed explanation of how the package works
 
 ## Contributing

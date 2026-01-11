@@ -1,7 +1,7 @@
 # Preview a hive write operation
 
 Shows what would happen if you ran
-[`db_hive_write()`](https://cathalbyrnegit.github.io/csolake/reference/db_hive_write.md)
+[`db_hive_write()`](https://cathalbyrnegit.github.io/datapond/reference/db_hive_write.md)
 without actually writing any data. Useful for validating writes before
 execution.
 
