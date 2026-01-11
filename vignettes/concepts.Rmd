@@ -724,35 +724,31 @@ Here's how a typical workflow might look:
 ```{r}
 library(datapond)
 
-# Connect with SQLite catalog
-db_lake_connect(
-  catalog_type = "sqlite",
-  metadata_path = "//CSO-NAS/DataLake/catalog.sqlite",
-  data_path = "//CSO-NAS/DataLake/data"
-)
+# Connect to your section (paths come from master catalog)
+db_lake_connect_section("trade")
 
 # Prepare your data
 imports_q1 <- prepare_imports_data(raw_files)
 
 # Preview what will happen
-db_preview_lake_write(imports_q1, schema = "trade", table = "imports", mode = "append")
+db_preview_lake_write(imports_q1, schema = "main", table = "imports", mode = "append")
 
 # Publish with a meaningful commit message
 db_lake_write(
   imports_q1,
-  schema = "trade",
+  schema = "main",
   table = "imports",
   mode = "append",
   commit_author = Sys.info()["user"],
   commit_message = "Q1 2025 imports data - final"
 )
 
-# Document your dataset
+# Document and make discoverable
 db_describe(
-  schema = "trade",
   table = "imports",
   description = "Monthly import values by country and HS code",
-  owner = "Trade Section"
+  owner = "Trade Section",
+  public = TRUE  # Publish to master catalog for discovery
 )
 
 db_disconnect()
@@ -763,25 +759,21 @@ db_disconnect()
 ```{r}
 library(datapond)
 
-# Connect (read-only access is fine)
-db_lake_connect(
-  catalog_type = "sqlite",
-  metadata_path = "//CSO-NAS/DataLake/catalog.sqlite",
-  data_path = "//CSO-NAS/DataLake/data"
-)
+# Connect to a section (read-only access is fine)
+db_lake_connect_section("trade")
 
 # Discover what's available
 db_list_schemas()
-db_list_tables("trade")
+db_list_tables("main")
 
 # Search for relevant data
 db_search("imports")
 
 # Check documentation
-db_get_docs(schema = "trade", table = "imports")
+db_get_docs(table = "imports")
 
 # Read and analyse
-imports <- db_lake_read(schema = "trade", table = "imports")
+imports <- db_lake_read(table = "imports")
 
 imports |>
   filter(year == 2025, quarter == 1) |>
