@@ -11,7 +11,8 @@ db_describe(
   table = NULL,
   description = NULL,
   owner = NULL,
-  tags = NULL
+  tags = NULL,
+  public = NULL
 )
 }
 \arguments{
@@ -28,6 +29,10 @@ db_describe(
 \item{owner}{Owner name or team responsible for this data}
 
 \item{tags}{Character vector of tags for categorization}
+
+\item{public}{Logical. If TRUE, publish metadata to the shared catalog folder.
+If FALSE, remove from catalog. If NULL (default), keep current public status
+and auto-sync if already public. (Hive mode only)}
 }
 \value{
 Invisibly returns the metadata list
@@ -35,6 +40,10 @@ Invisibly returns the metadata list
 \description{
 Add documentation metadata to a dataset (hive mode) or table
 (DuckLake mode). Metadata includes description, owner, and tags.
+
+In hive mode, you can set \code{public = TRUE} to publish the metadata to a
+shared catalog folder, making it discoverable organisation-wide without
+granting access to the underlying data.
 }
 \examples{
 \dontrun{
@@ -45,7 +54,8 @@ db_describe(
   dataset = "Imports",
   description = "Monthly import values by country and commodity code",
   owner = "Trade Section",
-  tags = c("trade", "monthly", "official")
+  tags = c("trade", "monthly", "official"),
+  public = TRUE
 )
 
 # DuckLake mode

@@ -12,7 +12,8 @@ db_describe_column(
   column,
   description = NULL,
   units = NULL,
-  notes = NULL
+  notes = NULL,
+  public = NULL
 )
 }
 \arguments{
@@ -31,12 +32,20 @@ db_describe_column(
 \item{units}{Units of measurement (optional)}
 
 \item{notes}{Additional notes (optional)}
+
+\item{public}{Logical. If TRUE, sync column docs to public catalog (requires
+dataset to already be public). If NULL (default), auto-sync if dataset is
+already public. (Hive mode only)}
 }
 \value{
 Invisibly returns the column metadata
 }
 \description{
 Add documentation to a specific column in a dataset or table.
+
+In hive mode, you can set \code{public = TRUE} to include the column documentation
+in the public catalog. The dataset must already be public (use
+\code{db_describe(public = TRUE)} first).
 }
 \examples{
 \dontrun{
@@ -46,7 +55,8 @@ db_describe_column(
   dataset = "Imports",
   column = "value",
   description = "Import value in thousands",
-  units = "EUR (thousands)"
+  units = "EUR (thousands)",
+  public = TRUE
 )
 }
 }
