@@ -409,5 +409,14 @@ db_get_schema_path <- function(schema) {
   if (nrow(result) == 0 || is.na(result$path[1]) || result$path[1] == "") {
     return(NULL)
   }
-  result$path[1]
+
+  path <- result$path[1]
+
+  # DuckLake sets default path to {schema_name}/ - treat as NULL (no custom path)
+  default_path <- paste0(schema, "/")
+  if (path == default_path) {
+    return(NULL)
+  }
+
+  path
 }
