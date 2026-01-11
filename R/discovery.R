@@ -335,7 +335,7 @@ db_create_schema <- function(schema, path = NULL) {
   DBI::dbExecute(con, sql)
 
   # If path is provided, update the ducklake metadata to set the custom path
-  # DuckLake 0.2+ stores path info in _ducklake_metadata.ducklake_schema
+  # DuckLake 0.2+ stores path info in __ducklake_metadata_{catalog}.ducklake_schema
   if (!is.null(path)) {
     # Normalize path and determine if it's absolute
     path <- normalizePath(path, mustWork = FALSE)
@@ -343,8 +343,10 @@ db_create_schema <- function(schema, path = NULL) {
 
     tryCatch({
       # Update the schema's path in the metadata table
+      # Metadata schema is __ducklake_metadata_{catalog}
+      metadata_schema <- paste0("__ducklake_metadata_", catalog)
       update_sql <- glue::glue("
-        UPDATE {catalog}._ducklake_metadata.ducklake_schema
+        UPDATE {metadata_schema}.ducklake_schema
         SET path = '{path}',
             path_is_relative = {if (is_absolute) 'false' else 'true'}
         WHERE schema_name = '{schema}'
@@ -392,9 +394,11 @@ db_get_schema_path <- function(schema) {
   catalog <- .db_get("catalog")
 
   # Query the DuckLake metadata for schema path
+  # Metadata schema is __ducklake_metadata_{catalog}
+  metadata_schema <- paste0("__ducklake_metadata_", catalog)
   result <- tryCatch({
     DBI::dbGetQuery(con, glue::glue("
-      SELECT path FROM {catalog}._ducklake_metadata.ducklake_schema
+      SELECT path FROM {metadata_schema}.ducklake_schema
       WHERE schema_name = '{schema}'
     "))
   }, error = function(e) {
