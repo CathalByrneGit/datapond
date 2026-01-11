@@ -269,46 +269,9 @@
 <span><span class="fu"><a href="reference/db_sync_catalog.html">db_sync_catalog</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level3">
-<h3 id="multi-catalog-ducklake-enterprise-setup">Multi-Catalog DuckLake (Enterprise Setup)<a class="anchor" aria-label="anchor" href="#multi-catalog-ducklake-enterprise-setup"></a>
-</h3>
-<p>For larger organisations with multiple sections, use a master discovery catalog:</p>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/CathalByrneGit/datapond" class="external-link">datapond</a></span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># Admin: Set up master catalog (one-time)</span></span>
-<span><span class="fu">db_setup_master</span><span class="op">(</span><span class="st">"//CSO-NAS/DataLake/_master/discovery.sqlite"</span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># Register sections</span></span>
-<span><span class="fu">db_register_section</span><span class="op">(</span></span>
-<span>  section <span class="op">=</span> <span class="st">"trade"</span>,</span>
-<span>  catalog_path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/trade/catalog.sqlite"</span>,</span>
-<span>  data_path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/trade/data"</span>,</span>
-<span>  owner <span class="op">=</span> <span class="st">"Trade Team"</span></span>
-<span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># User: Connect to a section</span></span>
-<span><span class="fu">db_lake_connect_section</span><span class="op">(</span><span class="st">"trade"</span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># Work with data</span></span>
-<span><span class="va">imports</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/db_lake_read.html">db_lake_read</a></span><span class="op">(</span>table <span class="op">=</span> <span class="st">"imports"</span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># Document and publish (same API as Hive mode!)</span></span>
-<span><span class="fu"><a href="reference/db_describe.html">db_describe</a></span><span class="op">(</span></span>
-<span>  table <span class="op">=</span> <span class="st">"imports"</span>,</span>
-<span>  description <span class="op">=</span> <span class="st">"Monthly import statistics"</span>,</span>
-<span>  public <span class="op">=</span> <span class="cn">TRUE</span>  <span class="co"># Syncs to master catalog</span></span>
-<span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># Discover all public tables across all sections</span></span>
-<span><span class="fu"><a href="reference/db_list_public.html">db_list_public</a></span><span class="op">(</span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># Switch sections</span></span>
-<span><span class="fu">db_switch_section</span><span class="op">(</span><span class="st">"labour"</span><span class="op">)</span></span></code></pre></div>
-</div>
-<div class="section level3">
 <h3 id="interactive-browser">Interactive Browser<a class="anchor" aria-label="anchor" href="#interactive-browser"></a>
 </h3>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/CathalByrneGit/datapond" class="external-link">datapond</a></span><span class="op">)</span></span>
 <span><span class="fu"><a href="reference/db_connect.html">db_connect</a></span><span class="op">(</span>path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake"</span><span class="op">)</span></span>
 <span></span>
@@ -420,7 +383,7 @@
 <h3 id="recommended-sqlite-for-cso">Recommended: SQLite for CSO<a class="anchor" aria-label="anchor" href="#recommended-sqlite-for-cso"></a>
 </h3>
 <p>For most CSO use cases with shared network drives, use SQLite:</p>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="reference/db_lake_connect.html">db_lake_connect</a></span><span class="op">(</span></span>
 <span>  catalog_type <span class="op">=</span> <span class="st">"sqlite"</span>,</span>
 <span>  metadata_path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/catalog.sqlite"</span>,</span>
@@ -438,7 +401,7 @@
 <h3 id="postgresql-for-production-scale">PostgreSQL for Production Scale<a class="anchor" aria-label="anchor" href="#postgresql-for-production-scale"></a>
 </h3>
 <p>If you need true multi-user concurrent writes or remote access:</p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="reference/db_lake_connect.html">db_lake_connect</a></span><span class="op">(</span></span>
 <span>  catalog_type <span class="op">=</span> <span class="st">"postgres"</span>,</span>
 <span>  metadata_path <span class="op">=</span> <span class="st">"dbname=ducklake_catalog host=db.cso.ie"</span>,</span>

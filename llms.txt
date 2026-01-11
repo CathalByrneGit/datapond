@@ -217,45 +217,6 @@ db_list_public()
 db_sync_catalog()
 ```
 
-### Multi-Catalog DuckLake (Enterprise Setup)
-
-For larger organisations with multiple sections, use a master discovery
-catalog:
-
-``` r
-library(datapond)
-
-# Admin: Set up master catalog (one-time)
-db_setup_master("//CSO-NAS/DataLake/_master/discovery.sqlite")
-
-# Register sections
-db_register_section(
-  section = "trade",
-  catalog_path = "//CSO-NAS/DataLake/trade/catalog.sqlite",
-  data_path = "//CSO-NAS/DataLake/trade/data",
-  owner = "Trade Team"
-)
-
-# User: Connect to a section
-db_lake_connect_section("trade")
-
-# Work with data
-imports <- db_lake_read(table = "imports")
-
-# Document and publish (same API as Hive mode!)
-db_describe(
-  table = "imports",
-  description = "Monthly import statistics",
-  public = TRUE  # Syncs to master catalog
-)
-
-# Discover all public tables across all sections
-db_list_public()
-
-# Switch sections
-db_switch_section("labour")
-```
-
 ### Interactive Browser
 
 ``` r
