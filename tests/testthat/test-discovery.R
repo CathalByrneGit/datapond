@@ -655,3 +655,74 @@ test_that("db_create_schema returns schema name invisibly", {
   clean_db_env()
   unlink(temp_dir, recursive = TRUE)
 })
+
+test_that("db_create_schema with path creates schema with custom data path", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  skip("DuckLake 0.2+ with path support not available in test environment")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "path_schema_test_")
+  dir.create(temp_dir)
+
+  trade_path <- file.path(temp_dir, "trade_data")
+  dir.create(trade_path)
+
+  db_lake_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  expect_message(
+    db_create_schema("trade", path = trade_path),
+    "path:"
+  )
+
+  schemas <- db_list_schemas()
+  expect_true("trade" %in% schemas)
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+# ==============================================================================
+# Tests for db_get_schema_path() - DuckLake
+# ==============================================================================
+
+test_that("db_get_schema_path errors when not connected", {
+  clean_db_env()
+
+  expect_error(db_get_schema_path("test"), "Not connected")
+})
+
+test_that("db_get_schema_path errors in hive mode", {
+  clean_db_env()
+  db_connect(path = "/test")
+
+  expect_error(db_get_schema_path("test"), "hive mode")
+
+  clean_db_env()
+})
+
+test_that("db_get_schema_path returns NULL for schema without custom path", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "get_path_test_")
+  dir.create(temp_dir)
+
+  db_lake_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  db_create_schema("trade")
+
+  # Schema without explicit path should return NULL
+  result <- db_get_schema_path("trade")
+  expect_null(result)
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
