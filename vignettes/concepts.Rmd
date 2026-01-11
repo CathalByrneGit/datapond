@@ -678,6 +678,30 @@ db_list_public()
 db_switch_section("labour")
 ```
 
+### Section vs Schema in DuckLake
+
+In DuckLake mode, both **section** and **schema** exist but serve different purposes:
+| Concept | What It Is | Purpose |
+|---------|------------|---------|
+| **Section** | A separate DuckLake catalog file | Ownership boundary - controls who can write/publish |
+| **Schema** | A namespace within a catalog | Logical grouping of related tables |
+
+A section might contain multiple schemas:
+
+```
+trade/catalog.sqlite          ← Section (owned by Trade Team)
+├── main.imports              ← schema.table
+├── main.exports
+├── staging.imports_draft     ← Different schema for work-in-progress
+└── reference.countries       ← Reference data schema
+```
+
+**Key difference**:
+- **Section** = who owns it (security boundary, controlled by file permissions)
+- **Schema** = how it's organised (logical boundary, no access control)
+
+Only the Trade Team can make `trade.main.imports` public because they own the `trade/` section. The schema is just for organisation within their catalog.
+
 ### Unified API
 
 The same functions work in both modes:
