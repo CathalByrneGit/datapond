@@ -414,15 +414,15 @@ systems needed.
 
 ### Multi-Catalog (DuckLake)
 
-| Function                                                                                                              | Description                           |
-|-----------------------------------------------------------------------------------------------------------------------|---------------------------------------|
-| [`db_setup_master()`](https://cathalbyrnegit.github.io/datapond/reference/db_setup_master.md)                         | Create master discovery catalog       |
-| [`db_register_section()`](https://cathalbyrnegit.github.io/datapond/reference/db_register_section.md)                 | Register a section in master catalog  |
-| [`db_unregister_section()`](https://cathalbyrnegit.github.io/datapond/reference/db_unregister_section.md)             | Remove section from master catalog    |
-| [`db_list_registered_sections()`](https://cathalbyrnegit.github.io/datapond/reference/db_list_registered_sections.md) | List all registered sections          |
-| [`db_lake_connect_section()`](https://cathalbyrnegit.github.io/datapond/reference/db_lake_connect_section.md)         | Connect to section via master catalog |
-| [`db_current_section()`](https://cathalbyrnegit.github.io/datapond/reference/db_current_section.md)                   | Get current section name              |
-| [`db_switch_section()`](https://cathalbyrnegit.github.io/datapond/reference/db_switch_section.md)                     | Switch to a different section         |
+| Function                        | Description                           |
+|---------------------------------|---------------------------------------|
+| `db_setup_master()`             | Create master discovery catalog       |
+| `db_register_section()`         | Register a section in master catalog  |
+| `db_unregister_section()`       | Remove section from master catalog    |
+| `db_list_registered_sections()` | List all registered sections          |
+| `db_lake_connect_section()`     | Connect to section via master catalog |
+| `db_current_section()`          | Get current section name              |
+| `db_switch_section()`           | Switch to a different section         |
 
 ### Metadata & Maintenance
 

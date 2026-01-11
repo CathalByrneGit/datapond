@@ -1,31 +1,26 @@
-# Remove a dataset/table from the public catalog
+# Remove a dataset from the public catalog (Hive mode only)
 
-Removes metadata from the public discovery catalog. The dataset/table
-and its data remain unchanged.
+Removes metadata from the public discovery catalog. The dataset and its
+data remain unchanged.
+
+This function is only available in hive mode. In DuckLake mode, use
+schema paths with folder ACLs to control access.
 
 ## Usage
 
 ``` r
-db_set_private(section = NULL, dataset = NULL, schema = "main", table = NULL)
+db_set_private(section, dataset)
 ```
 
 ## Arguments
 
 - section:
 
-  Section name (hive mode), or NULL in DuckLake mode
+  Section name
 
 - dataset:
 
-  Dataset name (hive mode only)
-
-- schema:
-
-  Schema name (DuckLake mode, default "main")
-
-- table:
-
-  Table name (DuckLake mode only)
+  Dataset name
 
 ## Value
 
@@ -35,12 +30,7 @@ Invisibly returns TRUE
 
 ``` r
 if (FALSE) { # \dontrun{
-# Hive mode
 db_connect("//CSO-NAS/DataLake")
 db_set_private(section = "Trade", dataset = "Imports")
-
-# DuckLake mode
-db_lake_connect_section("trade")
-db_set_private(schema = "main", table = "imports")
 } # }
 ```

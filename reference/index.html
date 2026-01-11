@@ -89,13 +89,6 @@
 
         <dt>
 
-          <code><a href="db_current_section.html">db_current_section()</a></code>
-
-        </dt>
-        <dd>Get current section</dd>
-
-        <dt>
-
           <code><a href="db_dataset_exists.html">db_dataset_exists()</a></code>
 
         </dt>
@@ -145,6 +138,20 @@
 
         <dt>
 
+          <code><a href="db_get_schema_path.html">db_get_schema_path()</a></code>
+
+        </dt>
+        <dd>Get the data path for a schema</dd>
+
+        <dt>
+
+          <code><a href="db_get_table_path.html">db_get_table_path()</a></code>
+
+        </dt>
+        <dd>Get the data path for a table</dd>
+
+        <dt>
+
           <code><a href="db_hive_read.html">db_hive_read()</a></code>
 
         </dt>
@@ -162,7 +169,7 @@
           <code><a href="db_is_public.html">db_is_public()</a></code>
 
         </dt>
-        <dd>Check if a dataset/table is in the public catalog</dd>
+        <dd>Check if a dataset is in the public catalog (Hive mode only)</dd>
 
         <dt>
 
@@ -170,13 +177,6 @@
 
         </dt>
         <dd>Connect to DuckDB + attach a DuckLake catalog</dd>
-
-        <dt>
-
-          <code><a href="db_lake_connect_section.html">db_lake_connect_section()</a></code>
-
-        </dt>
-        <dd>Connect to a DuckLake section via master catalog</dd>
 
         <dt>
 
@@ -204,14 +204,7 @@
           <code><a href="db_list_public.html">db_list_public()</a></code>
 
         </dt>
-        <dd>List all datasets/tables in the public catalog</dd>
-
-        <dt>
-
-          <code><a href="db_list_registered_sections.html">db_list_registered_sections()</a></code>
-
-        </dt>
-        <dd>List registered sections</dd>
+        <dd>List all datasets in the public catalog (Hive mode only)</dd>
 
         <dt>
 
@@ -271,13 +264,6 @@
 
         <dt>
 
-          <code><a href="db_register_section.html">db_register_section()</a></code>
-
-        </dt>
-        <dd>Register a section in the master catalog</dd>
-
-        <dt>
-
           <code><a href="db_rollback.html">db_rollback()</a></code>
 
         </dt>
@@ -302,21 +288,14 @@
           <code><a href="db_set_private.html">db_set_private()</a></code>
 
         </dt>
-        <dd>Remove a dataset/table from the public catalog</dd>
+        <dd>Remove a dataset from the public catalog (Hive mode only)</dd>
 
         <dt>
 
           <code><a href="db_set_public.html">db_set_public()</a></code>
 
         </dt>
-        <dd>Make a dataset/table discoverable in the public catalog</dd>
-
-        <dt>
-
-          <code><a href="db_setup_master.html">db_setup_master()</a></code>
-
-        </dt>
-        <dd>Set up the master discovery catalog</dd>
+        <dd>Make a dataset discoverable in the public catalog (Hive mode only)</dd>
 
         <dt>
 
@@ -334,17 +313,10 @@
 
         <dt>
 
-          <code><a href="db_switch_section.html">db_switch_section()</a></code>
-
-        </dt>
-        <dd>Switch to a different section</dd>
-
-        <dt>
-
           <code><a href="db_sync_catalog.html">db_sync_catalog()</a></code>
 
         </dt>
-        <dd>Sync the public catalog with source metadata</dd>
+        <dd>Sync the public catalog with source metadata (Hive mode only)</dd>
 
         <dt>
 
@@ -359,13 +331,6 @@
 
         </dt>
         <dd>Check if a DuckLake table exists</dd>
-
-        <dt>
-
-          <code><a href="db_unregister_section.html">db_unregister_section()</a></code>
-
-        </dt>
-        <dd>Unregister a section from the master catalog</dd>
 
         <dt>
 

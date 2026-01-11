@@ -1,30 +1,25 @@
-# Check if a dataset/table is in the public catalog
+# Check if a dataset is in the public catalog (Hive mode only)
 
 Check whether metadata has been published to the discovery catalog.
+
+This function is only available in hive mode. In DuckLake mode, access
+control is managed via schema paths and folder ACLs.
 
 ## Usage
 
 ``` r
-db_is_public(section = NULL, dataset = NULL, schema = "main", table = NULL)
+db_is_public(section, dataset)
 ```
 
 ## Arguments
 
 - section:
 
-  Section name (hive mode), or NULL in DuckLake mode
+  Section name
 
 - dataset:
 
-  Dataset name (hive mode only)
-
-- schema:
-
-  Schema name (DuckLake mode, default "main")
-
-- table:
-
-  Table name (DuckLake mode only)
+  Dataset name
 
 ## Value
 
@@ -34,12 +29,7 @@ Logical TRUE if public, FALSE otherwise
 
 ``` r
 if (FALSE) { # \dontrun{
-# Hive mode
 db_connect("//CSO-NAS/DataLake")
 db_is_public(section = "Trade", dataset = "Imports")
-
-# DuckLake mode
-db_lake_connect_section("trade")
-db_is_public(schema = "main", table = "imports")
 } # }
 ```

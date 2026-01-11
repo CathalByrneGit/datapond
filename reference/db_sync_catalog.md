@@ -1,7 +1,9 @@
-# Sync the public catalog with source metadata
+# Sync the public catalog with source metadata (Hive mode only)
 
 Scans the public catalog and updates entries from their source metadata.
 Optionally removes entries where the source no longer exists.
+
+This function is only available in hive mode.
 
 ## Usage
 
@@ -24,13 +26,8 @@ Invisibly returns a list with counts of synced, removed, and errors
 
 ``` r
 if (FALSE) { # \dontrun{
-# Hive mode
 db_connect("//CSO-NAS/DataLake")
 db_sync_catalog()
 db_sync_catalog(remove_orphans = TRUE)
-
-# DuckLake mode
-db_lake_connect_section("trade")
-db_sync_catalog()
 } # }
 ```

@@ -684,8 +684,7 @@ db_lake_connect_section <- function(section, master_path = NULL, ...) {
 **Key points:**
 
 - Master catalog is SQLite (read by everyone, write by admins)
-- [`db_lake_connect_section()`](https://cathalbyrnegit.github.io/datapond/reference/db_lake_connect_section.md)
-  looks up paths automatically
+- `db_lake_connect_section()` looks up paths automatically
 - Section stored in `.db_env` enables `db_describe(public=TRUE)` to sync
 
 ------------------------------------------------------------------------

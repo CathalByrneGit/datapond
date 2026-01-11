@@ -602,109 +602,85 @@ descriptions, not the actual data values.
 
 ------------------------------------------------------------------------
 
-## Multi-Catalog DuckLake
+## DuckLake Access Control
 
-For larger organisations, each section may have its own DuckLake
-catalog. A **master discovery catalog** provides organisation-wide
-visibility.
+DuckLake 0.2+ supports **path-based access control** - schemas can have
+custom data paths, enabling folder-level permissions.
 
 ### Architecture
 
     //CSO-NAS/DataLake/
-    ├── _master/
-    │   └── discovery.sqlite     ← Master catalog (everyone reads)
-    ├── trade/
-    │   ├── catalog.sqlite       ← Trade's DuckLake catalog
-    │   └── data/                ← Trade's Parquet files
-    ├── labour/
-    │   ├── catalog.sqlite       ← Labour's DuckLake catalog
-    │   └── data/
-    └── shared/
-        ├── catalog.sqlite
-        └── data/
+    ├── catalog.sqlite           ← Single DuckLake catalog
+    └── data/                    ← Data organised by schema path
+        ├── trade/               ← Trade team has access (folder ACLs)
+        │   └── imports/
+        │       └── data.parquet
+        ├── labour/              ← Labour team has access (folder ACLs)
+        │   └── employment/
+        │       └── data.parquet
+        └── shared/              ← Everyone has read access
+            └── reference/
+                └── data.parquet
 
-### Setting Up (Admin)
-
-``` r
-# Create master catalog
-db_setup_master("//CSO-NAS/DataLake/_master/discovery.sqlite")
-
-# Register each section
-db_register_section(
-  section = "trade",
-  catalog_path = "//CSO-NAS/DataLake/trade/catalog.sqlite",
-  data_path = "//CSO-NAS/DataLake/trade/data",
-  owner = "Trade Team"
-)
-
-db_register_section(
-  section = "labour",
-  catalog_path = "//CSO-NAS/DataLake/labour/catalog.sqlite",
-  data_path = "//CSO-NAS/DataLake/labour/data",
-  owner = "Labour Team"
-)
-```
-
-### Using Sections (User)
+### Setting Up Schemas with Paths
 
 ``` r
-# Connect to a section (looks up paths from master)
-db_lake_connect_section("trade")
-
-# Work with data
-imports <- db_lake_read(table = "imports")
-
-# Document and make discoverable (same API!)
-db_describe(
-  table = "imports",
-  description = "Monthly import statistics",
-  public = TRUE  # Syncs to master catalog
+# Connect to DuckLake
+db_lake_connect(
+  catalog_type = "sqlite",
+  metadata_path = "//CSO-NAS/DataLake/catalog.sqlite",
+  data_path = "//CSO-NAS/DataLake/data"
 )
 
-# Discover across all sections
-db_list_public()
-#>   section schema    table           description
-#> 1   trade   main  imports Monthly import stats
-#> 2  labour   main employment    Employment data
+# Create schemas with custom data paths
+db_create_schema("trade", path = "//CSO-NAS/DataLake/data/trade/")
+db_create_schema("labour", path = "//CSO-NAS/DataLake/data/labour/")
+db_create_schema("shared", path = "//CSO-NAS/DataLake/data/shared/")
 
-# Switch to another section
-db_switch_section("labour")
+# Now folder ACLs control access:
+# - //CSO-NAS/DataLake/data/trade/   → Trade team read/write
+# - //CSO-NAS/DataLake/data/labour/  → Labour team read/write
+# - //CSO-NAS/DataLake/data/shared/  → Everyone read
 ```
 
-### Section vs Schema in DuckLake
+### Using Path-Based Schemas
 
-In DuckLake mode, both **section** and **schema** exist but serve
-different purposes: \| Concept \| What It Is \| Purpose \|
-\|———\|————\|———\| \| **Section** \| A separate DuckLake catalog file \|
-Ownership boundary - controls who can write/publish \| \| **Schema** \|
-A namespace within a catalog \| Logical grouping of related tables \|
+``` r
+# Check schema's data path
+db_get_schema_path("trade")
+#> "//CSO-NAS/DataLake/data/trade/"
 
-A section might contain multiple schemas:
+# Write to a schema (data goes to schema's path)
+db_lake_write(imports_data, schema = "trade", table = "imports")
 
-    trade/catalog.sqlite          ← Section (owned by Trade Team)
-    ├── main.imports              ← schema.table
-    ├── main.exports
-    ├── staging.imports_draft     ← Different schema for work-in-progress
-    └── reference.countries       ← Reference data schema
+# Read from a schema (requires folder access)
+imports <- db_lake_read(schema = "trade", table = "imports")
 
-**Key difference**: - **Section** = who owns it (security boundary,
-controlled by file permissions) - **Schema** = how it’s organised
-(logical boundary, no access control)
+# Discover available tables
+db_list_schemas()
+db_list_tables("trade")
+```
 
-Only the Trade Team can make `trade.main.imports` public because they
-own the `trade/` section. The schema is just for organisation within
-their catalog.
+### How It Works
 
-### Unified API
+\<\<\<\<\<\<\< HEAD In DuckLake mode, both **section** and **schema**
+exist but serve different purposes:
 
-The same functions work in both modes:
+| Concept     | What It Is                       | Purpose                                             |
+|-------------|----------------------------------|-----------------------------------------------------|
+| **Section** | A separate DuckLake catalog file | Ownership boundary - controls who can write/publish |
+| **Schema**  | A namespace within a catalog     | Logical grouping of related tables                  |
 
-| Function                                                                                      | Hive Mode             | DuckLake Mode          |
-|-----------------------------------------------------------------------------------------------|-----------------------|------------------------|
-| `db_describe(public=TRUE)`                                                                    | Copies to `_catalog/` | Syncs to master SQLite |
-| [`db_set_public()`](https://cathalbyrnegit.github.io/datapond/reference/db_set_public.md)     | Same                  | Same                   |
-| [`db_list_public()`](https://cathalbyrnegit.github.io/datapond/reference/db_list_public.md)   | Lists `_catalog/`     | Queries master         |
-| [`db_sync_catalog()`](https://cathalbyrnegit.github.io/datapond/reference/db_sync_catalog.md) | Syncs JSON files      | Syncs master entries   |
+======= \| Component \| Access Controlled By \| \|———–\|———————\| \|
+Catalog file (`.sqlite`) \| File permissions - need read to query, write
+to modify \| \| Schema data folder \| Folder ACLs - each schema can have
+different permissions \| \| Table data \| Inherited from schema folder
+\| \>\>\>\>\>\>\> 7ca1ba29fe7034729ada034f78210def94da93f5
+
+**Benefits**: - **Familiar model** - uses standard folder permissions -
+**Granular control** - different teams can own different schemas -
+**Single catalog** - one metadata file, simpler management -
+**IT-friendly** - works with existing permission infrastructure
 
 ------------------------------------------------------------------------
 
@@ -717,31 +693,35 @@ Here’s how a typical workflow might look:
 ``` r
 library(datapond)
 
-# Connect to your section (paths come from master catalog)
-db_lake_connect_section("trade")
+# Connect to DuckLake
+db_lake_connect(
+  catalog_type = "sqlite",
+  metadata_path = "//CSO-NAS/DataLake/catalog.sqlite",
+  data_path = "//CSO-NAS/DataLake/data"
+)
 
 # Prepare your data
 imports_q1 <- prepare_imports_data(raw_files)
 
 # Preview what will happen
-db_preview_lake_write(imports_q1, schema = "main", table = "imports", mode = "append")
+db_preview_lake_write(imports_q1, schema = "trade", table = "imports", mode = "append")
 
 # Publish with a meaningful commit message
 db_lake_write(
   imports_q1,
-  schema = "main",
+  schema = "trade",
   table = "imports",
   mode = "append",
   commit_author = Sys.info()["user"],
   commit_message = "Q1 2025 imports data - final"
 )
 
-# Document and make discoverable
+# Document for discovery
 db_describe(
+  schema = "trade",
   table = "imports",
   description = "Monthly import values by country and HS code",
-  owner = "Trade Section",
-  public = TRUE  # Publish to master catalog for discovery
+  owner = "Trade Section"
 )
 
 db_disconnect()
@@ -752,21 +732,25 @@ db_disconnect()
 ``` r
 library(datapond)
 
-# Connect to a section (read-only access is fine)
-db_lake_connect_section("trade")
+# Connect to DuckLake (read access to catalog and data folder)
+db_lake_connect(
+  catalog_type = "sqlite",
+  metadata_path = "//CSO-NAS/DataLake/catalog.sqlite",
+  data_path = "//CSO-NAS/DataLake/data"
+)
 
 # Discover what's available
 db_list_schemas()
-db_list_tables("main")
+db_list_tables("trade")
 
 # Search for relevant data
 db_search("imports")
 
 # Check documentation
-db_get_docs(table = "imports")
+db_get_docs(schema = "trade", table = "imports")
 
 # Read and analyse
-imports <- db_lake_read(table = "imports")
+imports <- db_lake_read(schema = "trade", table = "imports")
 
 imports |>
   filter(year == 2025, quarter == 1) |>
@@ -780,22 +764,22 @@ db_disconnect()
 
 ## Glossary
 
-| Term                  | Meaning                                                                         |
-|-----------------------|---------------------------------------------------------------------------------|
-| **Parquet**           | Columnar file format for storing tabular data efficiently                       |
-| **Hive partitioning** | Organising files into folders named by column values (e.g., `year=2024/`)       |
-| **Partition pruning** | Query optimisation that skips irrelevant partition folders                      |
-| **DuckLake**          | Metadata layer that adds versioning and transactions to Parquet files           |
-| **Catalog**           | Database storing DuckLake metadata (can be DuckDB, SQLite, or PostgreSQL)       |
-| **Snapshot**          | A point-in-time version of the data in DuckLake                                 |
-| **Time travel**       | Querying data as it existed at a past version or timestamp                      |
-| **Schema**            | A namespace/folder for organising related tables                                |
-| **ACID**              | Atomicity, Consistency, Isolation, Durability - database reliability guarantees |
-| **Upsert**            | Update existing rows + insert new rows in one operation                         |
-| **Data dictionary**   | Documentation of all datasets, their columns, types, and descriptions           |
-| **Public catalog**    | Shared location for metadata, enabling discovery without data access            |
-| **Master catalog**    | Central SQLite database tracking all sections in multi-catalog DuckLake         |
-| **Section**           | An organisational unit (e.g., Trade, Labour) with its own data and catalog      |
+| Term                  | Meaning                                                                                  |
+|-----------------------|------------------------------------------------------------------------------------------|
+| **Parquet**           | Columnar file format for storing tabular data efficiently                                |
+| **Hive partitioning** | Organising files into folders named by column values (e.g., `year=2024/`)                |
+| **Partition pruning** | Query optimisation that skips irrelevant partition folders                               |
+| **DuckLake**          | Metadata layer that adds versioning and transactions to Parquet files                    |
+| **Catalog**           | Database storing DuckLake metadata (can be DuckDB, SQLite, or PostgreSQL)                |
+| **Snapshot**          | A point-in-time version of the data in DuckLake                                          |
+| **Time travel**       | Querying data as it existed at a past version or timestamp                               |
+| **Schema**            | A namespace for organising related tables; can have custom data paths for access control |
+| **Schema path**       | Custom data folder for a DuckLake schema, enabling folder-based access control           |
+| **ACID**              | Atomicity, Consistency, Isolation, Durability - database reliability guarantees          |
+| **Upsert**            | Update existing rows + insert new rows in one operation                                  |
+| **Data dictionary**   | Documentation of all datasets, their columns, types, and descriptions                    |
+| **Public catalog**    | Shared location for metadata in hive mode, enabling discovery without data access        |
+| **Section**           | An organisational unit (e.g., Trade, Labour) - folder in hive mode                       |
 
 ------------------------------------------------------------------------
 

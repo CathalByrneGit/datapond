@@ -1,8 +1,12 @@
-# List all datasets/tables in the public catalog
+# List all datasets in the public catalog (Hive mode only)
 
 Lists all entries published to the discovery catalog. This works even if
 you don't have access to the underlying data, allowing organisation-wide
 data discovery.
+
+This function is only available in hive mode. In DuckLake mode, use
+[`db_dictionary()`](https://cathalbyrnegit.github.io/datapond/reference/db_dictionary.md)
+for data discovery, with access controlled via schema paths.
 
 ## Usage
 
@@ -24,14 +28,8 @@ A data.frame with discovery information
 
 ``` r
 if (FALSE) { # \dontrun{
-# Hive mode
 db_connect("//CSO-NAS/DataLake")
 db_list_public()
 db_list_public(section = "Trade")
-
-# DuckLake mode - lists from master catalog
-db_lake_connect_section("trade")
-db_list_public()
-db_list_public(section = "trade")
 } # }
 ```

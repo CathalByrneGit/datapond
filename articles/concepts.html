@@ -738,138 +738,108 @@ contains descriptions, not the actual data values.</p>
 </div>
 </div>
 <div class="section level2">
-<h2 id="multi-catalog-ducklake">Multi-Catalog DuckLake<a class="anchor" aria-label="anchor" href="#multi-catalog-ducklake"></a>
+<h2 id="ducklake-access-control">DuckLake Access Control<a class="anchor" aria-label="anchor" href="#ducklake-access-control"></a>
 </h2>
-<p>For larger organisations, each section may have its own DuckLake
-catalog. A <strong>master discovery catalog</strong> provides
-organisation-wide visibility.</p>
+<p>DuckLake 0.2+ supports <strong>path-based access control</strong> -
+schemas can have custom data paths, enabling folder-level
+permissions.</p>
 <div class="section level3">
 <h3 id="architecture">Architecture<a class="anchor" aria-label="anchor" href="#architecture"></a>
 </h3>
 <pre><code>//CSO-NAS/DataLake/
-├── _master/
-│   └── discovery.sqlite     ← Master catalog (everyone reads)
-├── trade/
-│   ├── catalog.sqlite       ← Trade's DuckLake catalog
-│   └── data/                ← Trade's Parquet files
-├── labour/
-│   ├── catalog.sqlite       ← Labour's DuckLake catalog
-│   └── data/
-└── shared/
-    ├── catalog.sqlite
-    └── data/</code></pre>
+├── catalog.sqlite           ← Single DuckLake catalog
+└── data/                    ← Data organised by schema path
+    ├── trade/               ← Trade team has access (folder ACLs)
+    │   └── imports/
+    │       └── data.parquet
+    ├── labour/              ← Labour team has access (folder ACLs)
+    │   └── employment/
+    │       └── data.parquet
+    └── shared/              ← Everyone has read access
+        └── reference/
+            └── data.parquet</code></pre>
 </div>
 <div class="section level3">
-<h3 id="setting-up-admin">Setting Up (Admin)<a class="anchor" aria-label="anchor" href="#setting-up-admin"></a>
+<h3 id="setting-up-schemas-with-paths">Setting Up Schemas with Paths<a class="anchor" aria-label="anchor" href="#setting-up-schemas-with-paths"></a>
 </h3>
 <div class="sourceCode" id="cb28"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Create master catalog</span></span>
-<span><span class="fu"><a href="../reference/db_setup_master.html">db_setup_master</a></span><span class="op">(</span><span class="st">"//CSO-NAS/DataLake/_master/discovery.sqlite"</span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># Register each section</span></span>
-<span><span class="fu"><a href="../reference/db_register_section.html">db_register_section</a></span><span class="op">(</span></span>
-<span>  section <span class="op">=</span> <span class="st">"trade"</span>,</span>
-<span>  catalog_path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/trade/catalog.sqlite"</span>,</span>
-<span>  data_path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/trade/data"</span>,</span>
-<span>  owner <span class="op">=</span> <span class="st">"Trade Team"</span></span>
+<code class="sourceCode R"><span><span class="co"># Connect to DuckLake</span></span>
+<span><span class="fu"><a href="../reference/db_lake_connect.html">db_lake_connect</a></span><span class="op">(</span></span>
+<span>  catalog_type <span class="op">=</span> <span class="st">"sqlite"</span>,</span>
+<span>  metadata_path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/catalog.sqlite"</span>,</span>
+<span>  data_path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/data"</span></span>
 <span><span class="op">)</span></span>
 <span></span>
-<span><span class="fu"><a href="../reference/db_register_section.html">db_register_section</a></span><span class="op">(</span></span>
-<span>  section <span class="op">=</span> <span class="st">"labour"</span>,</span>
-<span>  catalog_path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/labour/catalog.sqlite"</span>,</span>
-<span>  data_path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/labour/data"</span>,</span>
-<span>  owner <span class="op">=</span> <span class="st">"Labour Team"</span></span>
-<span><span class="op">)</span></span></code></pre></div>
+<span><span class="co"># Create schemas with custom data paths</span></span>
+<span><span class="fu"><a href="../reference/db_create_schema.html">db_create_schema</a></span><span class="op">(</span><span class="st">"trade"</span>, path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/data/trade/"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/db_create_schema.html">db_create_schema</a></span><span class="op">(</span><span class="st">"labour"</span>, path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/data/labour/"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/db_create_schema.html">db_create_schema</a></span><span class="op">(</span><span class="st">"shared"</span>, path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/data/shared/"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Now folder ACLs control access:</span></span>
+<span><span class="co"># - //CSO-NAS/DataLake/data/trade/   → Trade team read/write</span></span>
+<span><span class="co"># - //CSO-NAS/DataLake/data/labour/  → Labour team read/write</span></span>
+<span><span class="co"># - //CSO-NAS/DataLake/data/shared/  → Everyone read</span></span></code></pre></div>
 </div>
 <div class="section level3">
-<h3 id="using-sections-user">Using Sections (User)<a class="anchor" aria-label="anchor" href="#using-sections-user"></a>
+<h3 id="using-path-based-schemas">Using Path-Based Schemas<a class="anchor" aria-label="anchor" href="#using-path-based-schemas"></a>
 </h3>
 <div class="sourceCode" id="cb29"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Connect to a section (looks up paths from master)</span></span>
-<span><span class="fu"><a href="../reference/db_lake_connect_section.html">db_lake_connect_section</a></span><span class="op">(</span><span class="st">"trade"</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="co"># Check schema's data path</span></span>
+<span><span class="fu"><a href="../reference/db_get_schema_path.html">db_get_schema_path</a></span><span class="op">(</span><span class="st">"trade"</span><span class="op">)</span></span>
+<span><span class="co">#&gt; "//CSO-NAS/DataLake/data/trade/"</span></span>
 <span></span>
-<span><span class="co"># Work with data</span></span>
-<span><span class="va">imports</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/db_lake_read.html">db_lake_read</a></span><span class="op">(</span>table <span class="op">=</span> <span class="st">"imports"</span><span class="op">)</span></span>
+<span><span class="co"># Write to a schema (data goes to schema's path)</span></span>
+<span><span class="fu"><a href="../reference/db_lake_write.html">db_lake_write</a></span><span class="op">(</span><span class="va">imports_data</span>, schema <span class="op">=</span> <span class="st">"trade"</span>, table <span class="op">=</span> <span class="st">"imports"</span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Document and make discoverable (same API!)</span></span>
-<span><span class="fu"><a href="../reference/db_describe.html">db_describe</a></span><span class="op">(</span></span>
-<span>  table <span class="op">=</span> <span class="st">"imports"</span>,</span>
-<span>  description <span class="op">=</span> <span class="st">"Monthly import statistics"</span>,</span>
-<span>  public <span class="op">=</span> <span class="cn">TRUE</span>  <span class="co"># Syncs to master catalog</span></span>
-<span><span class="op">)</span></span>
+<span><span class="co"># Read from a schema (requires folder access)</span></span>
+<span><span class="va">imports</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/db_lake_read.html">db_lake_read</a></span><span class="op">(</span>schema <span class="op">=</span> <span class="st">"trade"</span>, table <span class="op">=</span> <span class="st">"imports"</span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Discover across all sections</span></span>
-<span><span class="fu"><a href="../reference/db_list_public.html">db_list_public</a></span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="co">#&gt;   section schema    table           description</span></span>
-<span><span class="co">#&gt; 1   trade   main  imports Monthly import stats</span></span>
-<span><span class="co">#&gt; 2  labour   main employment    Employment data</span></span>
-<span></span>
-<span><span class="co"># Switch to another section</span></span>
-<span><span class="fu"><a href="../reference/db_switch_section.html">db_switch_section</a></span><span class="op">(</span><span class="st">"labour"</span><span class="op">)</span></span></code></pre></div>
+<span><span class="co"># Discover available tables</span></span>
+<span><span class="fu"><a href="../reference/db_list_schemas.html">db_list_schemas</a></span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/db_list_tables.html">db_list_tables</a></span><span class="op">(</span><span class="st">"trade"</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level3">
-<h3 id="section-vs-schema-in-ducklake">Section vs Schema in DuckLake<a class="anchor" aria-label="anchor" href="#section-vs-schema-in-ducklake"></a>
+<h3 id="how-it-works-1">How It Works<a class="anchor" aria-label="anchor" href="#how-it-works-1"></a>
 </h3>
-<p>In DuckLake mode, both <strong>section</strong> and
-<strong>schema</strong> exist but serve different purposes: | Concept |
-What It Is | Purpose | |———|————|———| | <strong>Section</strong> | A
-separate DuckLake catalog file | Ownership boundary - controls who can
-write/publish | | <strong>Schema</strong> | A namespace within a catalog
-| Logical grouping of related tables |</p>
-<p>A section might contain multiple schemas:</p>
-<pre><code>trade/catalog.sqlite          ← Section (owned by Trade Team)
-├── main.imports              ← schema.table
-├── main.exports
-├── staging.imports_draft     ← Different schema for work-in-progress
-└── reference.countries       ← Reference data schema</code></pre>
-<p><strong>Key difference</strong>: - <strong>Section</strong> = who
-owns it (security boundary, controlled by file permissions) -
-<strong>Schema</strong> = how it’s organised (logical boundary, no
-access control)</p>
-<p>Only the Trade Team can make <code>trade.main.imports</code> public
-because they own the <code>trade/</code> section. The schema is just for
-organisation within their catalog.</p>
-</div>
-<div class="section level3">
-<h3 id="unified-api">Unified API<a class="anchor" aria-label="anchor" href="#unified-api"></a>
-</h3>
-<p>The same functions work in both modes:</p>
+<p>&lt;&lt;&lt;&lt;&lt;&lt;&lt; HEAD In DuckLake mode, both
+<strong>section</strong> and <strong>schema</strong> exist but serve
+different purposes:</p>
 <table class="table">
 <colgroup>
-<col width="27%">
 <col width="30%">
-<col width="41%">
+<col width="40%">
+<col width="30%">
 </colgroup>
 <thead><tr class="header">
-<th>Function</th>
-<th>Hive Mode</th>
-<th>DuckLake Mode</th>
+<th>Concept</th>
+<th>What It Is</th>
+<th>Purpose</th>
 </tr></thead>
 <tbody>
 <tr class="odd">
-<td><code>db_describe(public=TRUE)</code></td>
-<td>Copies to <code>_catalog/</code>
-</td>
-<td>Syncs to master SQLite</td>
+<td><strong>Section</strong></td>
+<td>A separate DuckLake catalog file</td>
+<td>Ownership boundary - controls who can write/publish</td>
 </tr>
 <tr class="even">
-<td><code><a href="../reference/db_set_public.html">db_set_public()</a></code></td>
-<td>Same</td>
-<td>Same</td>
-</tr>
-<tr class="odd">
-<td><code><a href="../reference/db_list_public.html">db_list_public()</a></code></td>
-<td>Lists <code>_catalog/</code>
-</td>
-<td>Queries master</td>
-</tr>
-<tr class="even">
-<td><code><a href="../reference/db_sync_catalog.html">db_sync_catalog()</a></code></td>
-<td>Syncs JSON files</td>
-<td>Syncs master entries</td>
+<td><strong>Schema</strong></td>
+<td>A namespace within a catalog</td>
+<td>Logical grouping of related tables</td>
 </tr>
 </tbody>
 </table>
+<p>======= | Component | Access Controlled By | |———–|———————| | Catalog
+file (<code>.sqlite</code>) | File permissions - need read to query,
+write to modify | | Schema data folder | Folder ACLs - each schema can
+have different permissions | | Table data | Inherited from schema folder
+| &gt;&gt;&gt;&gt;&gt;&gt;&gt;
+7ca1ba29fe7034729ada034f78210def94da93f5</p>
+<p><strong>Benefits</strong>: - <strong>Familiar model</strong> - uses
+standard folder permissions - <strong>Granular control</strong> -
+different teams can own different schemas - <strong>Single
+catalog</strong> - one metadata file, simpler management -
+<strong>IT-friendly</strong> - works with existing permission
+infrastructure</p>
 <hr>
 </div>
 </div>
@@ -880,34 +850,38 @@ organisation within their catalog.</p>
 <div class="section level3">
 <h3 id="publishing-data-producer">Publishing Data (Producer)<a class="anchor" aria-label="anchor" href="#publishing-data-producer"></a>
 </h3>
-<div class="sourceCode" id="cb31"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb30"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/CathalByrneGit/datapond" class="external-link">datapond</a></span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Connect to your section (paths come from master catalog)</span></span>
-<span><span class="fu"><a href="../reference/db_lake_connect_section.html">db_lake_connect_section</a></span><span class="op">(</span><span class="st">"trade"</span><span class="op">)</span></span>
+<span><span class="co"># Connect to DuckLake</span></span>
+<span><span class="fu"><a href="../reference/db_lake_connect.html">db_lake_connect</a></span><span class="op">(</span></span>
+<span>  catalog_type <span class="op">=</span> <span class="st">"sqlite"</span>,</span>
+<span>  metadata_path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/catalog.sqlite"</span>,</span>
+<span>  data_path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/data"</span></span>
+<span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Prepare your data</span></span>
 <span><span class="va">imports_q1</span> <span class="op">&lt;-</span> <span class="fu">prepare_imports_data</span><span class="op">(</span><span class="va">raw_files</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Preview what will happen</span></span>
-<span><span class="fu"><a href="../reference/db_preview_lake_write.html">db_preview_lake_write</a></span><span class="op">(</span><span class="va">imports_q1</span>, schema <span class="op">=</span> <span class="st">"main"</span>, table <span class="op">=</span> <span class="st">"imports"</span>, mode <span class="op">=</span> <span class="st">"append"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/db_preview_lake_write.html">db_preview_lake_write</a></span><span class="op">(</span><span class="va">imports_q1</span>, schema <span class="op">=</span> <span class="st">"trade"</span>, table <span class="op">=</span> <span class="st">"imports"</span>, mode <span class="op">=</span> <span class="st">"append"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Publish with a meaningful commit message</span></span>
 <span><span class="fu"><a href="../reference/db_lake_write.html">db_lake_write</a></span><span class="op">(</span></span>
 <span>  <span class="va">imports_q1</span>,</span>
-<span>  schema <span class="op">=</span> <span class="st">"main"</span>,</span>
+<span>  schema <span class="op">=</span> <span class="st">"trade"</span>,</span>
 <span>  table <span class="op">=</span> <span class="st">"imports"</span>,</span>
 <span>  mode <span class="op">=</span> <span class="st">"append"</span>,</span>
 <span>  commit_author <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Sys.info.html" class="external-link">Sys.info</a></span><span class="op">(</span><span class="op">)</span><span class="op">[</span><span class="st">"user"</span><span class="op">]</span>,</span>
 <span>  commit_message <span class="op">=</span> <span class="st">"Q1 2025 imports data - final"</span></span>
 <span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Document and make discoverable</span></span>
+<span><span class="co"># Document for discovery</span></span>
 <span><span class="fu"><a href="../reference/db_describe.html">db_describe</a></span><span class="op">(</span></span>
+<span>  schema <span class="op">=</span> <span class="st">"trade"</span>,</span>
 <span>  table <span class="op">=</span> <span class="st">"imports"</span>,</span>
 <span>  description <span class="op">=</span> <span class="st">"Monthly import values by country and HS code"</span>,</span>
-<span>  owner <span class="op">=</span> <span class="st">"Trade Section"</span>,</span>
-<span>  public <span class="op">=</span> <span class="cn">TRUE</span>  <span class="co"># Publish to master catalog for discovery</span></span>
+<span>  owner <span class="op">=</span> <span class="st">"Trade Section"</span></span>
 <span><span class="op">)</span></span>
 <span></span>
 <span><span class="fu"><a href="../reference/db_disconnect.html">db_disconnect</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
@@ -915,24 +889,28 @@ organisation within their catalog.</p>
 <div class="section level3">
 <h3 id="consuming-data-consumer">Consuming Data (Consumer)<a class="anchor" aria-label="anchor" href="#consuming-data-consumer"></a>
 </h3>
-<div class="sourceCode" id="cb32"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb31"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/CathalByrneGit/datapond" class="external-link">datapond</a></span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Connect to a section (read-only access is fine)</span></span>
-<span><span class="fu"><a href="../reference/db_lake_connect_section.html">db_lake_connect_section</a></span><span class="op">(</span><span class="st">"trade"</span><span class="op">)</span></span>
+<span><span class="co"># Connect to DuckLake (read access to catalog and data folder)</span></span>
+<span><span class="fu"><a href="../reference/db_lake_connect.html">db_lake_connect</a></span><span class="op">(</span></span>
+<span>  catalog_type <span class="op">=</span> <span class="st">"sqlite"</span>,</span>
+<span>  metadata_path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/catalog.sqlite"</span>,</span>
+<span>  data_path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/data"</span></span>
+<span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Discover what's available</span></span>
 <span><span class="fu"><a href="../reference/db_list_schemas.html">db_list_schemas</a></span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="fu"><a href="../reference/db_list_tables.html">db_list_tables</a></span><span class="op">(</span><span class="st">"main"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/db_list_tables.html">db_list_tables</a></span><span class="op">(</span><span class="st">"trade"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Search for relevant data</span></span>
 <span><span class="fu"><a href="../reference/db_search.html">db_search</a></span><span class="op">(</span><span class="st">"imports"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Check documentation</span></span>
-<span><span class="fu"><a href="../reference/db_get_docs.html">db_get_docs</a></span><span class="op">(</span>table <span class="op">=</span> <span class="st">"imports"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/db_get_docs.html">db_get_docs</a></span><span class="op">(</span>schema <span class="op">=</span> <span class="st">"trade"</span>, table <span class="op">=</span> <span class="st">"imports"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Read and analyse</span></span>
-<span><span class="va">imports</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/db_lake_read.html">db_lake_read</a></span><span class="op">(</span>table <span class="op">=</span> <span class="st">"imports"</span><span class="op">)</span></span>
+<span><span class="va">imports</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/db_lake_read.html">db_lake_read</a></span><span class="op">(</span>schema <span class="op">=</span> <span class="st">"trade"</span>, table <span class="op">=</span> <span class="st">"imports"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">imports</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/stats/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">year</span> <span class="op">==</span> <span class="fl">2025</span>, <span class="va">quarter</span> <span class="op">==</span> <span class="fl">1</span><span class="op">)</span> <span class="op">|&gt;</span></span>
@@ -989,36 +967,37 @@ PostgreSQL)</td>
 </tr>
 <tr class="even">
 <td><strong>Schema</strong></td>
-<td>A namespace/folder for organising related tables</td>
+<td>A namespace for organising related tables; can have custom data
+paths for access control</td>
 </tr>
 <tr class="odd">
+<td><strong>Schema path</strong></td>
+<td>Custom data folder for a DuckLake schema, enabling folder-based
+access control</td>
+</tr>
+<tr class="even">
 <td><strong>ACID</strong></td>
 <td>Atomicity, Consistency, Isolation, Durability - database reliability
 guarantees</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><strong>Upsert</strong></td>
 <td>Update existing rows + insert new rows in one operation</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><strong>Data dictionary</strong></td>
 <td>Documentation of all datasets, their columns, types, and
 descriptions</td>
 </tr>
-<tr class="even">
-<td><strong>Public catalog</strong></td>
-<td>Shared location for metadata, enabling discovery without data
-access</td>
-</tr>
 <tr class="odd">
-<td><strong>Master catalog</strong></td>
-<td>Central SQLite database tracking all sections in multi-catalog
-DuckLake</td>
+<td><strong>Public catalog</strong></td>
+<td>Shared location for metadata in hive mode, enabling discovery
+without data access</td>
 </tr>
 <tr class="even">
 <td><strong>Section</strong></td>
-<td>An organisational unit (e.g., Trade, Labour) with its own data and
-catalog</td>
+<td>An organisational unit (e.g., Trade, Labour) - folder in hive
+mode</td>
 </tr>
 </tbody>
 </table>

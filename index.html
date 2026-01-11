@@ -276,10 +276,10 @@
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/CathalByrneGit/datapond" class="external-link">datapond</a></span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Admin: Set up master catalog (one-time)</span></span>
-<span><span class="fu"><a href="reference/db_setup_master.html">db_setup_master</a></span><span class="op">(</span><span class="st">"//CSO-NAS/DataLake/_master/discovery.sqlite"</span><span class="op">)</span></span>
+<span><span class="fu">db_setup_master</span><span class="op">(</span><span class="st">"//CSO-NAS/DataLake/_master/discovery.sqlite"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Register sections</span></span>
-<span><span class="fu"><a href="reference/db_register_section.html">db_register_section</a></span><span class="op">(</span></span>
+<span><span class="fu">db_register_section</span><span class="op">(</span></span>
 <span>  section <span class="op">=</span> <span class="st">"trade"</span>,</span>
 <span>  catalog_path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/trade/catalog.sqlite"</span>,</span>
 <span>  data_path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/trade/data"</span>,</span>
@@ -287,7 +287,7 @@
 <span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># User: Connect to a section</span></span>
-<span><span class="fu"><a href="reference/db_lake_connect_section.html">db_lake_connect_section</a></span><span class="op">(</span><span class="st">"trade"</span><span class="op">)</span></span>
+<span><span class="fu">db_lake_connect_section</span><span class="op">(</span><span class="st">"trade"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Work with data</span></span>
 <span><span class="va">imports</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/db_lake_read.html">db_lake_read</a></span><span class="op">(</span>table <span class="op">=</span> <span class="st">"imports"</span><span class="op">)</span></span>
@@ -303,7 +303,7 @@
 <span><span class="fu"><a href="reference/db_list_public.html">db_list_public</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Switch sections</span></span>
-<span><span class="fu"><a href="reference/db_switch_section.html">db_switch_section</a></span><span class="op">(</span><span class="st">"labour"</span><span class="op">)</span></span></code></pre></div>
+<span><span class="fu">db_switch_section</span><span class="op">(</span><span class="st">"labour"</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level3">
 <h3 id="interactive-browser">Interactive Browser<a class="anchor" aria-label="anchor" href="#interactive-browser"></a>
@@ -736,31 +736,31 @@
 </tr></thead>
 <tbody>
 <tr class="odd">
-<td><code><a href="reference/db_setup_master.html">db_setup_master()</a></code></td>
+<td><code>db_setup_master()</code></td>
 <td>Create master discovery catalog</td>
 </tr>
 <tr class="even">
-<td><code><a href="reference/db_register_section.html">db_register_section()</a></code></td>
+<td><code>db_register_section()</code></td>
 <td>Register a section in master catalog</td>
 </tr>
 <tr class="odd">
-<td><code><a href="reference/db_unregister_section.html">db_unregister_section()</a></code></td>
+<td><code>db_unregister_section()</code></td>
 <td>Remove section from master catalog</td>
 </tr>
 <tr class="even">
-<td><code><a href="reference/db_list_registered_sections.html">db_list_registered_sections()</a></code></td>
+<td><code>db_list_registered_sections()</code></td>
 <td>List all registered sections</td>
 </tr>
 <tr class="odd">
-<td><code><a href="reference/db_lake_connect_section.html">db_lake_connect_section()</a></code></td>
+<td><code>db_lake_connect_section()</code></td>
 <td>Connect to section via master catalog</td>
 </tr>
 <tr class="even">
-<td><code><a href="reference/db_current_section.html">db_current_section()</a></code></td>
+<td><code>db_current_section()</code></td>
 <td>Get current section name</td>
 </tr>
 <tr class="odd">
-<td><code><a href="reference/db_switch_section.html">db_switch_section()</a></code></td>
+<td><code>db_switch_section()</code></td>
 <td>Switch to a different section</td>
 </tr>
 </tbody>

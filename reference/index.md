@@ -14,8 +14,6 @@
   : Connect to the CSO hive parquet lake
 - [`db_create_schema()`](https://cathalbyrnegit.github.io/datapond/reference/db_create_schema.md)
   : Create a new schema in DuckLake
-- [`db_current_section()`](https://cathalbyrnegit.github.io/datapond/reference/db_current_section.md)
-  : Get current section
 - [`db_dataset_exists()`](https://cathalbyrnegit.github.io/datapond/reference/db_dataset_exists.md)
   : Check if a hive dataset exists
 - [`db_describe()`](https://cathalbyrnegit.github.io/datapond/reference/db_describe.md)
@@ -30,16 +28,18 @@
   : Disconnect from the CSO Data Lake
 - [`db_get_docs()`](https://cathalbyrnegit.github.io/datapond/reference/db_get_docs.md)
   : Get documentation for a dataset or table
+- [`db_get_schema_path()`](https://cathalbyrnegit.github.io/datapond/reference/db_get_schema_path.md)
+  : Get the data path for a schema
+- [`db_get_table_path()`](https://cathalbyrnegit.github.io/datapond/reference/db_get_table_path.md)
+  : Get the data path for a table
 - [`db_hive_read()`](https://cathalbyrnegit.github.io/datapond/reference/db_hive_read.md)
   : Read a CSO Dataset from hive-partitioned parquet (lazy)
 - [`db_hive_write()`](https://cathalbyrnegit.github.io/datapond/reference/db_hive_write.md)
   : Publish / Append / Ignore / Replace Partitions in the Hive Lake
 - [`db_is_public()`](https://cathalbyrnegit.github.io/datapond/reference/db_is_public.md)
-  : Check if a dataset/table is in the public catalog
+  : Check if a dataset is in the public catalog (Hive mode only)
 - [`db_lake_connect()`](https://cathalbyrnegit.github.io/datapond/reference/db_lake_connect.md)
   : Connect to DuckDB + attach a DuckLake catalog
-- [`db_lake_connect_section()`](https://cathalbyrnegit.github.io/datapond/reference/db_lake_connect_section.md)
-  : Connect to a DuckLake section via master catalog
 - [`db_lake_read()`](https://cathalbyrnegit.github.io/datapond/reference/db_lake_read.md)
   : Read a DuckLake table (lazy)
 - [`db_lake_write()`](https://cathalbyrnegit.github.io/datapond/reference/db_lake_write.md)
@@ -47,9 +47,7 @@
 - [`db_list_datasets()`](https://cathalbyrnegit.github.io/datapond/reference/db_list_datasets.md)
   : List datasets within a section
 - [`db_list_public()`](https://cathalbyrnegit.github.io/datapond/reference/db_list_public.md)
-  : List all datasets/tables in the public catalog
-- [`db_list_registered_sections()`](https://cathalbyrnegit.github.io/datapond/reference/db_list_registered_sections.md)
-  : List registered sections
+  : List all datasets in the public catalog (Hive mode only)
 - [`db_list_schemas()`](https://cathalbyrnegit.github.io/datapond/reference/db_list_schemas.md)
   : List schemas in the DuckLake catalog
 - [`db_list_sections()`](https://cathalbyrnegit.github.io/datapond/reference/db_list_sections.md)
@@ -66,8 +64,6 @@
   : Preview an upsert operation
 - [`db_query()`](https://cathalbyrnegit.github.io/datapond/reference/db_query.md)
   : Run arbitrary SQL and return results
-- [`db_register_section()`](https://cathalbyrnegit.github.io/datapond/reference/db_register_section.md)
-  : Register a section in the master catalog
 - [`db_rollback()`](https://cathalbyrnegit.github.io/datapond/reference/db_rollback.md)
   : Rollback a table to a previous snapshot
 - [`db_search()`](https://cathalbyrnegit.github.io/datapond/reference/db_search.md)
@@ -75,25 +71,19 @@
 - [`db_search_columns()`](https://cathalbyrnegit.github.io/datapond/reference/db_search_columns.md)
   : Search for columns
 - [`db_set_private()`](https://cathalbyrnegit.github.io/datapond/reference/db_set_private.md)
-  : Remove a dataset/table from the public catalog
+  : Remove a dataset from the public catalog (Hive mode only)
 - [`db_set_public()`](https://cathalbyrnegit.github.io/datapond/reference/db_set_public.md)
-  : Make a dataset/table discoverable in the public catalog
-- [`db_setup_master()`](https://cathalbyrnegit.github.io/datapond/reference/db_setup_master.md)
-  : Set up the master discovery catalog
+  : Make a dataset discoverable in the public catalog (Hive mode only)
 - [`db_snapshots()`](https://cathalbyrnegit.github.io/datapond/reference/db_snapshots.md)
   : List DuckLake snapshots
 - [`db_status()`](https://cathalbyrnegit.github.io/datapond/reference/db_status.md)
   : Get connection status and configuration
-- [`db_switch_section()`](https://cathalbyrnegit.github.io/datapond/reference/db_switch_section.md)
-  : Switch to a different section
 - [`db_sync_catalog()`](https://cathalbyrnegit.github.io/datapond/reference/db_sync_catalog.md)
-  : Sync the public catalog with source metadata
+  : Sync the public catalog with source metadata (Hive mode only)
 - [`db_table_cols()`](https://cathalbyrnegit.github.io/datapond/reference/db_table_cols.md)
   : Get column names for a DuckLake table
 - [`db_table_exists()`](https://cathalbyrnegit.github.io/datapond/reference/db_table_exists.md)
   : Check if a DuckLake table exists
-- [`db_unregister_section()`](https://cathalbyrnegit.github.io/datapond/reference/db_unregister_section.md)
-  : Unregister a section from the master catalog
 - [`db_upsert()`](https://cathalbyrnegit.github.io/datapond/reference/db_upsert.md)
   : Upsert into a DuckLake table using MERGE INTO
 - [`db_vacuum()`](https://cathalbyrnegit.github.io/datapond/reference/db_vacuum.md)
