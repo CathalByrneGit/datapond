@@ -36,6 +36,22 @@ db_preview_hive_write <- function(data,
   section <- .db_validate_name(section, "section")
   dataset <- .db_validate_name(dataset, "dataset")
 
+  # Validate partition_by columns exist in data
+  if (!is.null(partition_by)) {
+    if (!is.character(partition_by) || length(partition_by) < 1L) {
+      stop("partition_by must be NULL or a character vector.", call. = FALSE)
+    }
+    if (anyNA(partition_by) || any(!nzchar(partition_by))) {
+      stop("partition_by cannot contain NA/empty strings.", call. = FALSE)
+    }
+    missing_cols <- setdiff(partition_by, names(data))
+    if (length(missing_cols) > 0) {
+      stop("partition_by columns not found in data: ",
+           paste(missing_cols, collapse = ", "),
+           call. = FALSE)
+    }
+  }
+
   con <- .db_get_con()
   if (is.null(con)) {
     stop("Not connected. Use db_connect() first.", call. = FALSE)

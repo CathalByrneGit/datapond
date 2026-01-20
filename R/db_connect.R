@@ -2,19 +2,47 @@
 
 .db_env <- new.env(parent = emptyenv())
 
-# internal: validate "simple" names to avoid traversal like ../
-.db_validate_name <- function(x, arg = deparse(substitute(x))) {
+# internal: validate identifier names
+# By default, allows simple names (letters, numbers, underscore, dash)
+# With strict = FALSE, allows more characters but blocks dangerous ones
+.db_validate_name <- function(x, arg = deparse(substitute(x)), strict = TRUE) {
   if (!is.character(x) || length(x) != 1 || is.na(x) || !nzchar(x)) {
     stop(arg, " must be a single, non-empty string.", call. = FALSE)
   }
-  # allow letters, numbers, underscore, dash; adjust if you need spaces
-  if (!grepl("^[A-Za-z0-9_-]+$", x)) {
-    stop(
-      arg, " contains invalid characters. Allowed: A-Z a-z 0-9 _ -",
-      call. = FALSE
-    )
+
+  # Always block dangerous characters that could enable injection or traversal
+  # Block: quotes, semicolons, comments, path traversal, NULL bytes
+  dangerous_pattern <- "['\";`\\\\]|--|/\\*|\\*/|\\.\\.|\\x00"
+  if (grepl(dangerous_pattern, x)) {
+    stop(arg, " contains potentially dangerous characters.", call. = FALSE)
+  }
+
+  if (strict) {
+    # Strict mode: only alphanumeric, underscore, dash
+    if (!grepl("^[A-Za-z0-9_-]+$", x)) {
+      stop(
+        arg, " contains invalid characters. Allowed: A-Z a-z 0-9 _ -\n",
+        "Use strict = FALSE in .db_validate_name() for names with spaces or dots.",
+        call. = FALSE
+      )
+    }
+  } else {
+    # Permissive mode: allow spaces, dots, and other common characters
+    # Still require alphanumeric start, block consecutive spaces
+    if (!grepl("^[A-Za-z][A-Za-z0-9_.\\s-]*$", x, perl = TRUE)) {
+      stop(
+        arg, " must start with a letter and contain only letters, numbers, spaces, dots, underscores, or dashes.",
+        call. = FALSE
+      )
+    }
   }
   x
+}
+
+# internal: quote an identifier for safe use in SQL
+.db_quote_identifier <- function(x) {
+  # Double any existing double quotes and wrap in double quotes
+  paste0('"', gsub('"', '""', x), '"')
 }
 
 # internal: ensure a connection exists & is valid
@@ -247,6 +275,11 @@ db_lake_connect <- function(duckdb_db = ":memory:",
 
   # Build the DuckLake connection string
   ducklake_dsn <- .db_build_ducklake_dsn(catalog_type, metadata_path)
+
+  # Validate time-travel options are mutually exclusive
+ if (!is.null(snapshot_version) && !is.null(snapshot_time)) {
+    stop("Cannot specify both snapshot_version and snapshot_time. Use one or the other for time travel.", call. = FALSE)
+  }
 
   # Build ATTACH options
   attach_opts <- c(glue::glue("DATA_PATH {.db_sql_quote(data_path)}"))

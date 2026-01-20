@@ -325,6 +325,11 @@ db_lake_write <- function(data,
 
   qname <- paste0(catalog, ".", schema, ".", table)
 
+  # For append mode, verify table exists first for clearer error message
+  if (mode == "append" && !.db_table_exists(con, catalog, schema, table)) {
+    stop("Table '", qname, "' does not exist. Use mode = 'overwrite' to create it first.", call. = FALSE)
+  }
+
   tmp <- .db_temp_name()
   duckdb::duckdb_register(con, tmp, data)
   on.exit(try(duckdb::duckdb_unregister(con, tmp), silent = TRUE), add = TRUE)
