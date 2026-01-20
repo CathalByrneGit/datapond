@@ -2,7 +2,7 @@
 % Please edit documentation in R/docs.R
 \name{db_list_public}
 \alias{db_list_public}
-\title{List all datasets/tables in the public catalog}
+\title{List all datasets in the public catalog (Hive mode only)}
 \usage{
 db_list_public(section = NULL)
 }
@@ -16,17 +16,14 @@ A data.frame with discovery information
 Lists all entries published to the discovery catalog.
 This works even if you don't have access to the underlying data,
 allowing organisation-wide data discovery.
+
+This function is only available in hive mode. In DuckLake mode, use
+\code{db_dictionary()} for data discovery, with access controlled via schema paths.
 }
 \examples{
 \dontrun{
-# Hive mode
 db_connect("//CSO-NAS/DataLake")
 db_list_public()
 db_list_public(section = "Trade")
-
-# DuckLake mode - lists from master catalog
-db_lake_connect_section("trade")
-db_list_public()
-db_list_public(section = "trade")
 }
 }

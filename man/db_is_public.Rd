@@ -2,33 +2,27 @@
 % Please edit documentation in R/docs.R
 \name{db_is_public}
 \alias{db_is_public}
-\title{Check if a dataset/table is in the public catalog}
+\title{Check if a dataset is in the public catalog (Hive mode only)}
 \usage{
-db_is_public(section = NULL, dataset = NULL, schema = "main", table = NULL)
+db_is_public(section, dataset)
 }
 \arguments{
-\item{section}{Section name (hive mode), or NULL in DuckLake mode}
+\item{section}{Section name}
 
-\item{dataset}{Dataset name (hive mode only)}
-
-\item{schema}{Schema name (DuckLake mode, default "main")}
-
-\item{table}{Table name (DuckLake mode only)}
+\item{dataset}{Dataset name}
 }
 \value{
 Logical TRUE if public, FALSE otherwise
 }
 \description{
 Check whether metadata has been published to the discovery catalog.
+
+This function is only available in hive mode. In DuckLake mode, access
+control is managed via schema paths and folder ACLs.
 }
 \examples{
 \dontrun{
-# Hive mode
 db_connect("//CSO-NAS/DataLake")
 db_is_public(section = "Trade", dataset = "Imports")
-
-# DuckLake mode
-db_lake_connect_section("trade")
-db_is_public(schema = "main", table = "imports")
 }
 }
