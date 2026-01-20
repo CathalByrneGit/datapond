@@ -1,7 +1,7 @@
 # browser_demo_ducklake.R
 # ========================
 # Interactive demo of db_browser() with sample DuckLake data
-# Demonstrates path-based access control with schema paths
+# Demonstrates DuckLake's automatic folder organization for access control
 #
 # Run with:
 #   source(system.file("examples", "browser_demo_ducklake.R", package = "datapond"))
@@ -21,8 +21,8 @@ cat("Setting up DuckLake at:", lake_path, "\n\n")
 # =============================================================================
 # Set up DuckLake catalog
 # =============================================================================
-# Single catalog file with schemas that have custom data paths.
-# In production, folder ACLs on each schema path control access.
+# DuckLake automatically organizes data into {schema}/{table}/ folders.
+# In production, set folder ACLs on each schema folder to control access.
 
 catalog_path <- file.path(lake_path, "catalog.sqlite")
 data_path <- file.path(lake_path, "data")
@@ -38,33 +38,17 @@ db_lake_connect(
 cat("DuckLake catalog created\n")
 
 # =============================================================================
-# Create schemas with custom paths (for access control)
+# Create schemas
 # =============================================================================
-# Each schema has its own data folder. In production, you'd set folder ACLs
-# on each path to control who can read/write to that schema.
+# DuckLake automatically creates {data_path}/{schema}/ folders when you write data.
+# Each schema gets its own folder - perfect for folder-based ACLs.
 
-trade_path <- file.path(data_path, "trade")
-labour_path <- file.path(data_path, "labour")
-health_path <- file.path(data_path, "health")
-shared_path <- file.path(data_path, "shared")
+db_create_schema("trade")
+db_create_schema("labour")
+db_create_schema("health")
+db_create_schema("reference")
 
-# Create directories
-dir.create(trade_path, recursive = TRUE, showWarnings = FALSE)
-dir.create(labour_path, recursive = TRUE, showWarnings = FALSE)
-dir.create(health_path, recursive = TRUE, showWarnings = FALSE)
-dir.create(shared_path, recursive = TRUE, showWarnings = FALSE)
-
-# Create schemas with paths
-db_create_schema("trade", path = trade_path)
-db_create_schema("labour", path = labour_path)
-db_create_schema("health", path = health_path)
-db_create_schema("reference", path = shared_path)
-
-cat("Created schemas with custom paths\n")
-cat("  trade:     ", trade_path, "\n")
-cat("  labour:    ", labour_path, "\n")
-cat("  health:    ", health_path, "\n")
-cat("  reference: ", shared_path, "\n\n")
+cat("Created schemas: trade, labour, health, reference\n\n")
 
 # =============================================================================
 # Create sample tables
@@ -199,17 +183,26 @@ cat("=" |> rep(60) |> paste(collapse = ""), "\n")
 cat("DUCKLAKE TEST DATA READY\n")
 cat("=" |> rep(60) |> paste(collapse = ""), "\n\n")
 
-cat("Schemas and their data paths:\n")
+cat("Schemas and tables:\n")
 for (sch in db_list_schemas()) {
-  if (startsWith(sch, "_")) next  # skip metadata schema
-  path <- db_get_schema_path(sch)
+  if (startsWith(sch, "_")) next  # skip metadata schemas
   tables <- db_list_tables(sch)
-  cat(sprintf("  %s (%d tables)\n", sch, length(tables)))
-  if (!is.null(path)) {
-    cat(sprintf("    path: %s\n", path))
-  }
+  cat(sprintf("  %s/ (%d tables)\n", sch, length(tables)))
   for (tbl in tables) {
     cat(sprintf("    - %s\n", tbl))
+  }
+}
+
+cat("\nData folder structure (automatic):\n")
+cat(sprintf("  %s/\n", data_path))
+for (sch in c("trade", "labour", "health", "reference")) {
+  schema_path <- file.path(data_path, sch)
+  if (dir.exists(schema_path)) {
+    cat(sprintf("    %s/\n", sch))
+    tables <- list.dirs(schema_path, full.names = FALSE, recursive = FALSE)
+    for (tbl in tables) {
+      cat(sprintf("      %s/\n", tbl))
+    }
   }
 }
 
@@ -225,18 +218,23 @@ db_status()
 
 cat("\n")
 cat("=" |> rep(60) |> paste(collapse = ""), "\n")
-cat("ACCESS CONTROL VIA SCHEMA PATHS\n")
+cat("ACCESS CONTROL VIA FOLDER ACLS\n")
 cat("=" |> rep(60) |> paste(collapse = ""), "\n\n")
 
-cat("In production, you would set folder ACLs on each schema's data path:\n\n")
-cat("  Schema      Path                          ACL Example\n")
-cat("  ---------   ---------------------------   ---------------------------\n")
-cat("  trade       ", trade_path, "    Trade Team: read/write\n")
-cat("  labour      ", labour_path, "   Labour Team: read/write\n")
-cat("  health      ", health_path, "   Health Team: read/write\n")
-cat("  reference   ", shared_path, "   Everyone: read\n")
+cat("DuckLake automatically organizes data into schema folders:\n\n")
+cat(sprintf("  %s/\n", data_path))
+cat("    trade/          <- Trade Team: read/write\n")
+cat("      imports/\n")
+cat("      exports/\n")
+cat("    labour/         <- Labour Team: read/write\n")
+cat("      employment/\n")
+cat("    health/         <- Health Team: read/write\n")
+cat("      hospitals/\n")
+cat("    reference/      <- Everyone: read\n")
+cat("      countries/\n")
 cat("\n")
-cat("This enables fine-grained access control using familiar folder permissions.\n")
+cat("Set Windows/NFS ACLs on schema folders to control access.\n")
+cat("Users can only query tables in folders they have access to.\n")
 
 # =============================================================================
 # Launch browser
