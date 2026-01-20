@@ -338,3 +338,159 @@ db_create_schema <- function(schema) {
   message("Schema created: ", catalog, ".", schema)
   invisible(schema)
 }
+
+
+#' Set partitioning for a DuckLake table
+#'
+#' @description Configures partition keys for a DuckLake table. When partitioning
+#'   is set, new data written to the table will be split into separate files
+#'   based on the partition key values.
+#'
+#'   Partitioning enables:
+#'   - Efficient query pruning (only read relevant partitions)
+#'   - Potential folder-based access control at partition level
+#'   - Better data organization for time-series data
+#'
+#'   Note: Existing data is not reorganized - only new inserts are partitioned.
+#'
+#' @param schema Schema name
+#' @param table Table name
+#' @param partition_by Character vector of column names or expressions to partition by.
+#'   Use NULL to remove partitioning.
+#' @return Invisibly returns TRUE on success
+#' @examples
+#' \dontrun{
+#' db_lake_connect(...)
+#'
+#' # Partition by year and month columns
+#' db_set_partitioning("trade", "imports", c("year", "month"))
+#'
+#' # Partition using date functions
+#' db_set_partitioning("trade", "imports", c("year(date)", "month(date)"))
+#'
+#' # Remove partitioning (new data won't be partitioned)
+#' db_set_partitioning("trade", "imports", NULL)
+#' }
+#' @export
+db_set_partitioning <- function(schema = "main", table, partition_by) {
+  schema <- .db_validate_name(schema, "schema")
+  table <- .db_validate_name(table, "table")
+
+  con <- .db_get_con()
+  if (is.null(con)) {
+    stop("Not connected. Use db_lake_connect() first.", call. = FALSE)
+  }
+
+  curr_mode <- .db_get("mode")
+  if (!is.null(curr_mode) && curr_mode != "ducklake") {
+    stop("Connected in hive mode. Partitioning is only available for DuckLake.", call. = FALSE)
+  }
+
+  catalog <- .db_get("catalog")
+  if (is.null(catalog)) {
+    stop("No DuckLake catalog configured. Use db_lake_connect() first.", call. = FALSE)
+  }
+
+  qname <- paste0(catalog, ".", schema, ".", table)
+
+  # Check table exists
+  if (!.db_table_exists(con, catalog, schema, table)) {
+    stop("Table '", qname, "' does not exist.", call. = FALSE)
+  }
+
+  if (is.null(partition_by) || length(partition_by) == 0) {
+    # Remove partitioning
+    sql <- glue::glue("ALTER TABLE {qname} SET PARTITIONED BY ()")
+    DBI::dbExecute(con, sql)
+    message("Removed partitioning from ", qname)
+  } else {
+    # Validate partition_by
+    if (!is.character(partition_by)) {
+      stop("partition_by must be a character vector of column names or expressions.", call. = FALSE)
+    }
+
+    # Build partition clause - allow expressions like year(date)
+    partition_clause <- paste(partition_by, collapse = ", ")
+    sql <- glue::glue("ALTER TABLE {qname} SET PARTITIONED BY ({partition_clause})")
+
+    tryCatch({
+      DBI::dbExecute(con, sql)
+      message("Set partitioning on ", qname, ": ", partition_clause)
+    }, error = function(e) {
+      stop("Failed to set partitioning: ", e$message, call. = FALSE)
+    })
+  }
+
+  invisible(TRUE)
+}
+
+
+#' Get partitioning configuration for a DuckLake table
+#'
+#' @description Returns the current partition keys configured for a table,
+#'   or NULL if the table is not partitioned.
+#'
+#' @param schema Schema name
+#' @param table Table name
+#' @return A character vector of partition key expressions, or NULL if not partitioned
+#' @examples
+#' \dontrun{
+#' db_lake_connect(...)
+#' db_set_partitioning("trade", "imports", c("year", "month"))
+#' db_get_partitioning("trade", "imports")
+#' #> [1] "year" "month"
+#' }
+#' @export
+db_get_partitioning <- function(schema = "main", table) {
+  schema <- .db_validate_name(schema, "schema")
+  table <- .db_validate_name(table, "table")
+
+  con <- .db_get_con()
+  if (is.null(con)) {
+    stop("Not connected. Use db_lake_connect() first.", call. = FALSE)
+  }
+
+  curr_mode <- .db_get("mode")
+  if (!is.null(curr_mode) && curr_mode != "ducklake") {
+    stop("Connected in hive mode. Partitioning is only available for DuckLake.", call. = FALSE)
+  }
+
+  catalog <- .db_get("catalog")
+
+  # Query the DuckLake metadata for partition info
+  # Metadata schema is __ducklake_metadata_{catalog}
+  metadata_schema <- paste0("__ducklake_metadata_", catalog)
+
+  result <- tryCatch({
+    DBI::dbGetQuery(con, glue::glue("
+      SELECT c.column_name, pc.transform
+      FROM {metadata_schema}.ducklake_partition_column pc
+      JOIN {metadata_schema}.ducklake_table t ON pc.table_id = t.table_id
+      JOIN {metadata_schema}.ducklake_schema s ON t.schema_id = s.schema_id
+      JOIN {metadata_schema}.ducklake_column c ON pc.column_id = c.column_id
+      WHERE s.schema_name = '{schema}' AND t.table_name = '{table}'
+      ORDER BY pc.partition_key_index
+    "))
+  }, error = function(e) {
+    # Table may not exist or metadata table may differ
+    data.frame(column_name = character(0), transform = character(0))
+  })
+
+  if (nrow(result) == 0) {
+    return(NULL)
+  }
+
+  # Build partition key expressions
+  # If transform is specified, wrap column in transform function
+  partition_keys <- vapply(seq_len(nrow(result)), function(i) {
+    col <- result$column_name[i]
+    transform <- result$transform[i]
+    if (!is.na(transform) && nzchar(transform) && transform != "identity") {
+      paste0(transform, "(", col, ")")
+    } else {
+      col
+    }
+  }, character(1))
+
+  partition_keys
+}
