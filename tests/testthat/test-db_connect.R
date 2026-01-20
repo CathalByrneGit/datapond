@@ -62,18 +62,18 @@ test_that(".db_validate_name rejects invalid names", {
   expect_error(validate(TRUE), "must be a single, non-empty string")
   expect_error(validate(c("a", "b")), "must be a single, non-empty string")
 
-  # Path traversal attempts
-  expect_error(validate("../etc"), "contains invalid characters")
-  expect_error(validate("Trade/Imports"), "contains invalid characters")
-  expect_error(validate("Trade\\Imports"), "contains invalid characters")
-  expect_error(validate(".."), "contains invalid characters")
+  # Path traversal attempts - blocked as dangerous
+  expect_error(validate("../etc"), "potentially dangerous characters")
+  expect_error(validate("Trade/Imports"), "contains invalid characters")  # / not in dangerous pattern
+  expect_error(validate("Trade\\Imports"), "potentially dangerous characters")
+  expect_error(validate(".."), "potentially dangerous characters")
 
-  # SQL injection attempts
-  expect_error(validate("Trade; DROP TABLE"), "contains invalid characters")
-  expect_error(validate("Trade'--"), "contains invalid characters")
-  expect_error(validate("Trade\""), "contains invalid characters")
+  # SQL injection attempts - blocked as dangerous
+  expect_error(validate("Trade; DROP TABLE"), "potentially dangerous characters")
+  expect_error(validate("Trade'--"), "potentially dangerous characters")
+  expect_error(validate("Trade\""), "potentially dangerous characters")
 
-  # Special characters
+  # Special characters - blocked as invalid (not dangerous)
   expect_error(validate("Trade Imports"), "contains invalid characters")  # space
   expect_error(validate("Trade.Imports"), "contains invalid characters")  # dot
   expect_error(validate("Trade@Imports"), "contains invalid characters")  # @
@@ -319,12 +319,12 @@ test_that("db_connect validates extension names", {
 
   expect_error(
     db_connect(path = "/test", db = ":memory:", load_extensions = "../bad"),
-    "contains invalid characters"
+    "potentially dangerous characters"
   )
 
   expect_error(
     db_connect(path = "/test", db = ":memory:", load_extensions = "ext; DROP"),
-    "contains invalid characters"
+    "potentially dangerous characters"
   )
 
   clean_db_env()
@@ -468,12 +468,12 @@ test_that("db_lake_connect validates catalog name", {
   # if catalog name is valid. With invalid name, should fail earlier.
   expect_error(
     db_lake_connect(catalog = "../bad"),
-    "contains invalid characters"
+    "potentially dangerous characters"
   )
 
   expect_error(
     db_lake_connect(catalog = "cat; DROP"),
-    "contains invalid characters"
+    "potentially dangerous characters"
   )
 })
 
