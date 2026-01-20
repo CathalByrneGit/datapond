@@ -173,7 +173,7 @@ test_that("db_hive_write validates section name", {
 
   df <- data.frame(x = 1)
   expect_error(db_hive_write(df, "", "Test"), "must be a single, non-empty")
-  expect_error(db_hive_write(df, "../bad", "Test"), "contains invalid characters")
+  expect_error(db_hive_write(df, "../bad", "Test"), "potentially dangerous characters")
   expect_error(db_hive_write(df, 123, "Test"), "must be a single, non-empty")
 
   clean_db_env()
@@ -565,7 +565,7 @@ test_that("db_lake_write validates schema name", {
 
   df <- data.frame(x = 1)
   expect_error(db_lake_write(df, schema = "", table = "t"), "must be a single, non-empty")
-  expect_error(db_lake_write(df, schema = "../bad", table = "t"), "contains invalid characters")
+  expect_error(db_lake_write(df, schema = "../bad", table = "t"), "potentially dangerous characters")
 
   clean_db_env()
 })
@@ -582,7 +582,7 @@ test_that("db_lake_write validates table name", {
 
   df <- data.frame(x = 1)
   expect_error(db_lake_write(df, table = ""), "must be a single, non-empty")
-  expect_error(db_lake_write(df, table = "bad;drop"), "contains invalid characters")
+  expect_error(db_lake_write(df, table = "bad;drop"), "potentially dangerous characters")
 
   clean_db_env()
 })

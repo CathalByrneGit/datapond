@@ -111,7 +111,7 @@ test_that("db_list_datasets validates section name", {
 
   expect_error(db_list_datasets(""), "non-empty")
   expect_error(db_list_datasets("Trade/Imports"), "invalid characters")
-  expect_error(db_list_datasets("../etc"), "invalid characters")
+  expect_error(db_list_datasets("../etc"), "potentially dangerous")
 
   clean_db_env()
 })
