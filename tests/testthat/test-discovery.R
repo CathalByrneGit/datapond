@@ -656,3 +656,173 @@ test_that("db_create_schema returns schema name invisibly", {
   unlink(temp_dir, recursive = TRUE)
 })
 
+# ==============================================================================
+# Tests for db_set_partitioning() - DuckLake
+# ==============================================================================
+
+test_that("db_set_partitioning errors when not connected", {
+  clean_db_env()
+
+  expect_error(db_set_partitioning("main", "test", c("year")), "Not connected")
+})
+
+test_that("db_set_partitioning errors in hive mode", {
+  clean_db_env()
+  db_connect(path = "/test")
+
+  expect_error(db_set_partitioning("main", "test", c("year")), "hive mode")
+
+  clean_db_env()
+})
+
+test_that("db_set_partitioning validates inputs", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "partition_test_")
+  dir.create(temp_dir)
+
+  db_lake_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  # Table doesn't exist
+  expect_error(db_set_partitioning("main", "nonexistent", c("year")), "does not exist")
+
+  # Invalid partition_by type
+  db_lake_write(data.frame(x = 1, year = 2024), schema = "main", table = "test_tbl")
+  expect_error(db_set_partitioning("main", "test_tbl", 123), "character vector")
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_set_partitioning sets partition keys on table", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "partition_set_test_")
+  dir.create(temp_dir)
+
+  db_lake_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  # Create a table
+  test_data <- data.frame(
+    year = c(2023, 2023, 2024, 2024),
+    month = c(1, 2, 1, 2),
+    value = c(100, 200, 300, 400)
+  )
+  db_lake_write(test_data, schema = "main", table = "partitioned_tbl")
+
+  # Set partitioning
+  expect_message(
+    db_set_partitioning("main", "partitioned_tbl", c("year", "month")),
+    "Set partitioning"
+  )
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_set_partitioning removes partitioning with NULL", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "partition_remove_test_")
+  dir.create(temp_dir)
+
+  db_lake_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  # Create and partition a table
+  test_data <- data.frame(year = 2024, value = 100)
+  db_lake_write(test_data, schema = "main", table = "remove_part_tbl")
+  db_set_partitioning("main", "remove_part_tbl", c("year"))
+
+  # Remove partitioning
+  expect_message(
+    db_set_partitioning("main", "remove_part_tbl", NULL),
+    "Removed partitioning"
+  )
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+# ==============================================================================
+# Tests for db_get_partitioning() - DuckLake
+# ==============================================================================
+
+test_that("db_get_partitioning errors when not connected", {
+  clean_db_env()
+
+  expect_error(db_get_partitioning("main", "test"), "Not connected")
+})
+
+test_that("db_get_partitioning errors in hive mode", {
+  clean_db_env()
+  db_connect(path = "/test")
+
+  expect_error(db_get_partitioning("main", "test"), "hive mode")
+
+  clean_db_env()
+})
+
+test_that("db_get_partitioning returns NULL for non-partitioned table", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "get_partition_test_")
+  dir.create(temp_dir)
+
+  db_lake_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  # Create a table without partitioning
+  db_lake_write(data.frame(x = 1), schema = "main", table = "no_part_tbl")
+
+  result <- db_get_partitioning("main", "no_part_tbl")
+  expect_null(result)
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_get_partitioning returns partition keys", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "get_partition_keys_test_")
+  dir.create(temp_dir)
+
+  db_lake_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  # Create and partition a table
+  test_data <- data.frame(year = 2024, month = 1, value = 100)
+  db_lake_write(test_data, schema = "main", table = "get_part_tbl")
+  db_set_partitioning("main", "get_part_tbl", c("year", "month"))
+
+  result <- db_get_partitioning("main", "get_part_tbl")
+  expect_true("year" %in% result)
+  expect_true("month" %in% result)
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
