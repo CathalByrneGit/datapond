@@ -295,6 +295,27 @@ db_hive_write <- function(data,
   result$column_name
 }
 
+# internal: map R column class to DuckDB SQL type
+.db_r_to_duckdb_type <- function(x) {
+  cls <- class(x)[1]
+
+  switch(cls,
+    integer = "INTEGER",
+    numeric = "DOUBLE",
+    double = "DOUBLE",
+    character = "VARCHAR",
+    factor = "VARCHAR",
+    logical = "BOOLEAN",
+    Date = "DATE",
+    POSIXct = "TIMESTAMP",
+    POSIXlt = "TIMESTAMP",
+    difftime = "INTERVAL",
+    raw = "BLOB",
+    # Default fallback
+    "VARCHAR"
+  )
+}
+
 
 #' Write a DuckLake table (overwrite/append)
 #'
@@ -415,7 +436,7 @@ db_lake_write <- function(data,
       }
 
       # Build column definitions from data types
-      cols <- vapply(data, duckdb::duckdb_data_type, character(1))
+      cols <- vapply(data, .db_r_to_duckdb_type, character(1))
       col_defs <- paste(
         paste(names(cols), cols),
         collapse = ", "

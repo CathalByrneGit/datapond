@@ -966,7 +966,7 @@ db_set_public <- function(section, dataset) {
 
   if (curr_mode != "hive") {
     stop("db_set_public() is only available in hive mode. ",
-         "In DuckLake mode, use db_create_schema(path=...) for access control.",
+         "In DuckLake mode, use schema folders with ACLs for access control.",
          call. = FALSE)
   }
 
@@ -1008,7 +1008,7 @@ db_set_private <- function(section, dataset) {
 
   if (curr_mode != "hive") {
     stop("db_set_private() is only available in hive mode. ",
-         "In DuckLake mode, use db_create_schema(path=...) for access control.",
+         "In DuckLake mode, use schema folders with ACLs for access control.",
          call. = FALSE)
   }
 
