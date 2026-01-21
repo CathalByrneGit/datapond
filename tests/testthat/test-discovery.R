@@ -656,8 +656,7 @@ test_that("db_create_schema returns schema name invisibly", {
   unlink(temp_dir, recursive = TRUE)
 })
 
-<<<<<<< HEAD
-=======
+
 # ==============================================================================
 # Tests for db_set_partitioning() - DuckLake
 # ==============================================================================
@@ -759,7 +758,6 @@ test_that("db_set_partitioning removes partitioning with NULL", {
   clean_db_env()
   unlink(temp_dir, recursive = TRUE)
 })
->>>>>>> bccba1f8f9335bb86b8744363666a688897bf387
 
 # ==============================================================================
 # Tests for db_get_partitioning() - DuckLake
