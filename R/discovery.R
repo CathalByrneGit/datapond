@@ -291,25 +291,27 @@ db_table_exists <- function(schema = "main", table) {
 
 #' Create a new schema in DuckLake
 #'
-#' @description Creates a new schema in the DuckLake catalog. In DuckLake 0.2+,
-#'   schemas can have custom data paths, enabling folder-based access control.
+#' @description Creates a new schema in the DuckLake catalog.
+#'
+#' DuckLake automatically organizes data into `{schema}/{table}/` folders
+#' under the catalog's DATA_PATH. This default structure enables folder-based
+#' access control - simply set ACLs on the schema folders.
+#'
 #' @param schema Schema name to create
-#' @param path Optional data path for this schema. Files for tables in this
-#'   schema will be stored under this path. Use this to enable folder-based
-#'   access control (e.g., different teams have access to different paths).
 #' @return Invisibly returns the schema name
 #' @examples
 #' \dontrun{
-#' db_lake_connect()
+#' db_lake_connect(data_path = "//CSO-NAS/DataLake")
 #'
-#' # Simple schema (uses default data path)
-#' db_create_schema("reference")
+#' db_create_schema("trade")
+#' db_create_schema("labour")
 #'
-#' # Schema with custom path for access control
-#' db_create_schema("trade", path = "//CSO-NAS/DataLake/trade/")
-#' db_create_schema("labour", path = "//CSO-NAS/DataLake/labour/")
+#' # Data will be organized as:
+#' # //CSO-NAS/DataLake/trade/imports/ducklake-xxx.parquet
+#' # //CSO-NAS/DataLake/trade/exports/ducklake-xxx.parquet
+#' # //CSO-NAS/DataLake/labour/employment/ducklake-xxx.parquet
 #'
-#' # Now folder ACLs on //CSO-NAS/DataLake/trade/ control access to trade schema
+#' # Set folder ACLs on //CSO-NAS/DataLake/trade/ to control access
 #' }
 #' @export
 db_create_schema <- function(schema) {
@@ -330,90 +332,47 @@ db_create_schema <- function(schema) {
     stop("No DuckLake catalog configured. Use db_lake_connect() first.", call. = FALSE)
   }
 
-  # Create the schema
   sql <- glue::glue("CREATE SCHEMA IF NOT EXISTS {catalog}.{schema}")
   DBI::dbExecute(con, sql)
 
-
   message("Schema created: ", catalog, ".", schema)
-
   invisible(schema)
 }
 
 
-#' Get the data path for a schema
+#' Set partitioning for a DuckLake table
 #'
-#' @description Returns the data path configured for a DuckLake schema.
-#'   Returns NULL if the schema uses the default catalog data path.
-#' @param schema Schema name
-#' @return The path string, or NULL if using default
-#' @examples
-#' \dontrun{
-#' db_lake_connect()
-#' db_create_schema("trade", path = "//CSO-NAS/trade/")
-#' db_get_schema_path("trade")
-#' #> "//CSO-NAS/trade/"
-#' }
-#' @export
-db_get_schema_path <- function(schema) {
-  schema <- .db_validate_name(schema, "schema")
-
-  con <- .db_get_con()
-  if (is.null(con)) {
-    stop("Not connected. Use db_lake_connect() first.", call. = FALSE)
-  }
-
-  curr_mode <- .db_get("mode")
-  if (!is.null(curr_mode) && curr_mode != "ducklake") {
-    stop("Connected in hive mode. Schemas are only available for DuckLake.", call. = FALSE)
-  }
-
-  catalog <- .db_get("catalog")
-
-  # Query the DuckLake metadata for schema path
-  # Metadata schema is __ducklake_metadata_{catalog}
-  metadata_schema <- paste0("__ducklake_metadata_", catalog)
-  result <- tryCatch({
-    DBI::dbGetQuery(con, glue::glue("
-      SELECT path FROM {metadata_schema}.ducklake_schema
-      WHERE schema_name = '{schema}'
-    "))
-  }, error = function(e) {
-    # Schema may not exist or metadata table may differ
-    data.frame(path = character(0))
-  })
-
-  if (nrow(result) == 0 || is.na(result$path[1]) || result$path[1] == "") {
-    return(NULL)
-  }
-
-  path <- result$path[1]
-
-  # DuckLake sets default path to {schema_name}/ - treat as NULL (no custom path)
-  default_path <- paste0(schema, "/")
-  if (path == default_path) {
-    return(NULL)
-  }
-
-  path
-}
-
-
-#' Get the data path for a table
+#' @description Configures partition keys for a DuckLake table. When partitioning
+#'   is set, new data written to the table will be split into separate files
+#'   based on the partition key values.
 #'
-#' @description Returns the data path configured for a DuckLake table.
-#'   Returns NULL if the table uses the default path (relative to schema).
+#'   Partitioning enables:
+#'   - Efficient query pruning (only read relevant partitions)
+#'   - Potential folder-based access control at partition level
+#'   - Better data organization for time-series data
+#'
+#'   Note: Existing data is not reorganized - only new inserts are partitioned.
+#'
 #' @param schema Schema name
 #' @param table Table name
-#' @return The path string, or NULL if using default
+#' @param partition_by Character vector of column names or expressions to partition by.
+#'   Use NULL to remove partitioning.
+#' @return Invisibly returns TRUE on success
 #' @examples
 #' \dontrun{
-#' db_lake_connect()
-#' db_get_table_path("trade", "imports")
+#' db_lake_connect(...)
+#'
+#' # Partition by year and month columns
+#' db_set_partitioning("trade", "imports", c("year", "month"))
+#'
+#' # Partition using date functions
+#' db_set_partitioning("trade", "imports", c("year(date)", "month(date)"))
+#'
+#' # Remove partitioning (new data won't be partitioned)
+#' db_set_partitioning("trade", "imports", NULL)
 #' }
 #' @export
-db_get_table_path <- function(schema, table) {
-
+db_set_partitioning <- function(schema = "main", table, partition_by) {
   schema <- .db_validate_name(schema, "schema")
   table <- .db_validate_name(table, "table")
 
@@ -424,38 +383,114 @@ db_get_table_path <- function(schema, table) {
 
   curr_mode <- .db_get("mode")
   if (!is.null(curr_mode) && curr_mode != "ducklake") {
-    stop("Connected in hive mode. Table paths are only available for DuckLake.", call. = FALSE)
+    stop("Connected in hive mode. Partitioning is only available for DuckLake.", call. = FALSE)
+  }
+
+  catalog <- .db_get("catalog")
+  if (is.null(catalog)) {
+    stop("No DuckLake catalog configured. Use db_lake_connect() first.", call. = FALSE)
+  }
+
+  qname <- paste0(catalog, ".", schema, ".", table)
+
+  # Check table exists
+  if (!.db_table_exists(con, catalog, schema, table)) {
+    stop("Table '", qname, "' does not exist.", call. = FALSE)
+  }
+
+  if (is.null(partition_by) || length(partition_by) == 0) {
+    # Remove partitioning
+    sql <- glue::glue("ALTER TABLE {qname} RESET PARTITIONED BY")
+    DBI::dbExecute(con, sql)
+    message("Removed partitioning from ", qname)
+  } else {
+    # Validate partition_by
+    if (!is.character(partition_by)) {
+      stop("partition_by must be a character vector of column names or expressions.", call. = FALSE)
+    }
+
+    # Build partition clause - allow expressions like year(date)
+    partition_clause <- paste(partition_by, collapse = ", ")
+    sql <- glue::glue("ALTER TABLE {qname} SET PARTITIONED BY ({partition_clause})")
+
+    tryCatch({
+      DBI::dbExecute(con, sql)
+      message("Set partitioning on ", qname, ": ", partition_clause)
+    }, error = function(e) {
+      stop("Failed to set partitioning: ", e$message, call. = FALSE)
+    })
+  }
+
+  invisible(TRUE)
+}
+
+
+#' Get partitioning configuration for a DuckLake table
+#'
+#' @description Returns the current partition keys configured for a table,
+#'   or NULL if the table is not partitioned.
+#'
+#' @param schema Schema name
+#' @param table Table name
+#' @return A character vector of partition key expressions, or NULL if not partitioned
+#' @examples
+#' \dontrun{
+#' db_lake_connect(...)
+#' db_set_partitioning("trade", "imports", c("year", "month"))
+#' db_get_partitioning("trade", "imports")
+#' #> [1] "year" "month"
+#' }
+#' @export
+db_get_partitioning <- function(schema = "main", table) {
+  schema <- .db_validate_name(schema, "schema")
+  table <- .db_validate_name(table, "table")
+
+  con <- .db_get_con()
+  if (is.null(con)) {
+    stop("Not connected. Use db_lake_connect() first.", call. = FALSE)
+  }
+
+  curr_mode <- .db_get("mode")
+  if (!is.null(curr_mode) && curr_mode != "ducklake") {
+    stop("Connected in hive mode. Partitioning is only available for DuckLake.", call. = FALSE)
   }
 
   catalog <- .db_get("catalog")
 
-  # Query the DuckLake metadata for table path
-
+  # Query the DuckLake metadata for partition info
   # Metadata schema is __ducklake_metadata_{catalog}
   metadata_schema <- paste0("__ducklake_metadata_", catalog)
+
   result <- tryCatch({
     DBI::dbGetQuery(con, glue::glue("
-      SELECT t.path
-      FROM {metadata_schema}.ducklake_table t
+      SELECT DISTINCT c.column_name, pc.transform, pc.partition_key_index
+      FROM {metadata_schema}.ducklake_partition_column pc
+      JOIN {metadata_schema}.ducklake_table t ON pc.table_id = t.table_id
       JOIN {metadata_schema}.ducklake_schema s ON t.schema_id = s.schema_id
+      JOIN {metadata_schema}.ducklake_column c ON pc.column_id = c.column_id
       WHERE s.schema_name = '{schema}' AND t.table_name = '{table}'
+      ORDER BY pc.partition_key_index
     "))
   }, error = function(e) {
     # Table may not exist or metadata table may differ
-    data.frame(path = character(0))
+    data.frame(column_name = character(0), transform = character(0), partition_key_index = integer(0))
   })
 
-  if (nrow(result) == 0 || is.na(result$path[1]) || result$path[1] == "") {
+  if (nrow(result) == 0) {
     return(NULL)
   }
 
-  path <- result$path[1]
+  # Build partition key expressions
+  # If transform is specified, wrap column in transform function
+  partition_keys <- vapply(seq_len(nrow(result)), function(i) {
+    col <- result$column_name[i]
+    transform <- result$transform[i]
+    if (!is.na(transform) && nzchar(transform) && transform != "identity") {
+      paste0(transform, "(", col, ")")
+    } else {
+      col
+    }
+  }, character(1))
 
-  # DuckLake sets default path to {table_name}/ - treat as NULL (no custom path)
-  default_path <- paste0(table, "/")
-  if (path == default_path) {
-    return(NULL)
-  }
-
-  path
+  partition_keys
 }

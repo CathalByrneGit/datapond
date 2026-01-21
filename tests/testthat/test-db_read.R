@@ -65,7 +65,7 @@ test_that("db_hive_read validates section name", {
   db_connect(path = "/test")
 
   expect_error(db_hive_read("", "Imports"), "must be a single, non-empty string")
-  expect_error(db_hive_read("../bad", "Imports"), "contains invalid characters")
+  expect_error(db_hive_read("../bad", "Imports"), "potentially dangerous characters")
   expect_error(db_hive_read("Trade/Sub", "Imports"), "contains invalid characters")
   expect_error(db_hive_read(123, "Imports"), "must be a single, non-empty string")
   expect_error(db_hive_read(NULL, "Imports"), "must be a single, non-empty string")
@@ -78,7 +78,7 @@ test_that("db_hive_read validates dataset name", {
   db_connect(path = "/test")
 
   expect_error(db_hive_read("Trade", ""), "must be a single, non-empty string")
-  expect_error(db_hive_read("Trade", "../etc"), "contains invalid characters")
+  expect_error(db_hive_read("Trade", "../etc"), "potentially dangerous characters")
   expect_error(db_hive_read("Trade", "Im ports"), "contains invalid characters")
   expect_error(db_hive_read("Trade", c("a", "b")), "must be a single, non-empty string")
 
@@ -297,7 +297,7 @@ test_that("db_lake_read validates schema name", {
   )
 
   expect_error(db_lake_read(schema = "", table = "t"), "must be a single, non-empty string")
-  expect_error(db_lake_read(schema = "../bad", table = "t"), "contains invalid characters")
+  expect_error(db_lake_read(schema = "../bad", table = "t"), "potentially dangerous characters")
   expect_error(db_lake_read(schema = 123, table = "t"), "must be a single, non-empty string")
 
   clean_db_env()
@@ -314,7 +314,7 @@ test_that("db_lake_read validates table name", {
   )
 
   expect_error(db_lake_read(table = ""), "must be a single, non-empty string")
-  expect_error(db_lake_read(table = "bad;drop"), "contains invalid characters")
+  expect_error(db_lake_read(table = "bad;drop"), "potentially dangerous characters")
   expect_error(db_lake_read(table = NULL), "must be a single, non-empty string")
 
   clean_db_env()

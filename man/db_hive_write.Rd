@@ -34,7 +34,7 @@ db_hive_write(
 \item{compression}{Parquet compression codec (NULL means DuckDB default).
 Options: "zstd", "snappy", "gzip", "brotli", "lz4", "lz4_raw", "uncompressed"}
 
-\item{filename_pattern}{Used in append-like modes (default "data_{uuid}")}
+\item{filename_pattern}{Used in append-like modes (default \code{"data_\{uuid\}"})}
 }
 \value{
 Invisibly returns the output path

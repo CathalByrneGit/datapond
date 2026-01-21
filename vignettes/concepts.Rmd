@@ -611,26 +611,28 @@ db_search("monthly", field = "description")
 
 ## DuckLake Access Control
 
-DuckLake 0.2+ supports **path-based access control** - schemas can have custom data paths, enabling folder-level permissions.
+DuckLake **automatically organises data** into `{schema}/{table}/` folder structure, enabling folder-level permissions without any extra configuration.
 
 ### Architecture
 
 ```
 //CSO-NAS/DataLake/
 ├── catalog.sqlite           ← Single DuckLake catalog
-└── data/                    ← Data organised by schema path
+└── data/                    ← Data organised automatically by schema/table
     ├── trade/               ← Trade team has access (folder ACLs)
-    │   └── imports/
-    │       └── data.parquet
+    │   ├── imports/
+    │   │   └── ducklake-uuid.parquet
+    │   └── exports/
+    │       └── ducklake-uuid.parquet
     ├── labour/              ← Labour team has access (folder ACLs)
     │   └── employment/
-    │       └── data.parquet
-    └── shared/              ← Everyone has read access
-        └── reference/
-            └── data.parquet
+    │       └── ducklake-uuid.parquet
+    └── reference/           ← Everyone has read access
+        └── countries/
+            └── ducklake-uuid.parquet
 ```
 
-### Setting Up Schemas with Paths
+### Setting Up Schemas
 
 ```{r}
 # Connect to DuckLake
@@ -640,33 +642,34 @@ db_lake_connect(
   data_path = "//CSO-NAS/DataLake/data"
 )
 
-# Create schemas with custom data paths
-db_create_schema("trade", path = "//CSO-NAS/DataLake/data/trade/")
-db_create_schema("labour", path = "//CSO-NAS/DataLake/data/labour/")
-db_create_schema("shared", path = "//CSO-NAS/DataLake/data/shared/")
+# Create schemas - DuckLake creates folders automatically
+db_create_schema("trade")
+db_create_schema("labour")
+db_create_schema("reference")
 
-# Now folder ACLs control access:
-# - //CSO-NAS/DataLake/data/trade/   → Trade team read/write
-# - //CSO-NAS/DataLake/data/labour/  → Labour team read/write
-# - //CSO-NAS/DataLake/data/shared/  → Everyone read
+# Write data - files go to data/{schema}/{table}/ automatically
+db_lake_write(imports_data, schema = "trade", table = "imports")
+db_lake_write(countries, schema = "reference", table = "countries")
+
+# Set folder ACLs on the schema folders:
+# - //CSO-NAS/DataLake/data/trade/     → Trade team read/write
+# - //CSO-NAS/DataLake/data/labour/    → Labour team read/write
+# - //CSO-NAS/DataLake/data/reference/ → Everyone read
 ```
 
-### Using Path-Based Schemas
+### Using Schemas
 
 ```{r}
-# Check schema's data path
-db_get_schema_path("trade")
-#> "//CSO-NAS/DataLake/data/trade/"
-
-# Write to a schema (data goes to schema's path)
-db_lake_write(imports_data, schema = "trade", table = "imports")
-
 # Read from a schema (requires folder access)
 imports <- db_lake_read(schema = "trade", table = "imports")
 
 # Discover available tables
 db_list_schemas()
 db_list_tables("trade")
+
+# Optionally partition for finer access control
+db_set_partitioning(schema = "trade", table = "imports", partition_by = c("year"))
+db_get_partitioning(schema = "trade", table = "imports")
 ```
 
 ### How It Works
@@ -687,6 +690,7 @@ In DuckLake mode, both **section** and **schema** exist but serve different purp
 >>>>>>> 7ca1ba29fe7034729ada034f78210def94da93f5
 
 **Benefits**:
+- **Zero configuration** - folder structure created automatically
 - **Familiar model** - uses standard folder permissions
 - **Granular control** - different teams can own different schemas
 - **Single catalog** - one metadata file, simpler management

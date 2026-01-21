@@ -222,10 +222,10 @@ db_browser_ui <- function(id, height = "500px") {
             shiny::h5("How Access Control Works"),
             shiny::tags$ul(
               shiny::tags$li(
-                shiny::tags$strong("Schema Paths: "),
-                "Each schema can have a custom data path using ",
-                shiny::tags$code("db_create_schema(name, path = '...')"),
-                ". Tables in that schema store their data in the specified folder."
+                shiny::tags$strong("Automatic Organization: "),
+                "DuckLake automatically organizes data into ",
+                shiny::tags$code("{schema}/{table}/"), " folders. ",
+                "Simply create schemas with ", shiny::tags$code("db_create_schema('name')"), "."
               ),
               shiny::tags$li(
                 shiny::tags$strong("Folder ACLs: "),
@@ -242,16 +242,15 @@ db_browser_ui <- function(id, height = "500px") {
             shiny::h5("Example"),
             shiny::tags$pre(
               style = "background-color: #f8f9fa; padding: 10px; border-radius: 4px;",
-              '# Create schemas with custom paths
-db_create_schema("trade", path = "//server/data/trade/")
-db_create_schema("labour", path = "//server/data/labour/")
+              '# Create schemas - DuckLake creates folders automatically
+db_create_schema("trade")
+db_create_schema("labour")
 
-# Folder ACLs on //server/data/trade/ control trade schema access
-# Folder ACLs on //server/data/labour/ control labour schema access
+# Data path: //server/DataLake/trade/imports/ducklake-xxx.parquet
+# Data path: //server/DataLake/labour/employment/ducklake-xxx.parquet
 
-# Check schema path
-db_get_schema_path("trade")
-#> "//server/data/trade/"'
+# Set folder ACLs on //server/DataLake/trade/ to control access
+# Set folder ACLs on //server/DataLake/labour/ to control access'
             )
           )
         }

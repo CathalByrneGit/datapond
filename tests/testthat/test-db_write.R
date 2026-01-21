@@ -173,7 +173,7 @@ test_that("db_hive_write validates section name", {
 
   df <- data.frame(x = 1)
   expect_error(db_hive_write(df, "", "Test"), "must be a single, non-empty")
-  expect_error(db_hive_write(df, "../bad", "Test"), "contains invalid characters")
+  expect_error(db_hive_write(df, "../bad", "Test"), "potentially dangerous characters")
   expect_error(db_hive_write(df, 123, "Test"), "must be a single, non-empty")
 
   clean_db_env()
@@ -565,7 +565,7 @@ test_that("db_lake_write validates schema name", {
 
   df <- data.frame(x = 1)
   expect_error(db_lake_write(df, schema = "", table = "t"), "must be a single, non-empty")
-  expect_error(db_lake_write(df, schema = "../bad", table = "t"), "contains invalid characters")
+  expect_error(db_lake_write(df, schema = "../bad", table = "t"), "potentially dangerous characters")
 
   clean_db_env()
 })
@@ -582,7 +582,7 @@ test_that("db_lake_write validates table name", {
 
   df <- data.frame(x = 1)
   expect_error(db_lake_write(df, table = ""), "must be a single, non-empty")
-  expect_error(db_lake_write(df, table = "bad;drop"), "contains invalid characters")
+  expect_error(db_lake_write(df, table = "bad;drop"), "potentially dangerous characters")
 
   clean_db_env()
 })
@@ -737,6 +737,184 @@ test_that("db_lake_write rolls back on error", {
   read_df <- db_lake_read(table = "items") |> dplyr::collect()
   expect_equal(nrow(read_df), 3)
   expect_true("id" %in% names(read_df))
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+# ==============================================================================
+# Tests for db_lake_write() - Partitioning
+# ==============================================================================
+
+test_that("db_lake_write validates partition_by parameter", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "lake_part_val_")
+  dir.create(temp_dir)
+
+  db_lake_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  df <- data.frame(id = 1:3, value = c(10, 20, 30), year = c(2023, 2023, 2024))
+
+  # partition_by must be non-empty character vector
+  expect_error(
+    db_lake_write(df, table = "test", partition_by = character(0)),
+    "must be a non-empty character vector"
+  )
+
+  # partition_by columns must exist in data
+  expect_error(
+    db_lake_write(df, table = "test", partition_by = c("nonexistent")),
+    "partition_by columns not found"
+  )
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_lake_write partition_by cannot be used with append mode", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "lake_part_append_")
+  dir.create(temp_dir)
+
+  db_lake_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  df <- data.frame(id = 1:3, value = c(10, 20, 30), year = c(2023, 2023, 2024))
+
+  # First create table
+  db_lake_write(df, table = "test", mode = "overwrite")
+
+  # partition_by not allowed with append
+  expect_error(
+    db_lake_write(df, table = "test", mode = "append", partition_by = "year"),
+    "cannot be used with mode = 'append'"
+  )
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_lake_write creates partitioned table", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "lake_part_create_")
+  dir.create(temp_dir)
+
+  db_lake_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  df <- data.frame(
+    id = 1:6,
+    value = c(10, 20, 30, 40, 50, 60),
+    year = as.integer(c(2023, 2023, 2023, 2024, 2024, 2024))
+  )
+
+  # Create with partitioning
+  db_lake_write(df, table = "sales", partition_by = "year")
+
+  # Verify partitioning was set
+  parts <- db_get_partitioning(table = "sales")
+  expect_equal(parts, "year")
+
+  # Verify data is readable
+  result <- db_lake_read(table = "sales") |> dplyr::collect()
+  expect_equal(nrow(result), 6)
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_lake_write preserves existing partitioning on overwrite", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "lake_part_preserve_")
+  dir.create(temp_dir)
+
+  db_lake_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  df1 <- data.frame(
+    id = 1:3,
+    value = c(10, 20, 30),
+    year = as.integer(c(2023, 2023, 2024))
+  )
+
+  # Create with partitioning
+  db_lake_write(df1, table = "sales", partition_by = "year")
+
+  # Verify partitioning
+  parts1 <- db_get_partitioning(table = "sales")
+  expect_equal(parts1, "year")
+
+  # Overwrite without specifying partition_by - should preserve
+  df2 <- data.frame(
+    id = 4:6,
+    value = c(40, 50, 60),
+    year = as.integer(c(2024, 2024, 2025))
+  )
+  db_lake_write(df2, table = "sales", mode = "overwrite")
+
+  # Partitioning should be preserved
+  parts2 <- db_get_partitioning(table = "sales")
+  expect_equal(parts2, "year")
+
+  # Data should be replaced
+  result <- db_lake_read(table = "sales") |> dplyr::collect()
+  expect_equal(nrow(result), 3)
+  expect_true(all(result$id %in% 4:6))
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_lake_write can change partitioning on overwrite", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "lake_part_change_")
+  dir.create(temp_dir)
+
+  db_lake_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  df <- data.frame(
+    id = 1:4,
+    value = c(10, 20, 30, 40),
+    year = as.integer(c(2023, 2023, 2024, 2024)),
+    month = as.integer(c(1, 2, 1, 2))
+  )
+
+  # Create with year partitioning
+  db_lake_write(df, table = "sales", partition_by = "year")
+  parts1 <- db_get_partitioning(table = "sales")
+  expect_equal(parts1, "year")
+
+  # Overwrite with different partitioning
+  db_lake_write(df, table = "sales", mode = "overwrite", partition_by = c("year", "month"))
+  parts2 <- db_get_partitioning(table = "sales")
+  expect_equal(parts2, c("year", "month"))
 
   clean_db_env()
   unlink(temp_dir, recursive = TRUE)

@@ -226,27 +226,45 @@ db_describe <- function(section = NULL, dataset = NULL,
 
     qname <- paste(catalog, schema, table, sep = ".")
 
-    # Delete existing and insert new (DuckDB doesn't support INSERT OR REPLACE)
-    DBI::dbExecute(con, glue::glue("
-      DELETE FROM {catalog}._metadata.table_docs
+    # Check if record exists and preserve created_at if so
+    existing <- DBI::dbGetQuery(con, glue::glue("
+      SELECT created_at, description, owner, tags
+      FROM {catalog}._metadata.table_docs
       WHERE schema_name = {.db_sql_quote(schema)} AND table_name = {.db_sql_quote(table)}
     "))
 
-    meta_sql <- glue::glue("
-      INSERT INTO {catalog}._metadata.table_docs
-      (schema_name, table_name, description, owner, tags, created_at, updated_at)
-      VALUES (
-        {.db_sql_quote(schema)},
-        {.db_sql_quote(table)},
-        {if (is.null(description)) 'NULL' else .db_sql_quote(description)},
-        {if (is.null(owner)) 'NULL' else .db_sql_quote(owner)},
-        {if (is.null(tags)) 'NULL' else .db_sql_quote(paste(tags, collapse = ','))},
-        NOW(),
-        NOW()
-      )
-    ")
+    if (nrow(existing) > 0) {
+      # Update existing record, preserving created_at and merging fields
+      # Use provided values or fall back to existing
+      new_desc <- if (!is.null(description)) .db_sql_quote(description) else if (!is.na(existing$description[1])) .db_sql_quote(existing$description[1]) else "NULL"
+      new_owner <- if (!is.null(owner)) .db_sql_quote(owner) else if (!is.na(existing$owner[1])) .db_sql_quote(existing$owner[1]) else "NULL"
+      new_tags <- if (!is.null(tags)) .db_sql_quote(paste(tags, collapse = ",")) else if (!is.na(existing$tags[1])) .db_sql_quote(existing$tags[1]) else "NULL"
 
-    DBI::dbExecute(con, meta_sql)
+      DBI::dbExecute(con, glue::glue("
+        UPDATE {catalog}._metadata.table_docs
+        SET description = {new_desc},
+            owner = {new_owner},
+            tags = {new_tags},
+            updated_at = NOW()
+        WHERE schema_name = {.db_sql_quote(schema)} AND table_name = {.db_sql_quote(table)}
+      "))
+    } else {
+      # Insert new record
+      meta_sql <- glue::glue("
+        INSERT INTO {catalog}._metadata.table_docs
+        (schema_name, table_name, description, owner, tags, created_at, updated_at)
+        VALUES (
+          {.db_sql_quote(schema)},
+          {.db_sql_quote(table)},
+          {if (is.null(description)) 'NULL' else .db_sql_quote(description)},
+          {if (is.null(owner)) 'NULL' else .db_sql_quote(owner)},
+          {if (is.null(tags)) 'NULL' else .db_sql_quote(paste(tags, collapse = ','))},
+          NOW(),
+          NOW()
+        )
+      ")
+      DBI::dbExecute(con, meta_sql)
+    }
 
     message("Updated metadata for ", qname)
     if (!is.null(public)) {
@@ -948,7 +966,7 @@ db_set_public <- function(section, dataset) {
 
   if (curr_mode != "hive") {
     stop("db_set_public() is only available in hive mode. ",
-         "In DuckLake mode, use db_create_schema(path=...) for access control.",
+         "In DuckLake mode, use schema folders with ACLs for access control.",
          call. = FALSE)
   }
 
@@ -990,7 +1008,7 @@ db_set_private <- function(section, dataset) {
 
   if (curr_mode != "hive") {
     stop("db_set_private() is only available in hive mode. ",
-         "In DuckLake mode, use db_create_schema(path=...) for access control.",
+         "In DuckLake mode, use schema folders with ACLs for access control.",
          call. = FALSE)
   }
 
