@@ -463,7 +463,7 @@ db_get_partitioning <- function(schema = "main", table) {
 
   result <- tryCatch({
     DBI::dbGetQuery(con, glue::glue("
-      SELECT c.column_name, pc.transform
+      SELECT DISTINCT c.column_name, pc.transform, pc.partition_key_index
       FROM {metadata_schema}.ducklake_partition_column pc
       JOIN {metadata_schema}.ducklake_table t ON pc.table_id = t.table_id
       JOIN {metadata_schema}.ducklake_schema s ON t.schema_id = s.schema_id
@@ -473,7 +473,7 @@ db_get_partitioning <- function(schema = "main", table) {
     "))
   }, error = function(e) {
     # Table may not exist or metadata table may differ
-    data.frame(column_name = character(0), transform = character(0))
+    data.frame(column_name = character(0), transform = character(0), partition_key_index = integer(0))
   })
 
   if (nrow(result) == 0) {

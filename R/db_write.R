@@ -275,7 +275,7 @@ db_hive_write <- function(data,
 
   result <- tryCatch({
     DBI::dbGetQuery(con, glue::glue("
-      SELECT c.column_name, pc.transform
+      SELECT DISTINCT c.column_name, pc.partition_key_index
       FROM {metadata_schema}.ducklake_partition_column pc
       JOIN {metadata_schema}.ducklake_table t ON pc.table_id = t.table_id
       JOIN {metadata_schema}.ducklake_schema s ON t.schema_id = s.schema_id
@@ -284,7 +284,7 @@ db_hive_write <- function(data,
       ORDER BY pc.partition_key_index
     "))
   }, error = function(e) {
-    data.frame(column_name = character(0), transform = character(0))
+    data.frame(column_name = character(0), partition_key_index = integer(0))
   })
 
   if (nrow(result) == 0) {
