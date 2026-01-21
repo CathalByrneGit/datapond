@@ -4,7 +4,7 @@
 \alias{db_create_schema}
 \title{Create a new schema in DuckLake}
 \usage{
-db_create_schema(schema, path = NULL)
+db_create_schema(schema)
 }
 \arguments{
 \item{schema}{Schema name to create}
