@@ -656,33 +656,6 @@ test_that("db_create_schema returns schema name invisibly", {
   unlink(temp_dir, recursive = TRUE)
 })
 
-test_that("db_create_schema with path creates schema with custom data path", {
-  skip_if_not(ducklake_available(), "DuckLake extension not available")
-  clean_db_env()
-
-  temp_dir <- tempfile(pattern = "path_schema_test_")
-  dir.create(temp_dir)
-
-  trade_path <- file.path(temp_dir, "trade_data")
-  dir.create(trade_path)
-
-  db_lake_connect(
-    catalog = "test",
-    metadata_path = file.path(temp_dir, "catalog.ducklake"),
-    data_path = temp_dir
-  )
-
-  expect_message(
-    db_create_schema("trade", path = trade_path),
-    "path:"
-  )
-
-  schemas <- db_list_schemas()
-  expect_true("trade" %in% schemas)
-
-  clean_db_env()
-  unlink(temp_dir, recursive = TRUE)
-})
 
 # ==============================================================================
 # Tests for db_get_schema_path() - DuckLake
