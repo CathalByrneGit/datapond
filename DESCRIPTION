@@ -16,12 +16,11 @@ Depends:
     R (>= 4.1.0)
 Imports:
     DBI,
-    duckdb (>= 0.10.0),
+    duckdb (>= 1.4.3),
     dplyr,
     glue,
     dbplyr,
-    jsonlite,
-    RSQLite
+    jsonlite
 Suggests:
     arrow,
     bslib,

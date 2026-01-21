@@ -4,10 +4,14 @@
 \alias{db_create_schema}
 \title{Create a new schema in DuckLake}
 \usage{
-db_create_schema(schema)
+db_create_schema(schema, path = NULL)
 }
 \arguments{
 \item{schema}{Schema name to create}
+
+\item{path}{Optional data path for this schema. Files for tables in this
+schema will be stored under this path. Use this to enable folder-based
+access control (e.g., different teams have access to different paths).}
 }
 \value{
 Invisibly returns the schema name

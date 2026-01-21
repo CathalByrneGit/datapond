@@ -674,11 +674,20 @@ db_get_partitioning(schema = "trade", table = "imports")
 
 ### How It Works
 
+<<<<<<< HEAD
+In DuckLake mode, both **section** and **schema** exist but serve different purposes:
+
+| Concept | What It Is | Purpose |
+|---------|------------|---------|
+| **Section** | A separate DuckLake catalog file | Ownership boundary - controls who can write/publish |
+| **Schema** | A namespace within a catalog | Logical grouping of related tables |
+=======
 | Component | Access Controlled By |
 |-----------|---------------------|
 | Catalog file (`.sqlite`) | File permissions - need read to query, write to modify |
 | Schema data folder | Folder ACLs - each schema can have different permissions |
 | Table data | Inherited from schema folder |
+>>>>>>> 7ca1ba29fe7034729ada034f78210def94da93f5
 
 **Benefits**:
 - **Zero configuration** - folder structure created automatically

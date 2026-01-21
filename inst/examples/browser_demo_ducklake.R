@@ -173,6 +173,7 @@ db_describe(
 )
 
 cat("Documentation added\n")
+print(list.dirs(lake_path))
 
 # =============================================================================
 # Show what we created
@@ -246,7 +247,6 @@ cat("Check the 'Public Catalog' tab for information about access control.\n")
 cat("(Close the browser window to return to R)\n\n")
 
 db_browser()
-
 # Cleanup
 cat("\nCleaning up...\n")
 db_disconnect()
