@@ -224,9 +224,6 @@ db_list_public()
 db_sync_catalog()
 ```
 
-
-
-
 ### Interactive Browser
 
 ``` r
@@ -383,17 +380,12 @@ systems needed.
 | `db_list_public()` | Both | List all discoverable datasets/tables |
 | `db_sync_catalog()` | Both | Sync public catalog with source metadata |
 
-### Multi-Catalog (DuckLake)
+### Partitioning (DuckLake)
 
 | Function | Description |
 |----|----|
-| `db_setup_master()` | Create master discovery catalog |
-| `db_register_section()` | Register a section in master catalog |
-| `db_unregister_section()` | Remove section from master catalog |
-| `db_list_registered_sections()` | List all registered sections |
-| `db_lake_connect_section()` | Connect to section via master catalog |
-| `db_current_section()` | Get current section name |
-| `db_switch_section()` | Switch to a different section |
+| `db_set_partitioning()` | Set or remove partitioning on a table |
+| `db_get_partitioning()` | Get current partition columns for a table |
 
 ### Metadata & Maintenance
 

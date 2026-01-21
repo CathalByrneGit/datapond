@@ -36,6 +36,22 @@ db_preview_hive_write <- function(data,
   section <- .db_validate_name(section, "section")
   dataset <- .db_validate_name(dataset, "dataset")
 
+  # Validate partition_by columns exist in data
+  if (!is.null(partition_by)) {
+    if (!is.character(partition_by) || length(partition_by) < 1L) {
+      stop("partition_by must be NULL or a character vector.", call. = FALSE)
+    }
+    if (anyNA(partition_by) || any(!nzchar(partition_by))) {
+      stop("partition_by cannot contain NA/empty strings.", call. = FALSE)
+    }
+    missing_cols <- setdiff(partition_by, names(data))
+    if (length(missing_cols) > 0) {
+      stop("partition_by columns not found in data: ",
+           paste(missing_cols, collapse = ", "),
+           call. = FALSE)
+    }
+  }
+
   con <- .db_get_con()
   if (is.null(con)) {
     stop("Not connected. Use db_connect() first.", call. = FALSE)
@@ -280,13 +296,18 @@ db_preview_hive_write <- function(data,
 #' db_lake_connect()
 #'
 #' db_preview_lake_write(my_data, table = "products", mode = "overwrite")
+#'
+#' # Preview with partitioning
+#' db_preview_lake_write(my_data, table = "sales",
+#'                       partition_by = c("year", "month"))
 #' }
 #' @export
 #' @importFrom stats setNames
 db_preview_lake_write <- function(data,
                                    schema = "main",
                                    table,
-                                   mode = c("overwrite", "append")) {
+                                   mode = c("overwrite", "append"),
+                                   partition_by = NULL) {
 
   mode <- match.arg(mode)
 
@@ -296,6 +317,22 @@ db_preview_lake_write <- function(data,
 
   schema <- .db_validate_name(schema, "schema")
   table <- .db_validate_name(table, "table")
+
+  # Validate partition_by
+  if (!is.null(partition_by)) {
+    if (!is.character(partition_by) || length(partition_by) == 0) {
+      stop("partition_by must be a non-empty character vector.", call. = FALSE)
+    }
+    missing_cols <- setdiff(partition_by, names(data))
+    if (length(missing_cols) > 0) {
+      stop("partition_by columns not found in data: ",
+           paste(missing_cols, collapse = ", "),
+           call. = FALSE)
+    }
+    if (mode == "append") {
+      stop("partition_by cannot be used with mode = 'append'.", call. = FALSE)
+    }
+  }
 
   con <- .db_get_con()
   if (is.null(con)) {
@@ -313,6 +350,18 @@ db_preview_lake_write <- function(data,
   # Check if table exists
   table_exists <- .db_table_exists(con, catalog, schema, table)
 
+  # Get existing partitioning if table exists
+  existing_partitioning <- NULL
+  if (table_exists) {
+    existing_partitioning <- .db_get_partitioning_internal(con, catalog, schema, table)
+  }
+
+  # Determine effective partitioning
+  effective_partition_by <- partition_by
+  if (mode == "overwrite" && table_exists && is.null(partition_by) && !is.null(existing_partitioning)) {
+    effective_partition_by <- existing_partitioning
+  }
+
   preview <- list(
     mode = mode,
     catalog = catalog,
@@ -327,7 +376,10 @@ db_preview_lake_write <- function(data,
       types = vapply(data, function(x) class(x)[1], character(1))
     ),
     existing = NULL,
-    schema_changes = NULL
+    schema_changes = NULL,
+    partition_by = partition_by,
+    existing_partitioning = existing_partitioning,
+    effective_partition_by = effective_partition_by
   )
 
   # Get existing table info
@@ -419,6 +471,38 @@ db_preview_lake_write <- function(data,
       }
       cat("\n")
     }
+  }
+
+  # Partitioning info
+  has_partitioning <- !is.null(preview$effective_partition_by) ||
+                      !is.null(preview$existing_partitioning) ||
+                      !is.null(preview$partition_by)
+
+  if (has_partitioning) {
+    cat("---- Partitioning --------------------------------------------------------------------------------------------------------\n")
+
+    if (!is.null(preview$existing_partitioning)) {
+      cat("Current:   ", paste(preview$existing_partitioning, collapse = ", "), "\n", sep = "")
+    } else if (preview$table_exists) {
+      cat("Current:   (none)\n")
+    }
+
+    if (!is.null(preview$partition_by)) {
+      cat("Requested: ", paste(preview$partition_by, collapse = ", "), "\n", sep = "")
+    }
+
+    if (!is.null(preview$effective_partition_by)) {
+      if (is.null(preview$partition_by) && !is.null(preview$existing_partitioning)) {
+        cat("Effective: ", paste(preview$effective_partition_by, collapse = ", "),
+            " (preserved from existing)\n", sep = "")
+      } else {
+        cat("Effective: ", paste(preview$effective_partition_by, collapse = ", "), "\n", sep = "")
+      }
+    } else {
+      cat("Effective: (none)\n")
+    }
+
+    cat("\n")
   }
 
   # Action summary

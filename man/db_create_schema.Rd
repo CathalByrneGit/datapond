@@ -8,29 +8,29 @@ db_create_schema(schema)
 }
 \arguments{
 \item{schema}{Schema name to create}
-
-\item{path}{Optional data path for this schema. Files for tables in this
-schema will be stored under this path. Use this to enable folder-based
-access control (e.g., different teams have access to different paths).}
 }
 \value{
 Invisibly returns the schema name
 }
 \description{
-Creates a new schema in the DuckLake catalog. In DuckLake 0.2+,
-schemas can have custom data paths, enabling folder-based access control.
+Creates a new schema in the DuckLake catalog.
+
+DuckLake automatically organizes data into \verb{{schema}/{table}/} folders
+under the catalog's DATA_PATH. This default structure enables folder-based
+access control - simply set ACLs on the schema folders.
 }
 \examples{
 \dontrun{
-db_lake_connect()
+db_lake_connect(data_path = "//CSO-NAS/DataLake")
 
-# Simple schema (uses default data path)
-db_create_schema("reference")
+db_create_schema("trade")
+db_create_schema("labour")
 
-# Schema with custom path for access control
-db_create_schema("trade", path = "//CSO-NAS/DataLake/trade/")
-db_create_schema("labour", path = "//CSO-NAS/DataLake/labour/")
+# Data will be organized as:
+# //CSO-NAS/DataLake/trade/imports/ducklake-xxx.parquet
+# //CSO-NAS/DataLake/trade/exports/ducklake-xxx.parquet
+# //CSO-NAS/DataLake/labour/employment/ducklake-xxx.parquet
 
-# Now folder ACLs on //CSO-NAS/DataLake/trade/ control access to trade schema
+# Set folder ACLs on //CSO-NAS/DataLake/trade/ to control access
 }
 }
