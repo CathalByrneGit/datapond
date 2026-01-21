@@ -740,27 +740,29 @@ contains descriptions, not the actual data values.</p>
 <div class="section level2">
 <h2 id="ducklake-access-control">DuckLake Access Control<a class="anchor" aria-label="anchor" href="#ducklake-access-control"></a>
 </h2>
-<p>DuckLake 0.2+ supports <strong>path-based access control</strong> -
-schemas can have custom data paths, enabling folder-level
-permissions.</p>
+<p>DuckLake <strong>automatically organises data</strong> into
+<code>{schema}/{table}/</code> folder structure, enabling folder-level
+permissions without any extra configuration.</p>
 <div class="section level3">
 <h3 id="architecture">Architecture<a class="anchor" aria-label="anchor" href="#architecture"></a>
 </h3>
 <pre><code>//CSO-NAS/DataLake/
 ├── catalog.sqlite           ← Single DuckLake catalog
-└── data/                    ← Data organised by schema path
+└── data/                    ← Data organised automatically by schema/table
     ├── trade/               ← Trade team has access (folder ACLs)
-    │   └── imports/
-    │       └── data.parquet
+    │   ├── imports/
+    │   │   └── ducklake-uuid.parquet
+    │   └── exports/
+    │       └── ducklake-uuid.parquet
     ├── labour/              ← Labour team has access (folder ACLs)
     │   └── employment/
-    │       └── data.parquet
-    └── shared/              ← Everyone has read access
-        └── reference/
-            └── data.parquet</code></pre>
+    │       └── ducklake-uuid.parquet
+    └── reference/           ← Everyone has read access
+        └── countries/
+            └── ducklake-uuid.parquet</code></pre>
 </div>
 <div class="section level3">
-<h3 id="setting-up-schemas-with-paths">Setting Up Schemas with Paths<a class="anchor" aria-label="anchor" href="#setting-up-schemas-with-paths"></a>
+<h3 id="setting-up-schemas">Setting Up Schemas<a class="anchor" aria-label="anchor" href="#setting-up-schemas"></a>
 </h3>
 <div class="sourceCode" id="cb28"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Connect to DuckLake</span></span>
@@ -770,33 +772,34 @@ permissions.</p>
 <span>  data_path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/data"</span></span>
 <span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Create schemas with custom data paths</span></span>
-<span><span class="fu"><a href="../reference/db_create_schema.html">db_create_schema</a></span><span class="op">(</span><span class="st">"trade"</span>, path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/data/trade/"</span><span class="op">)</span></span>
-<span><span class="fu"><a href="../reference/db_create_schema.html">db_create_schema</a></span><span class="op">(</span><span class="st">"labour"</span>, path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/data/labour/"</span><span class="op">)</span></span>
-<span><span class="fu"><a href="../reference/db_create_schema.html">db_create_schema</a></span><span class="op">(</span><span class="st">"shared"</span>, path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/data/shared/"</span><span class="op">)</span></span>
+<span><span class="co"># Create schemas - DuckLake creates folders automatically</span></span>
+<span><span class="fu"><a href="../reference/db_create_schema.html">db_create_schema</a></span><span class="op">(</span><span class="st">"trade"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/db_create_schema.html">db_create_schema</a></span><span class="op">(</span><span class="st">"labour"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/db_create_schema.html">db_create_schema</a></span><span class="op">(</span><span class="st">"reference"</span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Now folder ACLs control access:</span></span>
-<span><span class="co"># - //CSO-NAS/DataLake/data/trade/   → Trade team read/write</span></span>
-<span><span class="co"># - //CSO-NAS/DataLake/data/labour/  → Labour team read/write</span></span>
-<span><span class="co"># - //CSO-NAS/DataLake/data/shared/  → Everyone read</span></span></code></pre></div>
+<span><span class="co"># Write data - files go to data/{schema}/{table}/ automatically</span></span>
+<span><span class="fu"><a href="../reference/db_lake_write.html">db_lake_write</a></span><span class="op">(</span><span class="va">imports_data</span>, schema <span class="op">=</span> <span class="st">"trade"</span>, table <span class="op">=</span> <span class="st">"imports"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/db_lake_write.html">db_lake_write</a></span><span class="op">(</span><span class="va">countries</span>, schema <span class="op">=</span> <span class="st">"reference"</span>, table <span class="op">=</span> <span class="st">"countries"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Set folder ACLs on the schema folders:</span></span>
+<span><span class="co"># - //CSO-NAS/DataLake/data/trade/     → Trade team read/write</span></span>
+<span><span class="co"># - //CSO-NAS/DataLake/data/labour/    → Labour team read/write</span></span>
+<span><span class="co"># - //CSO-NAS/DataLake/data/reference/ → Everyone read</span></span></code></pre></div>
 </div>
 <div class="section level3">
-<h3 id="using-path-based-schemas">Using Path-Based Schemas<a class="anchor" aria-label="anchor" href="#using-path-based-schemas"></a>
+<h3 id="using-schemas-1">Using Schemas<a class="anchor" aria-label="anchor" href="#using-schemas-1"></a>
 </h3>
 <div class="sourceCode" id="cb29"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Check schema's data path</span></span>
-<span><span class="fu"><a href="../reference/db_get_schema_path.html">db_get_schema_path</a></span><span class="op">(</span><span class="st">"trade"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; "//CSO-NAS/DataLake/data/trade/"</span></span>
-<span></span>
-<span><span class="co"># Write to a schema (data goes to schema's path)</span></span>
-<span><span class="fu"><a href="../reference/db_lake_write.html">db_lake_write</a></span><span class="op">(</span><span class="va">imports_data</span>, schema <span class="op">=</span> <span class="st">"trade"</span>, table <span class="op">=</span> <span class="st">"imports"</span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># Read from a schema (requires folder access)</span></span>
+<code class="sourceCode R"><span><span class="co"># Read from a schema (requires folder access)</span></span>
 <span><span class="va">imports</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/db_lake_read.html">db_lake_read</a></span><span class="op">(</span>schema <span class="op">=</span> <span class="st">"trade"</span>, table <span class="op">=</span> <span class="st">"imports"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Discover available tables</span></span>
 <span><span class="fu"><a href="../reference/db_list_schemas.html">db_list_schemas</a></span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="fu"><a href="../reference/db_list_tables.html">db_list_tables</a></span><span class="op">(</span><span class="st">"trade"</span><span class="op">)</span></span></code></pre></div>
+<span><span class="fu"><a href="../reference/db_list_tables.html">db_list_tables</a></span><span class="op">(</span><span class="st">"trade"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Optionally partition for finer access control</span></span>
+<span><span class="fu">db_set_partitioning</span><span class="op">(</span>schema <span class="op">=</span> <span class="st">"trade"</span>, table <span class="op">=</span> <span class="st">"imports"</span>, partition_by <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"year"</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu">db_get_partitioning</span><span class="op">(</span>schema <span class="op">=</span> <span class="st">"trade"</span>, table <span class="op">=</span> <span class="st">"imports"</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level3">
 <h3 id="how-it-works-1">How It Works<a class="anchor" aria-label="anchor" href="#how-it-works-1"></a>
@@ -834,8 +837,9 @@ write to modify | | Schema data folder | Folder ACLs - each schema can
 have different permissions | | Table data | Inherited from schema folder
 | &gt;&gt;&gt;&gt;&gt;&gt;&gt;
 7ca1ba29fe7034729ada034f78210def94da93f5</p>
-<p><strong>Benefits</strong>: - <strong>Familiar model</strong> - uses
-standard folder permissions - <strong>Granular control</strong> -
+<p><strong>Benefits</strong>: - <strong>Zero configuration</strong> -
+folder structure created automatically - <strong>Familiar model</strong>
+- uses standard folder permissions - <strong>Granular control</strong> -
 different teams can own different schemas - <strong>Single
 catalog</strong> - one metadata file, simpler management -
 <strong>IT-friendly</strong> - works with existing permission

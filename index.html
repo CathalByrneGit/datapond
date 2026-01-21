@@ -690,7 +690,7 @@
 </table>
 </div>
 <div class="section level3">
-<h3 id="multi-catalog-ducklake">Multi-Catalog (DuckLake)<a class="anchor" aria-label="anchor" href="#multi-catalog-ducklake"></a>
+<h3 id="partitioning-ducklake">Partitioning (DuckLake)<a class="anchor" aria-label="anchor" href="#partitioning-ducklake"></a>
 </h3>
 <table class="table">
 <thead><tr class="header">
@@ -699,32 +699,12 @@
 </tr></thead>
 <tbody>
 <tr class="odd">
-<td><code>db_setup_master()</code></td>
-<td>Create master discovery catalog</td>
+<td><code>db_set_partitioning()</code></td>
+<td>Set or remove partitioning on a table</td>
 </tr>
 <tr class="even">
-<td><code>db_register_section()</code></td>
-<td>Register a section in master catalog</td>
-</tr>
-<tr class="odd">
-<td><code>db_unregister_section()</code></td>
-<td>Remove section from master catalog</td>
-</tr>
-<tr class="even">
-<td><code>db_list_registered_sections()</code></td>
-<td>List all registered sections</td>
-</tr>
-<tr class="odd">
-<td><code>db_lake_connect_section()</code></td>
-<td>Connect to section via master catalog</td>
-</tr>
-<tr class="even">
-<td><code>db_current_section()</code></td>
-<td>Get current section name</td>
-</tr>
-<tr class="odd">
-<td><code>db_switch_section()</code></td>
-<td>Switch to a different section</td>
+<td><code>db_get_partitioning()</code></td>
+<td>Get current partition columns for a table</td>
 </tr>
 </tbody>
 </table>
