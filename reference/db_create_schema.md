@@ -6,7 +6,7 @@ can have custom data paths, enabling folder-based access control.
 ## Usage
 
 ``` r
-db_create_schema(schema, path = NULL)
+db_create_schema(schema)
 ```
 
 ## Arguments
