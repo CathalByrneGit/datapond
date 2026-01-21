@@ -28,10 +28,8 @@
   : Disconnect from the CSO Data Lake
 - [`db_get_docs()`](https://cathalbyrnegit.github.io/datapond/reference/db_get_docs.md)
   : Get documentation for a dataset or table
-- [`db_get_schema_path()`](https://cathalbyrnegit.github.io/datapond/reference/db_get_schema_path.md)
-  : Get the data path for a schema
-- [`db_get_table_path()`](https://cathalbyrnegit.github.io/datapond/reference/db_get_table_path.md)
-  : Get the data path for a table
+- [`db_get_partitioning()`](https://cathalbyrnegit.github.io/datapond/reference/db_get_partitioning.md)
+  : Get partitioning configuration for a DuckLake table
 - [`db_hive_read()`](https://cathalbyrnegit.github.io/datapond/reference/db_hive_read.md)
   : Read a CSO Dataset from hive-partitioned parquet (lazy)
 - [`db_hive_write()`](https://cathalbyrnegit.github.io/datapond/reference/db_hive_write.md)
@@ -70,6 +68,8 @@
   : Search for datasets or tables
 - [`db_search_columns()`](https://cathalbyrnegit.github.io/datapond/reference/db_search_columns.md)
   : Search for columns
+- [`db_set_partitioning()`](https://cathalbyrnegit.github.io/datapond/reference/db_set_partitioning.md)
+  : Set partitioning for a DuckLake table
 - [`db_set_private()`](https://cathalbyrnegit.github.io/datapond/reference/db_set_private.md)
   : Remove a dataset from the public catalog (Hive mode only)
 - [`db_set_public()`](https://cathalbyrnegit.github.io/datapond/reference/db_set_public.md)

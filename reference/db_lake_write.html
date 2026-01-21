@@ -48,6 +48,7 @@
 <span>  schema <span class="op">=</span> <span class="st">"main"</span>,</span>
 <span>  <span class="va">table</span>,</span>
 <span>  mode <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"overwrite"</span>, <span class="st">"append"</span><span class="op">)</span>,</span>
+<span>  partition_by <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  commit_author <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  commit_message <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
@@ -73,6 +74,12 @@
 <dd><p>"overwrite" or "append"</p></dd>
 
 
+<dt id="arg-partition-by">partition_by<a class="anchor" aria-label="anchor" href="#arg-partition-by"></a></dt>
+<dd><p>Optional character vector of column names to partition by.
+Only valid for mode = "overwrite". On overwrite, if not specified, existing
+partitioning is preserved.</p></dd>
+
+
 <dt id="arg-commit-author">commit_author<a class="anchor" aria-label="anchor" href="#arg-commit-author"></a></dt>
 <dd><p>Optional author for DuckLake commit metadata</p></dd>
 
@@ -95,9 +102,13 @@
 <span class="r-in"><span><span class="co"># With schema</span></span></span>
 <span class="r-in"><span><span class="fu">db_lake_write</span><span class="op">(</span><span class="va">my_data</span>, schema <span class="op">=</span> <span class="st">"trade"</span>, table <span class="op">=</span> <span class="st">"imports"</span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co"># With partitioning (overwrite mode only)</span></span></span>
+<span class="r-in"><span><span class="fu">db_lake_write</span><span class="op">(</span><span class="va">my_data</span>, schema <span class="op">=</span> <span class="st">"trade"</span>, table <span class="op">=</span> <span class="st">"imports"</span>,</span></span>
+<span class="r-in"><span>              partition_by <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"year"</span>, <span class="st">"month"</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Append mode with commit info</span></span></span>
 <span class="r-in"><span><span class="fu">db_lake_write</span><span class="op">(</span><span class="va">my_data</span>, table <span class="op">=</span> <span class="st">"imports"</span>, mode <span class="op">=</span> <span class="st">"append"</span>,</span></span>
-<span class="r-in"><span>              commit_author <span class="op">=</span> <span class="st">"jsmith"</span>, </span></span>
+<span class="r-in"><span>              commit_author <span class="op">=</span> <span class="st">"jsmith"</span>,</span></span>
 <span class="r-in"><span>              commit_message <span class="op">=</span> <span class="st">"Added Q3 data"</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="op">}</span> <span class="co"># }</span></span></span>
 </code></pre></div>

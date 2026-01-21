@@ -50,7 +50,8 @@ actually writing any data.</p>
 <span>  <span class="va">data</span>,</span>
 <span>  schema <span class="op">=</span> <span class="st">"main"</span>,</span>
 <span>  <span class="va">table</span>,</span>
-<span>  mode <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"overwrite"</span>, <span class="st">"append"</span><span class="op">)</span></span>
+<span>  mode <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"overwrite"</span>, <span class="st">"append"</span><span class="op">)</span>,</span>
+<span>  partition_by <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -73,6 +74,12 @@ actually writing any data.</p>
 <dt id="arg-mode">mode<a class="anchor" aria-label="anchor" href="#arg-mode"></a></dt>
 <dd><p>"overwrite" or "append"</p></dd>
 
+
+<dt id="arg-partition-by">partition_by<a class="anchor" aria-label="anchor" href="#arg-partition-by"></a></dt>
+<dd><p>Optional character vector of column names to partition by.
+Only valid for mode = "overwrite". On overwrite, if not specified, existing
+partitioning is preserved.</p></dd>
+
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
@@ -85,6 +92,10 @@ actually writing any data.</p>
 <span class="r-in"><span><span class="fu"><a href="db_lake_connect.html">db_lake_connect</a></span><span class="op">(</span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="fu">db_preview_lake_write</span><span class="op">(</span><span class="va">my_data</span>, table <span class="op">=</span> <span class="st">"products"</span>, mode <span class="op">=</span> <span class="st">"overwrite"</span><span class="op">)</span></span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co"># Preview with partitioning</span></span></span>
+<span class="r-in"><span><span class="fu">db_preview_lake_write</span><span class="op">(</span><span class="va">my_data</span>, table <span class="op">=</span> <span class="st">"sales"</span>,</span></span>
+<span class="r-in"><span>                      partition_by <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"year"</span>, <span class="st">"month"</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="op">}</span> <span class="co"># }</span></span></span>
 </code></pre></div>
     </div>

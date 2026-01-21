@@ -1,6 +1,6 @@
 # datapond
 
-**datapond** is a simple and ligthweight data lake infrastructure for
+**datapond** is a simple and lightweight data lake infrastructure for
 small to medium data requirements. Provides a unified R interface for
 duckdb and ducklake internal data infrastructure. It supports two
 storage backends:
@@ -375,10 +375,10 @@ systems needed.
 
 ### Partitioning (DuckLake)
 
-| Function                | Description                               |
-|-------------------------|-------------------------------------------|
-| `db_set_partitioning()` | Set or remove partitioning on a table     |
-| `db_get_partitioning()` | Get current partition columns for a table |
+| Function                                                                                              | Description                               |
+|-------------------------------------------------------------------------------------------------------|-------------------------------------------|
+| [`db_set_partitioning()`](https://cathalbyrnegit.github.io/datapond/reference/db_set_partitioning.md) | Set or remove partitioning on a table     |
+| [`db_get_partitioning()`](https://cathalbyrnegit.github.io/datapond/reference/db_get_partitioning.md) | Get current partition columns for a table |
 
 ### Metadata & Maintenance
 

@@ -1,5 +1,6 @@
 <urlset xmlns = 'http://www.sitemaps.org/schemas/sitemap/0.9'>
 <url><loc>https://cathalbyrnegit.github.io/datapond/404.html</loc></url>
+<url><loc>https://cathalbyrnegit.github.io/datapond/LICENSE-text.html</loc></url>
 <url><loc>https://cathalbyrnegit.github.io/datapond/LICENSE.html</loc></url>
 <url><loc>https://cathalbyrnegit.github.io/datapond/articles/code-walkthrough.html</loc></url>
 <url><loc>https://cathalbyrnegit.github.io/datapond/articles/concepts.html</loc></url>
@@ -19,8 +20,7 @@
 <url><loc>https://cathalbyrnegit.github.io/datapond/reference/db_diff.html</loc></url>
 <url><loc>https://cathalbyrnegit.github.io/datapond/reference/db_disconnect.html</loc></url>
 <url><loc>https://cathalbyrnegit.github.io/datapond/reference/db_get_docs.html</loc></url>
-<url><loc>https://cathalbyrnegit.github.io/datapond/reference/db_get_schema_path.html</loc></url>
-<url><loc>https://cathalbyrnegit.github.io/datapond/reference/db_get_table_path.html</loc></url>
+<url><loc>https://cathalbyrnegit.github.io/datapond/reference/db_get_partitioning.html</loc></url>
 <url><loc>https://cathalbyrnegit.github.io/datapond/reference/db_hive_read.html</loc></url>
 <url><loc>https://cathalbyrnegit.github.io/datapond/reference/db_hive_write.html</loc></url>
 <url><loc>https://cathalbyrnegit.github.io/datapond/reference/db_is_public.html</loc></url>
@@ -40,6 +40,7 @@
 <url><loc>https://cathalbyrnegit.github.io/datapond/reference/db_rollback.html</loc></url>
 <url><loc>https://cathalbyrnegit.github.io/datapond/reference/db_search.html</loc></url>
 <url><loc>https://cathalbyrnegit.github.io/datapond/reference/db_search_columns.html</loc></url>
+<url><loc>https://cathalbyrnegit.github.io/datapond/reference/db_set_partitioning.html</loc></url>
 <url><loc>https://cathalbyrnegit.github.io/datapond/reference/db_set_private.html</loc></url>
 <url><loc>https://cathalbyrnegit.github.io/datapond/reference/db_set_public.html</loc></url>
 <url><loc>https://cathalbyrnegit.github.io/datapond/reference/db_snapshots.html</loc></url>

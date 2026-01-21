@@ -56,7 +56,7 @@ db_hive_write(
 
 - filename_pattern:
 
-  Used in append-like modes (default "data_uuid")
+  Used in append-like modes (default `"data_\{uuid\}"`)
 
 ## Value
 
