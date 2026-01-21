@@ -71,7 +71,7 @@
 #'   - "replace_partitions": delete only affected partition folders, then append fresh files (requires partition_by)
 #' @param compression Parquet compression codec (NULL means DuckDB default). 
 #'   Options: "zstd", "snappy", "gzip", "brotli", "lz4", "lz4_raw", "uncompressed"
-#' @param filename_pattern Used in append-like modes (default "data_{uuid}")
+#' @param filename_pattern Used in append-like modes (default \code{"data_\{uuid\}"})
 #' @return Invisibly returns the output path
 #' @examples
 #' \dontrun{
