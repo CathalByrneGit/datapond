@@ -442,16 +442,15 @@ db_lake_write <- function(data,
         collapse = ", "
       )
 
-      # Build partition clause if specified
-      part_clause <- if (!is.null(partition_by)) {
-        paste0(" PARTITIONED BY (", paste(partition_by, collapse = ", "), ")")
-      } else {
-        ""
-      }
-
-      # Create table with explicit schema and optional partitioning
-      create_sql <- glue::glue("CREATE TABLE {qname} ({col_defs}){part_clause}")
+      # Create table with explicit schema
+      create_sql <- glue::glue("CREATE TABLE {qname} ({col_defs})")
       DBI::dbExecute(con, create_sql)
+
+      # Set partitioning if specified (must be done before inserting data)
+      if (!is.null(partition_by)) {
+        partition_clause <- paste(partition_by, collapse = ", ")
+        DBI::dbExecute(con, glue::glue("ALTER TABLE {qname} SET PARTITIONED BY ({partition_clause})"))
+      }
 
       # Insert data
       DBI::dbExecute(con, glue::glue("INSERT INTO {qname} SELECT * FROM {tmp}"))
