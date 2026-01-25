@@ -804,39 +804,30 @@ permissions without any extra configuration.</p>
 <div class="section level3">
 <h3 id="how-it-works-1">How It Works<a class="anchor" aria-label="anchor" href="#how-it-works-1"></a>
 </h3>
-<p>&lt;&lt;&lt;&lt;&lt;&lt;&lt; HEAD In DuckLake mode, both
-<strong>section</strong> and <strong>schema</strong> exist but serve
-different purposes:</p>
 <table class="table">
 <colgroup>
-<col width="30%">
-<col width="40%">
-<col width="30%">
+<col width="34%">
+<col width="65%">
 </colgroup>
 <thead><tr class="header">
-<th>Concept</th>
-<th>What It Is</th>
-<th>Purpose</th>
+<th>Component</th>
+<th>Access Controlled By</th>
 </tr></thead>
 <tbody>
 <tr class="odd">
-<td><strong>Section</strong></td>
-<td>A separate DuckLake catalog file</td>
-<td>Ownership boundary - controls who can write/publish</td>
+<td>Catalog file (<code>.sqlite</code>)</td>
+<td>File permissions - need read to query, write to modify</td>
 </tr>
 <tr class="even">
-<td><strong>Schema</strong></td>
-<td>A namespace within a catalog</td>
-<td>Logical grouping of related tables</td>
+<td>Schema data folder</td>
+<td>Folder ACLs - each schema can have different permissions</td>
+</tr>
+<tr class="odd">
+<td>Table data</td>
+<td>Inherited from schema folder</td>
 </tr>
 </tbody>
 </table>
-<p>======= | Component | Access Controlled By | |———–|———————| | Catalog
-file (<code>.sqlite</code>) | File permissions - need read to query,
-write to modify | | Schema data folder | Folder ACLs - each schema can
-have different permissions | | Table data | Inherited from schema folder
-| &gt;&gt;&gt;&gt;&gt;&gt;&gt;
-7ca1ba29fe7034729ada034f78210def94da93f5</p>
 <p><strong>Benefits</strong>: - <strong>Zero configuration</strong> -
 folder structure created automatically - <strong>Familiar model</strong>
 - uses standard folder permissions - <strong>Granular control</strong> -

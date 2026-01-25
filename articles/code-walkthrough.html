@@ -730,55 +730,6 @@ documentation</li>
 </div>
 </div>
 <div class="section level2">
-<h2 id="rdb_connect-r---section-management">
-<code>R/db_connect.R</code> - Section Management<a class="anchor" aria-label="anchor" href="#rdb_connect-r---section-management"></a>
-</h2>
-<p>For multi-catalog DuckLake, sections are registered in a master
-catalog:</p>
-<div class="sourceCode" id="cb25"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">db_register_section</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">section</span>, <span class="va">catalog_path</span>, <span class="va">data_path</span>, <span class="va">...</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="va">master_con</span> <span class="op">&lt;-</span> <span class="fu">.db_master_connect</span><span class="op">(</span><span class="op">)</span></span>
-<span></span>
-<span>  <span class="co"># Ensure schema exists</span></span>
-<span>  <span class="fu">.db_ensure_master_schema</span><span class="op">(</span><span class="va">master_con</span><span class="op">)</span></span>
-<span></span>
-<span>  <span class="co"># Upsert section</span></span>
-<span>  <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbExecute.html" class="external-link">dbExecute</a></span><span class="op">(</span><span class="va">master_con</span>, <span class="st">"</span></span>
-<span><span class="st">    INSERT OR REPLACE INTO sections</span></span>
-<span><span class="st">    (section_name, catalog_path, data_path, ...)</span></span>
-<span><span class="st">    VALUES (?, ?, ?, ...)</span></span>
-<span><span class="st">  "</span><span class="op">)</span></span>
-<span><span class="op">}</span></span>
-<span></span>
-<span><span class="va">db_lake_connect_section</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">section</span>, <span class="va">master_path</span> <span class="op">=</span> <span class="cn">NULL</span>, <span class="va">...</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="co"># Look up section in master</span></span>
-<span>  <span class="va">master_con</span> <span class="op">&lt;-</span> <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbConnect.html" class="external-link">dbConnect</a></span><span class="op">(</span><span class="fu">RSQLite</span><span class="fu">::</span><span class="fu"><a href="https://rsqlite.r-dbi.org/reference/SQLite.html" class="external-link">SQLite</a></span><span class="op">(</span><span class="op">)</span>, <span class="va">master_path</span><span class="op">)</span></span>
-<span>  <span class="va">section_info</span> <span class="op">&lt;-</span> <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbGetQuery.html" class="external-link">dbGetQuery</a></span><span class="op">(</span><span class="va">master_con</span>, <span class="st">"</span></span>
-<span><span class="st">    SELECT catalog_path, data_path FROM sections WHERE section_name = ?</span></span>
-<span><span class="st">  "</span><span class="op">)</span></span>
-<span></span>
-<span>  <span class="co"># Connect using looked-up paths</span></span>
-<span>  <span class="va">con</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/db_lake_connect.html">db_lake_connect</a></span><span class="op">(</span></span>
-<span>    metadata_path <span class="op">=</span> <span class="va">section_info</span><span class="op">$</span><span class="va">catalog_path</span>,</span>
-<span>    data_path <span class="op">=</span> <span class="va">section_info</span><span class="op">$</span><span class="va">data_path</span>,</span>
-<span>    <span class="va">...</span></span>
-<span>  <span class="op">)</span></span>
-<span></span>
-<span>  <span class="co"># Store section for master catalog sync</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/assign.html" class="external-link">assign</a></span><span class="op">(</span><span class="st">"section"</span>, <span class="va">section</span>, envir <span class="op">=</span> <span class="va">.db_env</span><span class="op">)</span></span>
-<span><span class="op">}</span></span></code></pre></div>
-<p><strong>Key points:</strong></p>
-<ul>
-<li>Master catalog is SQLite (read by everyone, write by admins)</li>
-<li>
-<code>db_lake_connect_section()</code> looks up paths
-automatically</li>
-<li>Section stored in <code>.db_env</code> enables
-<code>db_describe(public=TRUE)</code> to sync</li>
-</ul>
-<hr>
-</div>
-<div class="section level2">
 <h2 id="rpreview-r---write-previews">
 <code>R/preview.R</code> - Write Previews<a class="anchor" aria-label="anchor" href="#rpreview-r---write-previews"></a>
 </h2>
@@ -786,7 +737,7 @@ automatically</li>
 <h3 id="db_preview_hive_write---preview-before-writing">
 <code>db_preview_hive_write()</code> - Preview Before Writing<a class="anchor" aria-label="anchor" href="#db_preview_hive_write---preview-before-writing"></a>
 </h3>
-<div class="sourceCode" id="cb26"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb25"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">db_preview_hive_write</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">data</span>, <span class="va">section</span>, <span class="va">dataset</span>,</span>
 <span>                                   <span class="va">partition_by</span> <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>                                   <span class="va">mode</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"overwrite"</span>, <span class="st">"append"</span>, <span class="st">"ignore"</span>, <span class="st">"replace_partitions"</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
@@ -839,7 +790,7 @@ summary</li>
 <code>db_preview_upsert()</code> - Preview Insert vs Update
 Counts<a class="anchor" aria-label="anchor" href="#db_preview_upsert---preview-insert-vs-update-counts"></a>
 </h3>
-<div class="sourceCode" id="cb27"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb26"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">db_preview_upsert</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">data</span>, <span class="va">schema</span>, <span class="va">table</span>, <span class="va">by</span>, <span class="va">update_cols</span> <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  </span>
 <span>  <span class="co"># Register data temporarily</span></span>
@@ -879,7 +830,7 @@ Counts<a class="anchor" aria-label="anchor" href="#db_preview_upsert---preview-i
 <div class="section level3">
 <h3 id="hive-discovery">Hive Discovery<a class="anchor" aria-label="anchor" href="#hive-discovery"></a>
 </h3>
-<div class="sourceCode" id="cb28"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb27"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">db_list_sections</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">base_path</span> <span class="op">&lt;-</span> <span class="fu">.db_get</span><span class="op">(</span><span class="st">"data_path"</span><span class="op">)</span></span>
 <span>  </span>
@@ -907,7 +858,7 @@ folders (<code>year=2024</code>)</li>
 <div class="section level3">
 <h3 id="ducklake-discovery">DuckLake Discovery<a class="anchor" aria-label="anchor" href="#ducklake-discovery"></a>
 </h3>
-<div class="sourceCode" id="cb29"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb28"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">db_list_tables</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">schema</span> <span class="op">=</span> <span class="st">"main"</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">sql</span> <span class="op">&lt;-</span> <span class="fu">glue</span><span class="fu">::</span><span class="fu"><a href="https://glue.tidyverse.org/reference/glue.html" class="external-link">glue</a></span><span class="op">(</span><span class="st">"</span></span>
 <span><span class="st">    SELECT table_name</span></span>
@@ -935,7 +886,7 @@ databases</li>
 <h3 id="db_vacuum---clean-up-old-snapshots">
 <code>db_vacuum()</code> - Clean Up Old Snapshots<a class="anchor" aria-label="anchor" href="#db_vacuum---clean-up-old-snapshots"></a>
 </h3>
-<div class="sourceCode" id="cb30"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb29"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">db_vacuum</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">older_than</span> <span class="op">=</span> <span class="st">"30 days"</span>, <span class="va">dry_run</span> <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="co"># Get snapshots before</span></span>
 <span>  <span class="va">snapshots_before</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/db_snapshots.html">db_snapshots</a></span><span class="op">(</span><span class="op">)</span></span>
@@ -963,7 +914,7 @@ deletion</li>
 <h3 id="db_rollback---restore-previous-version">
 <code>db_rollback()</code> - Restore Previous Version<a class="anchor" aria-label="anchor" href="#db_rollback---restore-previous-version"></a>
 </h3>
-<div class="sourceCode" id="cb31"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb30"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">db_rollback</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">schema</span>, <span class="va">table</span>, <span class="va">version</span> <span class="op">=</span> <span class="cn">NULL</span>, <span class="va">timestamp</span> <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="co"># Build time travel clause</span></span>
 <span>  <span class="va">at_clause</span> <span class="op">&lt;-</span> <span class="fu">glue</span><span class="fu">::</span><span class="fu"><a href="https://glue.tidyverse.org/reference/glue.html" class="external-link">glue</a></span><span class="op">(</span><span class="st">"AT (VERSION =&gt; {version})"</span><span class="op">)</span></span>
@@ -987,7 +938,7 @@ version</li>
 <h3 id="db_diff---compare-versions">
 <code>db_diff()</code> - Compare Versions<a class="anchor" aria-label="anchor" href="#db_diff---compare-versions"></a>
 </h3>
-<div class="sourceCode" id="cb32"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb31"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">db_diff</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">schema</span>, <span class="va">table</span>, <span class="va">from_version</span>, <span class="va">to_version</span>, <span class="va">key_cols</span> <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="co"># ADDED: rows in 'to' but not in 'from'</span></span>
 <span>  <span class="va">added_sql</span> <span class="op">&lt;-</span> <span class="fu">glue</span><span class="fu">::</span><span class="fu"><a href="https://glue.tidyverse.org/reference/glue.html" class="external-link">glue</a></span><span class="op">(</span><span class="st">"SELECT * FROM {to_ref} EXCEPT SELECT * FROM {from_ref}"</span><span class="op">)</span></span>
@@ -1027,7 +978,7 @@ version</li>
 <h2 id="rzzz-r---package-hooks">
 <code>R/zzz.R</code> - Package Hooks<a class="anchor" aria-label="anchor" href="#rzzz-r---package-hooks"></a>
 </h2>
-<div class="sourceCode" id="cb33"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb32"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Null coalesce operator used throughout</span></span>
 <span><span class="va">`%||%`</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">x</span>, <span class="va">y</span><span class="op">)</span> <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="op">||</span> <span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="op">==</span> <span class="fl">0</span><span class="op">)</span> <span class="va">y</span> <span class="kw">else</span> <span class="va">x</span></span>
 <span></span>
@@ -1073,7 +1024,7 @@ data lake.</p>
 allows it to be: 1. Used standalone via <code><a href="../reference/db_browser.html">db_browser()</a></code> 2.
 Embedded in other Shiny apps via <code><a href="../reference/db_browser_ui.html">db_browser_ui()</a></code> +
 <code><a href="../reference/db_browser_server.html">db_browser_server()</a></code></p>
-<div class="sourceCode" id="cb34"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb33"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Standalone usage</span></span>
 <span><span class="fu"><a href="../reference/db_browser.html">db_browser</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
@@ -1089,7 +1040,7 @@ Embedded in other Shiny apps via <code><a href="../reference/db_browser_ui.html"
 <h3 id="browser-r---launcher">
 <code>browser.R</code> - Launcher<a class="anchor" aria-label="anchor" href="#browser-r---launcher"></a>
 </h3>
-<div class="sourceCode" id="cb35"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb34"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">db_browser</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">height</span> <span class="op">=</span> <span class="st">"500px"</span>, <span class="va">viewer</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"dialog"</span>, <span class="st">"browser"</span>, <span class="st">"pane"</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="co"># Check packages are available</span></span>
 <span>  <span class="fu">.db_assert_browser_packages</span><span class="op">(</span><span class="op">)</span></span>
@@ -1111,7 +1062,7 @@ Embedded in other Shiny apps via <code><a href="../reference/db_browser_ui.html"
 </h3>
 <p>The UI is built with <code>bslib</code> for modern Bootstrap 5
 styling:</p>
-<div class="sourceCode" id="cb36"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb35"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">db_browser_ui</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">id</span>, <span class="va">height</span> <span class="op">=</span> <span class="st">"500px"</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">ns</span> <span class="op">&lt;-</span> <span class="fu">shiny</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/shiny/man/NS.html" class="external-link">NS</a></span><span class="op">(</span><span class="va">id</span><span class="op">)</span>  <span class="co"># Namespace for module</span></span>
 <span>  </span>
@@ -1146,7 +1097,7 @@ mode</li>
 <h3 id="browser_server-r---module-server">
 <code>browser_server.R</code> - Module Server<a class="anchor" aria-label="anchor" href="#browser_server-r---module-server"></a>
 </h3>
-<div class="sourceCode" id="cb37"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb36"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">db_browser_server</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">id</span>, <span class="va">height</span> <span class="op">=</span> <span class="st">"500px"</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="fu">shiny</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/shiny/man/moduleServer.html" class="external-link">moduleServer</a></span><span class="op">(</span><span class="va">id</span>, <span class="kw">function</span><span class="op">(</span><span class="va">input</span>, <span class="va">output</span>, <span class="va">session</span><span class="op">)</span> <span class="op">{</span></span>
 <span>    </span>
@@ -1219,7 +1170,7 @@ filtering</li>
 <strong>Quoted</strong> with <code>.db_sql_quote()</code> (escapes
 single quotes)</li>
 </ol>
-<div class="sourceCode" id="cb38"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb37"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># This is safe:</span></span>
 <span><span class="va">section</span> <span class="op">&lt;-</span> <span class="fu">.db_validate_name</span><span class="op">(</span><span class="va">section</span><span class="op">)</span>  <span class="co"># Rejects "../../../etc"</span></span>
 <span><span class="va">path</span> <span class="op">&lt;-</span> <span class="fu">.db_sql_quote</span><span class="op">(</span><span class="va">glob_path</span><span class="op">)</span>       <span class="co"># Escapes quotes properly</span></span></code></pre></div>
@@ -1231,7 +1182,7 @@ single quotes)</li>
 separators (<code>/</code>, <code>\</code>) - Parent directory
 references (<code>..</code>) - Special characters</p>
 <p>This prevents attacks like:</p>
-<div class="sourceCode" id="cb39"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb38"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/db_hive_read.html">db_hive_read</a></span><span class="op">(</span><span class="st">"../../../etc"</span>, <span class="st">"passwd"</span><span class="op">)</span>  <span class="co"># Rejected!</span></span></code></pre></div>
 <hr>
 </div>

@@ -643,52 +643,6 @@ db_set_public <- function(section = NULL, dataset = NULL,
 
 ------------------------------------------------------------------------
 
-## `R/db_connect.R` - Section Management
-
-For multi-catalog DuckLake, sections are registered in a master catalog:
-
-``` r
-db_register_section <- function(section, catalog_path, data_path, ...) {
-  master_con <- .db_master_connect()
-
-  # Ensure schema exists
-  .db_ensure_master_schema(master_con)
-
-  # Upsert section
-  DBI::dbExecute(master_con, "
-    INSERT OR REPLACE INTO sections
-    (section_name, catalog_path, data_path, ...)
-    VALUES (?, ?, ?, ...)
-  ")
-}
-
-db_lake_connect_section <- function(section, master_path = NULL, ...) {
-  # Look up section in master
-  master_con <- DBI::dbConnect(RSQLite::SQLite(), master_path)
-  section_info <- DBI::dbGetQuery(master_con, "
-    SELECT catalog_path, data_path FROM sections WHERE section_name = ?
-  ")
-
-  # Connect using looked-up paths
-  con <- db_lake_connect(
-    metadata_path = section_info$catalog_path,
-    data_path = section_info$data_path,
-    ...
-  )
-
-  # Store section for master catalog sync
-  assign("section", section, envir = .db_env)
-}
-```
-
-**Key points:**
-
-- Master catalog is SQLite (read by everyone, write by admins)
-- `db_lake_connect_section()` looks up paths automatically
-- Section stored in `.db_env` enables `db_describe(public=TRUE)` to sync
-
-------------------------------------------------------------------------
-
 ## `R/preview.R` - Write Previews
 
 ### `db_preview_hive_write()` - Preview Before Writing
