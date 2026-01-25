@@ -15,7 +15,7 @@ Invisibly returns the schema name
 \description{
 Creates a new schema in the DuckLake catalog.
 
-DuckLake automatically organizes data into \verb{{schema}/{table}/} folders
+DuckLake automatically organizes data into \verb{\{schema\}/\{table\}/} folders
 under the catalog's DATA_PATH. This default structure enables folder-based
 access control - simply set ACLs on the schema folders.
 }

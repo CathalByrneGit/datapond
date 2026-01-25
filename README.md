@@ -9,7 +9,7 @@
 experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
 <!-- badges: end -->
 
-**datapond** is a simple and ligthweight data lake infrastructure for small to medium data requirements. Provides a unified R interface for duckdb and ducklake internal data
+**datapond** is a simple and lightweight data lake infrastructure for small to medium data requirements. Provides a unified R interface for duckdb and ducklake internal data
 infrastructure. It supports two storage backends:
 
 1.  **Hive-partitioned Parquet** - familiar folder-based structure
