@@ -463,16 +463,17 @@ db_get_partitioning <- function(schema = "main", table) {
 
   result <- tryCatch({
     DBI::dbGetQuery(con, glue::glue("
-      SELECT DISTINCT c.column_name, pc.transform, pc.partition_key_index
-      FROM {metadata_schema}.ducklake_partition_column pc
-      JOIN {metadata_schema}.ducklake_table t ON pc.table_id = t.table_id
-      JOIN {metadata_schema}.ducklake_schema s ON t.schema_id = s.schema_id
-      JOIN {metadata_schema}.ducklake_column c ON pc.column_id = c.column_id
-      WHERE s.schema_name = '{schema}' AND t.table_name = '{table}'
-      ORDER BY pc.partition_key_index
-    "))
+    SELECT DISTINCT c.column_name, pc.transform, pc.partition_key_index
+    FROM {metadata_schema}.ducklake_partition_column pc
+    JOIN {metadata_schema}.ducklake_table t ON pc.table_id = t.table_id
+    JOIN {metadata_schema}.ducklake_schema s ON t.schema_id = s.schema_id
+    JOIN {metadata_schema}.ducklake_column c
+      ON pc.column_id = c.column_id
+     AND c.table_id  = t.table_id
+    WHERE s.schema_name = '{schema}' AND t.table_name = '{table}'
+    ORDER BY pc.partition_key_index
+  "))
   }, error = function(e) {
-    # Table may not exist or metadata table may differ
     data.frame(column_name = character(0), transform = character(0), partition_key_index = integer(0))
   })
 

@@ -59,7 +59,7 @@
 
 
 #' Publish / Append / Ignore / Replace Partitions in the Hive Lake
-#' 
+#'
 #' @param data A data.frame / tibble
 #' @param section Your section name
 #' @param dataset The name of the dataset
@@ -69,7 +69,7 @@
 #'   - "append": add new files (requires unique filenames)
 #'   - "ignore": write only if target path does not exist (best-effort; still race-prone)
 #'   - "replace_partitions": delete only affected partition folders, then append fresh files (requires partition_by)
-#' @param compression Parquet compression codec (NULL means DuckDB default). 
+#' @param compression Parquet compression codec (NULL means DuckDB default).
 #'   Options: "zstd", "snappy", "gzip", "brotli", "lz4", "lz4_raw", "uncompressed"
 #' @param filename_pattern Used in append-like modes (default \code{"data_\{uuid\}"})
 #' @return Invisibly returns the output path
@@ -77,16 +77,16 @@
 #' \dontrun{
 #' # Basic overwrite
 #' db_hive_write(my_data, "Trade", "Imports")
-#' 
+#'
 #' # Partitioned write
 #' db_hive_write(my_data, "Trade", "Imports", partition_by = c("year", "month"))
-#' 
+#'
 #' # Append mode
 #' db_hive_write(my_data, "Trade", "Imports", mode = "append")
-#' 
+#'
 #' # Replace only touched partitions
-#' db_hive_write(my_data, "Trade", "Imports", 
-#'               partition_by = c("year", "month"), 
+#' db_hive_write(my_data, "Trade", "Imports",
+#'               partition_by = c("year", "month"),
 #'               mode = "replace_partitions")
 #' }
 #' @export
@@ -111,7 +111,7 @@ db_hive_write <- function(data,
   if (is.null(con)) {
     stop("Not connected. Use db_connect() first.", call. = FALSE)
   }
-  
+
   curr_mode <- .db_get("mode")
   if (!is.null(curr_mode) && curr_mode != "hive") {
     stop("Connected in DuckLake mode. Use db_lake_write() instead, or reconnect with db_connect().", call. = FALSE)
@@ -149,7 +149,7 @@ db_hive_write <- function(data,
   if (is.null(base_path)) {
     stop("No data path configured.", call. = FALSE)
   }
-  
+
   output_path <- file.path(base_path, section, dataset)
 
   # Ensure output directory exists
@@ -275,17 +275,20 @@ db_hive_write <- function(data,
 
   result <- tryCatch({
     DBI::dbGetQuery(con, glue::glue("
-      SELECT DISTINCT c.column_name, pc.partition_key_index
-      FROM {metadata_schema}.ducklake_partition_column pc
-      JOIN {metadata_schema}.ducklake_table t ON pc.table_id = t.table_id
-      JOIN {metadata_schema}.ducklake_schema s ON t.schema_id = s.schema_id
-      JOIN {metadata_schema}.ducklake_column c ON pc.column_id = c.column_id
-      WHERE s.schema_name = '{schema}' AND t.table_name = '{table}'
-      ORDER BY pc.partition_key_index
-    "))
+    SELECT DISTINCT c.column_name, pc.partition_key_index
+    FROM {metadata_schema}.ducklake_partition_column pc
+    JOIN {metadata_schema}.ducklake_table t ON pc.table_id = t.table_id
+    JOIN {metadata_schema}.ducklake_schema s ON t.schema_id = s.schema_id
+    JOIN {metadata_schema}.ducklake_column c
+      ON pc.column_id = c.column_id
+     AND c.table_id  = t.table_id
+    WHERE s.schema_name = '{schema}' AND t.table_name = '{table}'
+    ORDER BY pc.partition_key_index
+  "))
   }, error = function(e) {
     data.frame(column_name = character(0), partition_key_index = integer(0))
   })
+
 
   if (nrow(result) == 0) {
     return(NULL)
