@@ -238,6 +238,8 @@ db_rollback <- function(schema = "main",
 #' Compare a table between two snapshots
 #' 
 #' @description Shows the differences in a table between two snapshot versions
+#' db_diff() is set-based (EXCEPT), so duplicates don’t count as “added”.
+#' Your append produced 10 duplicate rows + 2 genuinely new distinct rows, so it reports 2 added.
 #' or timestamps. Returns added, removed, and (optionally) changed rows.
 #' 
 #' @param schema Schema name (default "main")

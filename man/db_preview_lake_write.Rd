@@ -8,7 +8,8 @@ db_preview_lake_write(
   data,
   schema = "main",
   table,
-  mode = c("overwrite", "append")
+  mode = c("overwrite", "append"),
+  partition_by = NULL
 )
 }
 \arguments{
@@ -19,6 +20,10 @@ db_preview_lake_write(
 \item{table}{Table name}
 
 \item{mode}{"overwrite" or "append"}
+
+\item{partition_by}{Optional character vector of column names to partition by.
+Only valid for mode = "overwrite". On overwrite, if not specified, existing
+partitioning is preserved.}
 }
 \value{
 A list with preview information (invisibly), also prints a summary
@@ -32,5 +37,9 @@ actually writing any data.
 db_lake_connect()
 
 db_preview_lake_write(my_data, table = "products", mode = "overwrite")
+
+# Preview with partitioning
+db_preview_lake_write(my_data, table = "sales",
+                      partition_by = c("year", "month"))
 }
 }

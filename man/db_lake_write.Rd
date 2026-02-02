@@ -9,6 +9,7 @@ db_lake_write(
   schema = "main",
   table,
   mode = c("overwrite", "append"),
+  partition_by = NULL,
   commit_author = NULL,
   commit_message = NULL
 )
@@ -21,6 +22,10 @@ db_lake_write(
 \item{table}{Table name}
 
 \item{mode}{"overwrite" or "append"}
+
+\item{partition_by}{Optional character vector of column names to partition by.
+Only valid for mode = "overwrite". On overwrite, if not specified, existing
+partitioning is preserved.}
 
 \item{commit_author}{Optional author for DuckLake commit metadata}
 
@@ -40,9 +45,13 @@ db_lake_write(my_data, table = "imports")
 # With schema
 db_lake_write(my_data, schema = "trade", table = "imports")
 
+# With partitioning (overwrite mode only)
+db_lake_write(my_data, schema = "trade", table = "imports",
+              partition_by = c("year", "month"))
+
 # Append mode with commit info
 db_lake_write(my_data, table = "imports", mode = "append",
-              commit_author = "jsmith", 
+              commit_author = "jsmith",
               commit_message = "Added Q3 data")
 }
 }
