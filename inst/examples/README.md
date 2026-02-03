@@ -36,3 +36,5 @@ Same as above but using DuckLake mode:
 - Creates schemas and tables
 - Shows snapshot history
 - Demonstrates time-travel capable storage
+
+## Also includes an entire workflow example
