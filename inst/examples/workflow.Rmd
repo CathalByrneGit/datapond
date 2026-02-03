@@ -1,0 +1,219 @@
+---
+title: "datapond: DuckLake Mode & Time Travel Demo"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = TRUE, warning = FALSE)
+
+```
+
+## Introduction
+
+This notebook demonstrates the `datapond` package in **DuckLake** mode. Unlike standard Hive partitioning, DuckLake mode provides:
+
+* **Time Travel:** Querying data as it existed at a specific point in time.
+* **Snapshots:** A versioned history of all table changes.
+* **ACID-like behavior:** Using a SQLite catalog to track commits and snapshots.
+
+## 1. Environment Setup
+
+First, we load the necessary libraries and define a local directory to host our data lake. Using a local directory instead of a temp folder allows us to inspect the physical file structure.
+
+```{r packages}
+library(datapond)
+library(dplyr)
+library(tibble)
+library(withr)
+
+# Define a local path for the demo
+lake_root <- "my_lake_demo"
+ducklake_data_path <- file.path(lake_root, "data")
+ducklake_catalog_path <- file.path(lake_root, "catalog.sqlite")
+
+# Ensure clean start
+if(dir.exists(lake_root)) unlink(lake_root, recursive = TRUE)
+dir.create(ducklake_data_path, recursive = TRUE)
+
+```
+
+## 2. Connect to DuckLake
+
+We initialize the connection using the SQLite catalog backend. This creates a `catalog.sqlite` file which acts as the "brain" of your data lake.
+
+```{r connect}
+datapond::db_lake_connect(
+  catalog_type = "sqlite",
+  metadata_path = ducklake_catalog_path,
+  data_path = ducklake_data_path
+)
+
+print(datapond::db_status())
+
+```
+
+## 3. Writing and Versioning
+
+We will create a schema called `trade` and write our initial dataset. Note that every `db_lake_write` in DuckLake mode creates a formal "commit."
+
+### Commit #1: Initial Load
+
+```{r write_1}
+my_data <- tibble(
+  year   = rep(c(2024, 2025), each = 6),
+  month  = rep(1:6, times = 2),
+  country = sample(c("IE", "FR", "DE", "ES"), size = 12, replace = TRUE),
+  value  = round(runif(12, min = 10, max = 200), 1)
+)
+
+schema <- "trade"
+table  <- "imports"
+
+if (!(schema %in% datapond::db_list_schemas())) {
+  datapond::db_create_schema(schema)
+}
+
+datapond::db_lake_write(
+  my_data,
+  schema = schema,
+  table  = table,
+  mode   = "overwrite",
+  commit_author  = "Demo User",
+  commit_message = "Initial demo load"
+)
+
+```
+
+### Commit #2: Append & Modification
+
+We modify the values and append data. This creates a new snapshot in the catalog.
+
+```{r write_2}
+my_data2 <- my_data |>
+  mutate(value = ifelse(row_number() <= 2, value + 50, value))
+
+datapond::db_lake_write(
+  my_data2,
+  schema = schema,
+  table  = table,
+  mode   = "append",
+  commit_author  = "Demo User",
+  commit_message = "Second demo append with adjustments"
+)
+
+```
+
+## 4. Time Travel & History
+
+We can now view the history of our table and "travel back" to see the data before the second commit.
+
+### Snapshot History
+
+```{r history}
+snaps <- datapond::db_snapshots()
+knitr::kable(snaps)
+
+```
+
+### Reading Historic Data
+
+By passing a timestamp, we can query exactly what was in the table at that moment.
+
+```{r time_travel}
+# Helper to get a timestamp just after a snapshot
+duck_ts_plus1 <- function(x) format(as.POSIXct(x) + 1, "%Y-%m-%d %H:%M:%S")
+
+if (nrow(snaps) >= 2) {
+  v_from <- duck_ts_plus1(snaps$snapshot_time[1])
+  
+  message("Reading data from Snapshot #1 time: ", v_from)
+  old_tbl <- datapond::db_lake_read(schema = schema, table = table, timestamp = v_from)
+  print(old_tbl %>% collect())
+}
+
+```
+
+## 5. Upsert Functionality
+
+DuckLake supports `db_upsert`, which identifies existing rows by a key and updates them while inserting new ones.
+
+```{r upsert}
+products_tbl <- "products"
+products_v1 <- tibble(
+  product_id = c(101, 102),
+  product    = c("Apples", "Bananas"),
+  price_eur  = c(1.20, 0.95)
+)
+
+# Initial Load
+datapond::db_lake_write(products_v1, schema = schema, table = products_tbl, mode = "overwrite")
+
+# Upsert (Update 102, Insert 103)
+products_v2 <- tibble(
+  product_id = c(102, 103),
+  product    = c("Bananas", "Cherries"),
+  price_eur  = c(1.05, 2.50)
+)
+
+datapond::db_upsert(
+  products_v2,
+  schema = schema,
+  table  = products_tbl,
+  by     = "product_id",
+  commit_message = "Price update and new product"
+)
+
+datapond::db_lake_read(schema = schema, table = products_tbl) %>% collect()
+
+```
+
+## 6. Inspecting the Directory Structure
+
+Now that we have written data, you can see how `datapond` organizes files on disk.
+
+```{r directory_view}
+# List the files created in our demo directory
+list.files(lake_root, recursive = TRUE)
+
+```
+
+## 7. Maintenance: Vacuuming the Lake
+
+Over time, your `my_lake_demo/data` folder will grow as every change creates new files. `db_vacuum()` identifies and removes data files that are no longer referenced by any active snapshots.
+
+### Dry Run
+
+It is best practice to perform a `dry_run` first. This returns a data frame of what *would* be deleted without actually removing anything.
+
+```{r vacuum_dry}
+# Check for files older than a specific threshold
+message("Checking for old snapshots (dry run):")
+vacuum_preview <- datapond::db_vacuum(
+  older_than = "0 days", # Using 0 for demo purposes to catch everything
+  dry_run = TRUE
+)
+
+print(vacuum_preview)
+
+```
+
+### Executing the Cleanup
+
+Once you are sure you no longer need the ability to "Time Travel" back to those specific versions, run the command with `dry_run = FALSE`.
+
+```{r vacuum_execute}
+# Physically delete the unreferenced files
+datapond::db_vacuum(
+  older_than = "0 days", 
+  dry_run = FALSE
+)
+
+message("Vacuum complete. Check your 'my_lake_demo/data' folder to see the file reduction.")
+
+```
+```{r cleanup}
+datapond::db_disconnect()
+
+```
+
+
