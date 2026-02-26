@@ -66,6 +66,28 @@
   }
 }
 
+# internal: auto-detect catalog type from metadata_path
+.db_detect_catalog_type <- function(metadata_path) {
+  path_lower <- tolower(metadata_path)
+
+  # Check for postgres connection string
+  if (grepl("^postgres(ql)?://", path_lower)) {
+    return("postgres")
+  }
+
+  # Check file extension
+
+  ext <- tools::file_ext(path_lower)
+  switch(ext,
+    sqlite = "sqlite",
+    db = "sqlite",
+    ducklake = "duckdb",
+    duckdb = "duckdb",
+    # Default to duckdb if no recognizable extension
+    "duckdb"
+  )
+}
+
 # internal: build the DuckLake connection string based on catalog type
 .db_build_ducklake_dsn <- function(catalog_type, metadata_path) {
   switch(catalog_type,
@@ -170,15 +192,14 @@ db_connect <- function(path = "//CSO-NAS/DataLake",
 #'
 #' @param duckdb_db DuckDB database file path. Use ":memory:" for in-memory.
 #' @param catalog DuckLake catalog name inside DuckDB (e.g. "cso")
-#' @param catalog_type Type of catalog database backend. One of:
+#' @param catalog_type Type of catalog database backend. If NULL (default),
+#'   auto-detected from metadata_path extension:
 #'   \itemize{
-#'     \item "duckdb" (default): Single-client local use. Metadata stored in .ducklake file.
-#'     \item "sqlite": Multi-client local use. Metadata stored in .sqlite file. 
-#'       Supports multiple readers + single writer with automatic retry.
-#'       Recommended for most CSO use cases with shared network drives.
-#'     \item "postgres": Multi-user lakehouse. Metadata stored in PostgreSQL database.
-#'       Requires PostgreSQL 12+ and connection string in metadata_path.
+#'     \item ".sqlite" or ".db" -> "sqlite"
+#'     \item ".ducklake" or ".duckdb" -> "duckdb"
+#'     \item "postgres://" connection string -> "postgres"
 #'   }
+#'   Can also be set explicitly to one of: "duckdb", "sqlite", "postgres".
 #' @param metadata_path Path or connection string for DuckLake metadata:
 #'   \itemize{
 #'     \item For "duckdb": file path (e.g. "metadata.ducklake")
@@ -200,9 +221,8 @@ db_connect <- function(path = "//CSO-NAS/DataLake",
 #'   data_path = "//CSO-NAS/DataLake"
 #' )
 #' 
-#' # SQLite catalog (multiple local users - RECOMMENDED for shared drives)
+#' # SQLite catalog (auto-detected from .sqlite extension)
 #' db_lake_connect(
-#'   catalog_type = "sqlite",
 #'   metadata_path = "//CSO-NAS/DataLake/catalog.sqlite",
 #'   data_path = "//CSO-NAS/DataLake/data"
 #' )
@@ -225,7 +245,7 @@ db_connect <- function(path = "//CSO-NAS/DataLake",
 #' @export
 db_lake_connect <- function(duckdb_db = ":memory:",
                        catalog = "cso",
-                       catalog_type = c("duckdb", "sqlite", "postgres"),
+                       catalog_type = NULL,
                        metadata_path = "metadata.ducklake",
                        data_path = "//CSO-NAS/DataLake",
                        snapshot_version = NULL,
@@ -247,8 +267,13 @@ db_lake_connect <- function(duckdb_db = ":memory:",
     }
   }
   
-  catalog_type <- match.arg(catalog_type)
-  
+  # Auto-detect catalog type from metadata_path if not specified
+ if (is.null(catalog_type)) {
+    catalog_type <- .db_detect_catalog_type(metadata_path)
+  } else {
+    catalog_type <- match.arg(catalog_type, c("duckdb", "sqlite", "postgres"))
+  }
+
   con <- DBI::dbConnect(duckdb::duckdb(), dbdir = duckdb_db)
   
   # Optional tuning
