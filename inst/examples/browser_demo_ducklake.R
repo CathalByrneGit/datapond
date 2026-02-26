@@ -187,7 +187,7 @@ cat("=" |> rep(60) |> paste(collapse = ""), "\n\n")
 cat("Schemas and tables:\n")
 for (sch in db_list_schemas()) {
   if (startsWith(sch, "_")) next  # skip metadata schemas
-  tables <- db_list_tables(sch)
+  tables <- db_tables(sch)
   cat(sprintf("  %s/ (%d tables)\n", sch, length(tables)))
   for (tbl in tables) {
     cat(sprintf("    - %s\n", tbl))

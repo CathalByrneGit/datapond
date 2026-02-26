@@ -331,7 +331,7 @@ db_lake_write(imports_data, schema = "trade", table = "imports")
 imports <- db_lake_read(schema = "trade", table = "imports")
 
 # List tables in a schema
-db_list_tables("trade")
+db_tables("trade")
 ```
 
 ### Schemas vs Sections
@@ -341,7 +341,7 @@ db_list_tables("trade")
 | Section (folder) | Schema |
 | Dataset (subfolder) | Table |
 | `db_list_sections()` | `db_list_schemas()` |
-| `db_list_datasets("Trade")` | `db_list_tables("trade")` |
+| `db_list_datasets("Trade")` | `db_tables("trade")` |
 
 They serve the same organisational purpose - grouping related data together.
 
@@ -665,7 +665,7 @@ imports <- db_lake_read(schema = "trade", table = "imports")
 
 # Discover available tables
 db_list_schemas()
-db_list_tables("trade")
+db_tables("trade")
 
 # Optionally partition for finer access control
 db_set_partitioning(schema = "trade", table = "imports", partition_by = c("year"))
@@ -746,7 +746,7 @@ db_lake_connect(
 
 # Discover what's available
 db_list_schemas()
-db_list_tables("trade")
+db_tables("trade")
 
 # Search for relevant data
 db_search("imports")

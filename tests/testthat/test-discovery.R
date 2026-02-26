@@ -330,25 +330,25 @@ test_that("db_list_schemas returns schema names", {
 })
 
 # ==============================================================================
-# Tests for db_list_tables() - DuckLake
+# Tests for db_tables() - DuckLake
 # ==============================================================================
 
-test_that("db_list_tables errors when not connected", {
+test_that("db_tables errors when not connected", {
   clean_db_env()
 
-  expect_error(db_list_tables(), "Not connected")
+  expect_error(db_tables(), "Not connected")
 })
 
-test_that("db_list_tables errors in hive mode", {
+test_that("db_tables errors in hive mode", {
   clean_db_env()
   db_connect(path = "/test")
 
-  expect_error(db_list_tables(), "hive mode")
+  expect_error(db_tables(), "hive mode")
 
   clean_db_env()
 })
 
-test_that("db_list_tables validates schema name", {
+test_that("db_tables validates schema name", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
   clean_db_env()
 
@@ -358,13 +358,13 @@ test_that("db_list_tables validates schema name", {
     data_path = temp_dir
   )
 
-  expect_error(db_list_tables(""), "non-empty")
-  expect_error(db_list_tables("test/schema"), "invalid characters")
+  expect_error(db_tables(""), "non-empty")
+  expect_error(db_tables("test/schema"), "invalid characters")
 
   clean_db_env()
 })
 
-test_that("db_list_tables returns table names", {
+test_that("db_tables returns table names", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
   clean_db_env()
 
@@ -383,7 +383,7 @@ test_that("db_list_tables returns table names", {
   DBI::dbExecute(con, "CREATE TABLE test.main.products (id INTEGER)")
   DBI::dbExecute(con, "CREATE TABLE test.main.orders (id INTEGER)")
 
-  tables <- db_list_tables()
+  tables <- db_tables()
 
   expect_true("products" %in% tables)
   expect_true("orders" %in% tables)
@@ -392,7 +392,7 @@ test_that("db_list_tables returns table names", {
   unlink(temp_dir, recursive = TRUE)
 })
 
-test_that("db_list_tables filters by schema", {
+test_that("db_tables filters by schema", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
   clean_db_env()
 
@@ -412,8 +412,8 @@ test_that("db_list_tables filters by schema", {
   DBI::dbExecute(con, "CREATE SCHEMA test.other")
   DBI::dbExecute(con, "CREATE TABLE test.other.other_table (id INTEGER)")
 
-  main_tables <- db_list_tables("main")
-  other_tables <- db_list_tables("other")
+  main_tables <- db_tables("main")
+  other_tables <- db_tables("other")
 
   expect_true("main_table" %in% main_tables)
   expect_false("other_table" %in% main_tables)

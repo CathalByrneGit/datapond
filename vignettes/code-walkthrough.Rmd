@@ -755,7 +755,7 @@ db_list_datasets <- function(section) {
 ### DuckLake Discovery
 
 ```{r}
-db_list_tables <- function(schema = "main") {
+db_tables <- function(schema = "main") {
   sql <- glue::glue("
     SELECT table_name
     FROM information_schema.tables

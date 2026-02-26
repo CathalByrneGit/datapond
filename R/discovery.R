@@ -63,7 +63,7 @@ db_list_datasets <- function(section) {
 
   curr_mode <- .db_get("mode")
   if (!is.null(curr_mode) && curr_mode != "hive") {
-    stop("Connected in DuckLake mode. Use db_list_tables() instead, or reconnect with db_connect().", call. = FALSE)
+    stop("Connected in DuckLake mode. Use db_tables() instead, or reconnect with db_connect().", call. = FALSE)
   }
 
   base_path <- .db_get("data_path")
@@ -178,14 +178,14 @@ db_list_schemas <- function() {
 #' @examples
 #' \dontrun{
 #' db_lake_connect()
-#' db_list_tables()
+#' db_tables()
 #' # [1] "imports" "exports" "products"
 #'
-#' db_list_tables("trade")
+#' db_tables("trade")
 #' # [1] "monthly_summary" "annual_totals"
 #' }
 #' @export
-db_list_tables <- function(schema = "main") {
+db_tables <- function(schema = "main") {
   schema <- .db_validate_name(schema, "schema")
 
   con <- .db_get_con()

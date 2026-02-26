@@ -469,7 +469,7 @@ db_browser_server <- function(id, height = "500px") {
   }
   
   tree_items <- lapply(schemas, function(sch) {
-    tables <- tryCatch(db_list_tables(sch), error = function(e) character(0))
+    tables <- tryCatch(db_tables(sch), error = function(e) character(0))
     views <- tryCatch(db_list_views(sch), error = function(e) character(0))
     
     if (length(tables) == 0 && length(views) == 0) {

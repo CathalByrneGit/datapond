@@ -83,7 +83,7 @@ Source: [DuckLake Documentation](https://duckdb.org/docs/stable/core_extensions/
 | Operation | Implementation | Security Source |
 |-----------|----------------|-----------------|
 | `db_list_schemas()` | SQL query to catalog | Catalog access only |
-| `db_list_tables(schema)` | SQL query to catalog | Catalog access only |
+| `db_tables(schema)` | SQL query to catalog | Catalog access only |
 | `db_lake_read(schema, table)` | DuckDB via catalog → parquet | **Both** catalog + data folder |
 | `db_get_docs(schema, table)` | SQL query to `_metadata.table_docs` | Catalog access only |
 | `db_search()` | SQL query to catalog | Catalog access only |
