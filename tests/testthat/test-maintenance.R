@@ -10,33 +10,12 @@ test_that("db_vacuum errors when not connected", {
   expect_error(db_vacuum(), "Not connected")
 })
 
-test_that("db_vacuum errors in hive mode", {
-  clean_db_env()
-  db_connect(path = "/test")
-
-  expect_error(db_vacuum(), "hive mode")
-
-  clean_db_env()
-})
-
-test_that("db_vacuum errors without catalog", {
-  skip_if_not(ducklake_available(), "DuckLake extension not available")
-  clean_db_env()
-
-  # Connect in hive mode - simulates no catalog configured
-  db_connect(path = "/test")
-
-  expect_error(db_vacuum(), "hive mode")
-
-  clean_db_env()
-})
-
 test_that("db_vacuum validates older_than argument", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
   clean_db_env()
 
   temp_dir <- tempdir()
-  db_lake_connect(
+  db_connect(
     metadata_path = file.path(temp_dir, "test_vacuum.ducklake"),
     data_path = temp_dir
   )
@@ -54,7 +33,7 @@ test_that("db_vacuum dry_run reports without deleting", {
   temp_dir <- tempfile(pattern = "vacuum_dry_test_")
   dir.create(temp_dir)
 
-  db_lake_connect(
+  db_connect(
     catalog = "test",
     metadata_path = file.path(temp_dir, "catalog.ducklake"),
     data_path = temp_dir
@@ -88,7 +67,7 @@ test_that("db_vacuum accepts POSIXct timestamp", {
   temp_dir <- tempfile(pattern = "vacuum_posix_test_")
   dir.create(temp_dir)
 
-  db_lake_connect(
+  db_connect(
     catalog = "test",
     metadata_path = file.path(temp_dir, "catalog.ducklake"),
     data_path = temp_dir
@@ -115,7 +94,7 @@ test_that("db_vacuum accepts difftime", {
   temp_dir <- tempfile(pattern = "vacuum_diff_test_")
   dir.create(temp_dir)
 
-  db_lake_connect(
+  db_connect(
     catalog = "test",
     metadata_path = file.path(temp_dir, "catalog.ducklake"),
     data_path = temp_dir
@@ -144,21 +123,12 @@ test_that("db_rollback errors when not connected", {
   expect_error(db_rollback(table = "test", version = 1), "Not connected")
 })
 
-test_that("db_rollback errors in hive mode", {
-  clean_db_env()
-  db_connect(path = "/test")
-
-  expect_error(db_rollback(table = "test", version = 1), "hive mode")
-
-  clean_db_env()
-})
-
 test_that("db_rollback validates name arguments", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
   clean_db_env()
 
   temp_dir <- tempdir()
-  db_lake_connect(
+  db_connect(
     metadata_path = file.path(temp_dir, "test_rb.ducklake"),
     data_path = temp_dir
   )
@@ -174,7 +144,7 @@ test_that("db_rollback requires version or timestamp", {
   clean_db_env()
 
   temp_dir <- tempdir()
-  db_lake_connect(
+  db_connect(
     metadata_path = file.path(temp_dir, "test_rb2.ducklake"),
     data_path = temp_dir
   )
@@ -189,7 +159,7 @@ test_that("db_rollback rejects both version and timestamp", {
   clean_db_env()
 
   temp_dir <- tempdir()
-  db_lake_connect(
+  db_connect(
     metadata_path = file.path(temp_dir, "test_rb3.ducklake"),
     data_path = temp_dir
   )
@@ -209,7 +179,7 @@ test_that("db_rollback by version works", {
   temp_dir <- tempfile(pattern = "rollback_test_")
   dir.create(temp_dir)
 
-  db_lake_connect(
+  db_connect(
     catalog = "test",
     metadata_path = file.path(temp_dir, "catalog.ducklake"),
     data_path = temp_dir
@@ -229,7 +199,7 @@ test_that("db_rollback by version works", {
   DBI::dbExecute(con, "UPDATE test.main.products SET name = 'Modified' WHERE id = 1")
 
   # Verify modification
-  current <- db_lake_read(table = "products") |> dplyr::collect()
+  current <- db_read(table = "products") |> dplyr::collect()
   expect_equal(current$name, "Modified")
 
   # Rollback to initial version
@@ -239,7 +209,7 @@ test_that("db_rollback by version works", {
   )
 
   # Verify rollback
-  after_rollback <- db_lake_read(table = "products") |> dplyr::collect()
+  after_rollback <- db_read(table = "products") |> dplyr::collect()
   expect_equal(after_rollback$name, "Original")
 
   clean_db_env()
@@ -253,7 +223,7 @@ test_that("db_rollback returns qualified table name", {
   temp_dir <- tempfile(pattern = "rollback_return_test_")
   dir.create(temp_dir)
 
-  db_lake_connect(
+  db_connect(
     catalog = "mycat",
     metadata_path = file.path(temp_dir, "catalog.ducklake"),
     data_path = temp_dir
@@ -283,21 +253,12 @@ test_that("db_diff errors when not connected", {
   expect_error(db_diff(table = "test", from_version = 1), "Not connected")
 })
 
-test_that("db_diff errors in hive mode", {
-  clean_db_env()
-  db_connect(path = "/test")
-
-  expect_error(db_diff(table = "test", from_version = 1), "hive mode")
-
-  clean_db_env()
-})
-
 test_that("db_diff validates name arguments", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
   clean_db_env()
 
   temp_dir <- tempdir()
-  db_lake_connect(
+  db_connect(
     metadata_path = file.path(temp_dir, "test_diff.ducklake"),
     data_path = temp_dir
   )
@@ -312,7 +273,7 @@ test_that("db_diff requires from reference", {
   clean_db_env()
 
   temp_dir <- tempdir()
-  db_lake_connect(
+  db_connect(
     metadata_path = file.path(temp_dir, "test_diff2.ducklake"),
     data_path = temp_dir
   )
@@ -329,7 +290,7 @@ test_that("db_diff validates key_cols", {
   temp_dir <- tempfile(pattern = "diff_keycols_test_")
   dir.create(temp_dir)
 
-  db_lake_connect(
+  db_connect(
     catalog = "test",
     metadata_path = file.path(temp_dir, "catalog.ducklake"),
     data_path = temp_dir
@@ -358,7 +319,7 @@ test_that("db_diff returns added and removed rows", {
   temp_dir <- tempfile(pattern = "diff_test_")
   dir.create(temp_dir)
 
-  db_lake_connect(
+  db_connect(
     catalog = "test",
     metadata_path = file.path(temp_dir, "catalog.ducklake"),
     data_path = temp_dir
@@ -401,7 +362,7 @@ test_that("db_diff with key_cols returns modified rows", {
   temp_dir <- tempfile(pattern = "diff_modified_test_")
   dir.create(temp_dir)
 
-  db_lake_connect(
+  db_connect(
     catalog = "test",
     metadata_path = file.path(temp_dir, "catalog.ducklake"),
     data_path = temp_dir
@@ -438,7 +399,7 @@ test_that("db_diff collect=FALSE returns lazy tbls", {
   temp_dir <- tempfile(pattern = "diff_lazy_test_")
   dir.create(temp_dir)
 
-  db_lake_connect(
+  db_connect(
     catalog = "test",
     metadata_path = file.path(temp_dir, "catalog.ducklake"),
     data_path = temp_dir
@@ -475,8 +436,14 @@ test_that("db_query errors when not connected", {
 })
 
 test_that("db_query validates sql argument", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
   clean_db_env()
-  db_connect(path = tempdir())
+
+  temp_dir <- tempdir()
+  db_connect(
+    metadata_path = file.path(temp_dir, "test_query.ducklake"),
+    data_path = temp_dir
+  )
 
   expect_error(db_query(""), "non-empty string")
   expect_error(db_query(123), "non-empty string")
@@ -487,8 +454,14 @@ test_that("db_query validates sql argument", {
 })
 
 test_that("db_query returns collected data.frame by default", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
   clean_db_env()
-  db_connect(path = tempdir())
+
+  temp_dir <- tempdir()
+  db_connect(
+    metadata_path = file.path(temp_dir, "test_query2.ducklake"),
+    data_path = temp_dir
+  )
 
   result <- db_query("SELECT 1 AS value, 'test' AS name")
 
@@ -500,8 +473,14 @@ test_that("db_query returns collected data.frame by default", {
 })
 
 test_that("db_query with collect=FALSE returns lazy tbl", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
   clean_db_env()
-  db_connect(path = tempdir())
+
+  temp_dir <- tempdir()
+  db_connect(
+    metadata_path = file.path(temp_dir, "test_query3.ducklake"),
+    data_path = temp_dir
+  )
 
   result <- db_query("SELECT 1 AS value", collect = FALSE)
 
@@ -514,25 +493,14 @@ test_that("db_query with collect=FALSE returns lazy tbl", {
   clean_db_env()
 })
 
-test_that("db_query works in hive mode", {
-  clean_db_env()
-  db_connect(path = tempdir())
-
-  # Simple query should work
-  result <- db_query("SELECT 42 AS answer")
-  expect_equal(result$answer, 42)
-
-  clean_db_env()
-})
-
-test_that("db_query works in DuckLake mode", {
+test_that("db_query works with DuckLake tables", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
   clean_db_env()
 
   temp_dir <- tempfile(pattern = "query_test_")
   dir.create(temp_dir)
 
-  db_lake_connect(
+  db_connect(
     catalog = "test",
     metadata_path = file.path(temp_dir, "catalog.ducklake"),
     data_path = temp_dir
@@ -552,8 +520,14 @@ test_that("db_query works in DuckLake mode", {
 })
 
 test_that("db_query propagates SQL errors", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
   clean_db_env()
-  db_connect(path = tempdir())
+
+  temp_dir <- tempdir()
+  db_connect(
+    metadata_path = file.path(temp_dir, "test_query4.ducklake"),
+    data_path = temp_dir
+  )
 
   expect_error(db_query("SELECT * FROM nonexistent_table_xyz"))
 

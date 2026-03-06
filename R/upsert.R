@@ -32,12 +32,12 @@
 db_table_cols <- function(schema = "main", table) {
   con <- .db_get_con()
   if (is.null(con)) {
-    stop("Not connected. Use db_lake_connect() first.", call. = FALSE)
+    stop("Not connected. Use db_connect() first.", call. = FALSE)
   }
 
   catalog <- .db_get("catalog")
   if (is.null(catalog)) {
-    stop("No DuckLake catalog configured. Use db_lake_connect() first.", call. = FALSE)
+    stop("No DuckLake catalog configured. Use db_connect() first.", call. = FALSE)
   }
 
   .db_relation_cols(con, catalog, schema, table)
@@ -52,12 +52,12 @@ db_table_cols <- function(schema = "main", table) {
 db_view_cols <- function(schema = "main", view) {
   con <- .db_get_con()
   if (is.null(con)) {
-    stop("Not connected. Use db_lake_connect() first.", call. = FALSE)
+    stop("Not connected. Use db_connect() first.", call. = FALSE)
   }
 
   catalog <- .db_get("catalog")
   if (is.null(catalog)) {
-    stop("No DuckLake catalog configured. Use db_lake_connect() first.", call. = FALSE)
+    stop("No DuckLake catalog configured. Use db_connect() first.", call. = FALSE)
   }
 
   .db_relation_cols(con, catalog, schema, view)
@@ -141,17 +141,12 @@ db_upsert <- function(data,
 
   con <- .db_get_con()
   if (is.null(con)) {
-    stop("Not connected. Use db_lake_connect() first.", call. = FALSE)
-  }
-
-  curr_mode <- .db_get("mode")
-  if (!is.null(curr_mode) && curr_mode != "ducklake") {
-    stop("Connected in hive mode. Upsert is only supported for DuckLake. Reconnect with db_lake_connect().", call. = FALSE)
+    stop("Not connected. Use db_connect() first.", call. = FALSE)
   }
 
   catalog <- .db_get("catalog")
   if (is.null(catalog)) {
-    stop("No DuckLake catalog configured. Use db_lake_connect() first.", call. = FALSE)
+    stop("No DuckLake catalog configured. Use db_connect() first.", call. = FALSE)
   }
 
   qname <- glue::glue("{catalog}.{schema}.{table}")

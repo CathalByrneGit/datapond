@@ -37,6 +37,6 @@ NULL
 
   packageStartupMessage(
     "datapond ", utils::packageVersion("datapond"), "\n",
-    "Use db_connect() for hive mode or db_lake_connect() for DuckLake mode."
+    "Use db_connect() to connect to a DuckLake catalog."
   )
 }

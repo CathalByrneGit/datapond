@@ -1,144 +1,12 @@
 # R/discovery.R
 
-# ---- Hive Discovery ----
-
-#' List sections in the hive data lake
-#'
-#' @description Returns all top-level section folders in the data lake.
-#' @return Character vector of section names
-#' @examples
-#' \dontrun{
-#' db_connect()
-#' db_list_sections()
-#' # [1] "Trade" "Labour" "Health" "Agriculture"
-#' }
-#' @export
-db_list_sections <- function() {
-  con <- .db_get_con()
-  if (is.null(con)) {
-    stop("Not connected. Use db_connect() first.", call. = FALSE)
-  }
-
-  curr_mode <- .db_get("mode")
-  if (!is.null(curr_mode) && curr_mode != "hive") {
-    stop("Connected in DuckLake mode. Use db_list_schemas() instead, or reconnect with db_connect().", call. = FALSE)
-  }
-
-  base_path <- .db_get("data_path")
-  if (is.null(base_path)) {
-    stop("No data path configured.", call. = FALSE)
-  }
-
-  if (!dir.exists(base_path)) {
-    stop("Data path does not exist or is not accessible: ", base_path, call. = FALSE)
-  }
-
-  # List directories only (sections are folders)
-  all_items <- list.dirs(base_path, full.names = FALSE, recursive = FALSE)
-
- # Filter out hidden folders and system folders (like _catalog)
-  all_items[!grepl("^[\\._]", all_items)]
-}
-
-
-#' List datasets within a section
-#'
-#' @description Returns all datasets (subfolders) within a given section.
-#' @param section The section name (e.g. "Trade")
-#' @return Character vector of dataset names
-#' @examples
-#' \dontrun{
-#' db_connect()
-#' db_list_datasets("Trade")
-#' # [1] "Imports" "Exports" "Balance"
-#' }
-#' @export
-db_list_datasets <- function(section) {
-  section <- .db_validate_name(section, "section")
-
- con <- .db_get_con()
-  if (is.null(con)) {
-    stop("Not connected. Use db_connect() first.", call. = FALSE)
-  }
-
-  curr_mode <- .db_get("mode")
-  if (!is.null(curr_mode) && curr_mode != "hive") {
-    stop("Connected in DuckLake mode. Use db_tables() instead, or reconnect with db_connect().", call. = FALSE)
-  }
-
-  base_path <- .db_get("data_path")
-  if (is.null(base_path)) {
-    stop("No data path configured.", call. = FALSE)
-  }
-
-  section_path <- file.path(base_path, section)
-
-  if (!dir.exists(section_path)) {
-    stop("Section does not exist or is not accessible: ", section, call. = FALSE)
-  }
-
-  # List directories only (datasets are folders)
-  all_items <- list.dirs(section_path, full.names = FALSE, recursive = FALSE)
-
-  # Filter out hidden folders and partition folders (year=, month=, etc.)
-  all_items <- all_items[!grepl("^\\.", all_items)]
-  all_items[!grepl("=", all_items)]
-}
-
-
-#' Check if a hive dataset exists
-#'
-#' @param section The section name
-#' @param dataset The dataset name
-#' @return Logical TRUE if exists, FALSE otherwise
-#' @examples
-#' \dontrun{
-#' db_connect()
-#' db_dataset_exists("Trade", "Imports")
-#' # [1] TRUE
-#' }
-#' @export
-db_dataset_exists <- function(section, dataset) {
-  section <- .db_validate_name(section, "section")
-  dataset <- .db_validate_name(dataset, "dataset")
-
-  con <- .db_get_con()
-  if (is.null(con)) {
-    stop("Not connected. Use db_connect() first.", call. = FALSE)
-  }
-
-  curr_mode <- .db_get("mode")
-  if (!is.null(curr_mode) && curr_mode != "hive") {
-    stop("Connected in DuckLake mode. Use db_table_exists() instead, or reconnect with db_connect().", call. = FALSE)
-  }
-
-  base_path <- .db_get("data_path")
-  if (is.null(base_path)) {
-    stop("No data path configured.", call. = FALSE)
-  }
-
-  dataset_path <- file.path(base_path, section, dataset)
-
-  # Check folder exists and contains at least one parquet file
- if (!dir.exists(dataset_path)) {
-    return(FALSE)
-  }
-
-  # Look for any parquet files (including in partition subfolders)
-  parquet_files <- list.files(dataset_path, pattern = "\\.parquet$", recursive = TRUE)
-  length(parquet_files) > 0
-}
-
-
-# ---- DuckLake Discovery ----
-
 #' List schemas in the DuckLake catalog
 #'
 #' @description Returns all schemas in the connected DuckLake catalog.
 #' @return Character vector of schema names
 #' @examples
 #' \dontrun{
-#' db_lake_connect()
+#' db_connect()
 #' db_list_schemas()
 #' # [1] "main" "trade" "labour"
 #' }
@@ -146,17 +14,12 @@ db_dataset_exists <- function(section, dataset) {
 db_list_schemas <- function() {
   con <- .db_get_con()
   if (is.null(con)) {
-    stop("Not connected. Use db_lake_connect() first.", call. = FALSE)
-  }
-
-  curr_mode <- .db_get("mode")
-  if (!is.null(curr_mode) && curr_mode != "ducklake") {
-    stop("Connected in hive mode. Use db_list_sections() instead, or reconnect with db_lake_connect().", call. = FALSE)
+    stop("Not connected. Use db_connect() first.", call. = FALSE)
   }
 
   catalog <- .db_get("catalog")
   if (is.null(catalog)) {
-    stop("No DuckLake catalog configured. Use db_lake_connect() first.", call. = FALSE)
+    stop("No DuckLake catalog configured. Use db_connect() first.", call. = FALSE)
   }
 
   sql <- glue::glue("
@@ -177,7 +40,7 @@ db_list_schemas <- function() {
 #' @return Character vector of table names
 #' @examples
 #' \dontrun{
-#' db_lake_connect()
+#' db_connect()
 #' db_tables()
 #' # [1] "imports" "exports" "products"
 #'
@@ -190,17 +53,12 @@ db_tables <- function(schema = "main") {
 
   con <- .db_get_con()
   if (is.null(con)) {
-    stop("Not connected. Use db_lake_connect() first.", call. = FALSE)
-  }
-
-  curr_mode <- .db_get("mode")
-  if (!is.null(curr_mode) && curr_mode != "ducklake") {
-    stop("Connected in hive mode. Use db_list_datasets() instead, or reconnect with db_lake_connect().", call. = FALSE)
+    stop("Not connected. Use db_connect() first.", call. = FALSE)
   }
 
   catalog <- .db_get("catalog")
   if (is.null(catalog)) {
-    stop("No DuckLake catalog configured. Use db_lake_connect() first.", call. = FALSE)
+    stop("No DuckLake catalog configured. Use db_connect() first.", call. = FALSE)
   }
 
   sql <- glue::glue("
@@ -227,17 +85,12 @@ db_list_views <- function(schema = "main") {
 
   con <- .db_get_con()
   if (is.null(con)) {
-    stop("Not connected. Use db_lake_connect() first.", call. = FALSE)
-  }
-
-  curr_mode <- .db_get("mode")
-  if (!is.null(curr_mode) && curr_mode != "ducklake") {
-    stop("Connected in hive mode. Views are only available for DuckLake.", call. = FALSE)
+    stop("Not connected. Use db_connect() first.", call. = FALSE)
   }
 
   catalog <- .db_get("catalog")
   if (is.null(catalog)) {
-    stop("No DuckLake catalog configured. Use db_lake_connect() first.", call. = FALSE)
+    stop("No DuckLake catalog configured. Use db_connect() first.", call. = FALSE)
   }
 
   sql <- glue::glue("
@@ -260,7 +113,7 @@ db_list_views <- function(schema = "main") {
 #' @return Logical TRUE if exists, FALSE otherwise
 #' @examples
 #' \dontrun{
-#' db_lake_connect()
+#' db_connect()
 #' db_table_exists(table = "imports")
 #' # [1] TRUE
 #' }
@@ -271,17 +124,12 @@ db_table_exists <- function(schema = "main", table) {
 
   con <- .db_get_con()
   if (is.null(con)) {
-    stop("Not connected. Use db_lake_connect() first.", call. = FALSE)
-  }
-
-  curr_mode <- .db_get("mode")
-  if (!is.null(curr_mode) && curr_mode != "ducklake") {
-    stop("Connected in hive mode. Use db_dataset_exists() instead, or reconnect with db_lake_connect().", call. = FALSE)
+    stop("Not connected. Use db_connect() first.", call. = FALSE)
   }
 
   catalog <- .db_get("catalog")
   if (is.null(catalog)) {
-    stop("No DuckLake catalog configured. Use db_lake_connect() first.", call. = FALSE)
+    stop("No DuckLake catalog configured. Use db_connect() first.", call. = FALSE)
   }
 
   # Use the internal helper
@@ -301,7 +149,7 @@ db_table_exists <- function(schema = "main", table) {
 #' @return Invisibly returns the schema name
 #' @examples
 #' \dontrun{
-#' db_lake_connect(data_path = "//CSO-NAS/DataLake")
+#' db_connect(data_path = "//CSO-NAS/DataLake")
 #'
 #' db_create_schema("trade")
 #' db_create_schema("labour")
@@ -319,17 +167,12 @@ db_create_schema <- function(schema) {
 
   con <- .db_get_con()
   if (is.null(con)) {
-    stop("Not connected. Use db_lake_connect() first.", call. = FALSE)
-  }
-
-  curr_mode <- .db_get("mode")
-  if (!is.null(curr_mode) && curr_mode != "ducklake") {
-    stop("Connected in hive mode. Schemas are only available for DuckLake.", call. = FALSE)
+    stop("Not connected. Use db_connect() first.", call. = FALSE)
   }
 
   catalog <- .db_get("catalog")
   if (is.null(catalog)) {
-    stop("No DuckLake catalog configured. Use db_lake_connect() first.", call. = FALSE)
+    stop("No DuckLake catalog configured. Use db_connect() first.", call. = FALSE)
   }
 
   sql <- glue::glue("CREATE SCHEMA IF NOT EXISTS {catalog}.{schema}")
@@ -360,7 +203,7 @@ db_create_schema <- function(schema) {
 #' @return Invisibly returns TRUE on success
 #' @examples
 #' \dontrun{
-#' db_lake_connect(...)
+#' db_connect(...)
 #'
 #' # Partition by year and month columns
 #' db_set_partitioning("trade", "imports", c("year", "month"))
@@ -378,17 +221,12 @@ db_set_partitioning <- function(schema = "main", table, partition_by) {
 
   con <- .db_get_con()
   if (is.null(con)) {
-    stop("Not connected. Use db_lake_connect() first.", call. = FALSE)
-  }
-
-  curr_mode <- .db_get("mode")
-  if (!is.null(curr_mode) && curr_mode != "ducklake") {
-    stop("Connected in hive mode. Partitioning is only available for DuckLake.", call. = FALSE)
+    stop("Not connected. Use db_connect() first.", call. = FALSE)
   }
 
   catalog <- .db_get("catalog")
   if (is.null(catalog)) {
-    stop("No DuckLake catalog configured. Use db_lake_connect() first.", call. = FALSE)
+    stop("No DuckLake catalog configured. Use db_connect() first.", call. = FALSE)
   }
 
   qname <- paste0(catalog, ".", schema, ".", table)
@@ -435,7 +273,7 @@ db_set_partitioning <- function(schema = "main", table, partition_by) {
 #' @return A character vector of partition key expressions, or NULL if not partitioned
 #' @examples
 #' \dontrun{
-#' db_lake_connect(...)
+#' db_connect(...)
 #' db_set_partitioning("trade", "imports", c("year", "month"))
 #' db_get_partitioning("trade", "imports")
 #' #> [1] "year" "month"
@@ -447,12 +285,7 @@ db_get_partitioning <- function(schema = "main", table) {
 
   con <- .db_get_con()
   if (is.null(con)) {
-    stop("Not connected. Use db_lake_connect() first.", call. = FALSE)
-  }
-
-  curr_mode <- .db_get("mode")
-  if (!is.null(curr_mode) && curr_mode != "ducklake") {
-    stop("Connected in hive mode. Partitioning is only available for DuckLake.", call. = FALSE)
+    stop("Not connected. Use db_connect() first.", call. = FALSE)
   }
 
   catalog <- .db_get("catalog")

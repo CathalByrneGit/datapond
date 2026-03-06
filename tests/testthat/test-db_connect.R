@@ -83,8 +83,8 @@ test_that(".db_validate_name rejects invalid names", {
 test_that(".db_validate_name uses custom arg name in errors", {
   validate <- datapond:::.db_validate_name
 
-  expect_error(validate("", arg = "section"), "section must be a single")
-  expect_error(validate("bad/name", arg = "dataset"), "dataset contains invalid")
+  expect_error(validate("", arg = "schema"), "schema must be a single")
+  expect_error(validate("bad/name", arg = "table"), "table contains invalid")
 })
 
 # ==============================================================================
@@ -183,154 +183,6 @@ test_that(".db_build_ducklake_dsn errors on unknown catalog type", {
 })
 
 # ==============================================================================
-# Tests for db_connect() - Hive Mode
-# ==============================================================================
-
-test_that("db_connect creates connection and stores state", {
-  clean_db_env()
-
-  con <- db_connect(path = "/test/path", db = ":memory:")
-
-  # Returns a valid connection
- expect_true(DBI::dbIsValid(con))
-
-  # Stored correct state
-  env <- datapond:::.db_env
-  expect_equal(env$mode, "hive")
-  expect_equal(env$data_path, "/test/path")
-  expect_equal(env$db_path, ":memory:")
-  expect_true(DBI::dbIsValid(env$con))
-
-  clean_db_env()
-})
-
-test_that("db_connect returns existing connection on second call", {
-  clean_db_env()
-
-  con1 <- db_connect(path = "/path1", db = ":memory:")
-  con2 <- db_connect(path = "/path2", db = ":memory:")  # Different path
-
-  # Should return same connection
-  expect_identical(con1, con2)
-
-  # Path should still be from first call
-  expect_equal(datapond:::.db_env$data_path, "/path1")
-
-  clean_db_env()
-})
-
-test_that("db_lake_connect auto-disconnects from hive mode", {
-  skip_if_not(ducklake_available(), "DuckLake extension not available")
-  clean_db_env()
-
-  temp_dir <- tempfile(pattern = "mode_switch_")
-  dir.create(temp_dir)
-
-  # Connect in hive mode first
-  con1 <- db_connect(path = temp_dir, db = ":memory:")
-  expect_equal(datapond:::.db_get("mode"), "hive")
-
-  # Now connect in DuckLake mode - should auto-disconnect
-  expect_message(
-    con2 <- db_lake_connect(
-      catalog = "test",
-      metadata_path = file.path(temp_dir, "cat.ducklake"),
-      data_path = temp_dir
-    ),
-    "Disconnecting from hive mode"
-  )
-
-  # Should now be in DuckLake mode
-  expect_equal(datapond:::.db_get("mode"), "ducklake")
-
-  # Connections should be different (new connection was made)
-  expect_false(identical(con1, con2))
-
-  clean_db_env()
-  unlink(temp_dir, recursive = TRUE)
-})
-
-test_that("db_connect auto-disconnects from DuckLake mode", {
-  skip_if_not(ducklake_available(), "DuckLake extension not available")
-  clean_db_env()
-
-  temp_dir <- tempfile(pattern = "mode_switch2_")
-  dir.create(temp_dir)
-
-  # Connect in DuckLake mode first
-  con1 <- db_lake_connect(
-    catalog = "test",
-    metadata_path = file.path(temp_dir, "cat.ducklake"),
-    data_path = temp_dir
-  )
-  expect_equal(datapond:::.db_get("mode"), "ducklake")
-
-  # Now connect in hive mode - should auto-disconnect
-  expect_message(
-    con2 <- db_connect(path = temp_dir, db = ":memory:"),
-    "Disconnecting from DuckLake mode"
-  )
-
-  # Should now be in hive mode
-  expect_equal(datapond:::.db_get("mode"), "hive")
-
-  clean_db_env()
-  unlink(temp_dir, recursive = TRUE)
-})
-
-test_that("db_connect respects threads parameter", {
-  clean_db_env()
-
-  con <- db_connect(path = "/test", db = ":memory:", threads = 2)
-
-  result <- DBI::dbGetQuery(con, "SELECT current_setting('threads') as threads")
-  expect_equal(as.integer(result$threads), 2L)
-
-  clean_db_env()
-})
-
-test_that("db_connect respects memory_limit parameter", {
-  clean_db_env()
-
-  con <- db_connect(path = "/test", db = ":memory:", memory_limit = "1GB")
-
-  result <- DBI::dbGetQuery(con, "SELECT current_setting('memory_limit') as mem")
-  # DuckDB returns format like "1.0 GiB" or similar - just check it's set to something
-  expect_true(nchar(result$mem) > 0)
-
-  clean_db_env()
-})
-
-test_that("db_connect can load extensions", {
-  skip_if_not_installed("duckdb")
-  clean_db_env()
-
-  # json extension is built-in and should always work
-  con <- db_connect(path = "/test", db = ":memory:", load_extensions = "json")
-
-  # If we got here without error, extension loaded successfully
-  expect_true(DBI::dbIsValid(con))
-
-  clean_db_env()
-})
-
-test_that("db_connect validates extension names", {
-  clean_db_env()
-
-  expect_error(
-    db_connect(path = "/test", db = ":memory:", load_extensions = "../bad"),
-    "potentially dangerous characters"
-  )
-
-  expect_error(
-    db_connect(path = "/test", db = ":memory:", load_extensions = "ext; DROP"),
-    "potentially dangerous characters"
-  )
-
-  clean_db_env()
-})
-
-# ==============================================================================
 # Tests for db_disconnect()
 # ==============================================================================
 
@@ -339,42 +191,6 @@ test_that("db_disconnect returns FALSE when not connected", {
 
   result <- db_disconnect()
   expect_false(result)
-})
-
-test_that("db_disconnect clears all state", {
-  clean_db_env()
-
-  # Connect first
-  con <- db_connect(path = "/test", db = ":memory:")
-  expect_true(DBI::dbIsValid(con))
-
-  # Disconnect
-  result <- db_disconnect()
-  expect_true(result)
-
-  # State should be cleared
-  env <- datapond:::.db_env
-  expect_false(exists("con", envir = env))
-  expect_false(exists("mode", envir = env))
-  expect_false(exists("data_path", envir = env))
-
-  # Original connection should be invalid
-  expect_false(DBI::dbIsValid(con))
-})
-
-test_that("db_disconnect allows reconnection", {
-  clean_db_env()
-
-  # Connect, disconnect, reconnect
-  con1 <- db_connect(path = "/path1", db = ":memory:")
-  db_disconnect()
-  con2 <- db_connect(path = "/path2", db = ":memory:")
-
-  # Should be a new connection with new path
-  expect_true(DBI::dbIsValid(con2))
-  expect_equal(datapond:::.db_env$data_path, "/path2")
-
-  clean_db_env()
 })
 
 # ==============================================================================
@@ -387,99 +203,40 @@ test_that("db_status returns correct status when disconnected", {
   status <- db_status(verbose = FALSE)
 
   expect_false(status$connected)
-  expect_true(is.na(status$mode))
   expect_true(is.na(status$data_path))
 })
 
-test_that("db_status returns correct status for hive mode", {
-  clean_db_env()
-
-  db_connect(path = "/test/lake", db = ":memory:")
-  status <- db_status(verbose = FALSE)
-
-  expect_true(status$connected)
-  expect_equal(status$mode, "hive")
-  expect_equal(status$data_path, "/test/lake")
-  expect_equal(status$db_path, ":memory:")
-  expect_true(is.na(status$catalog))  # Not set in hive mode
-  expect_true(is.na(status$catalog_type))  # Not set in hive mode
-
-  clean_db_env()
-})
-
-test_that("db_status verbose mode prints output", {
-  clean_db_env()
-
-  db_connect(path = "/test/lake", db = ":memory:")
-
-  # Capture output
-  output <- capture.output(db_status(verbose = TRUE))
-
-  expect_true(any(grepl("Connected", output)))
-  expect_true(any(grepl("hive", output)))
-  expect_true(any(grepl("/test/lake", output)))
-
-  clean_db_env()
-})
-
-test_that("db_status verbose mode returns invisible status", {
-  clean_db_env()
-
-  db_connect(path = "/test/lake", db = ":memory:")
-
-  # Capture output and result
-  output <- capture.output({
-    result <- db_status(verbose = TRUE)
-  })
-
-  # Should still return the status list
-  expect_true(result$connected)
-  expect_equal(result$mode, "hive")
-
-  clean_db_env()
-})
-
 # ==============================================================================
-# Tests for db_lake_connect() - DuckLake Mode
+# Tests for db_connect() - DuckLake Mode
 # ==============================================================================
 
-# Note: DuckLake tests are more limited because the extension may not be available
-# We test what we can without requiring DuckLake to actually connect
-
-test_that("db_lake_connect validates catalog_type", {
+test_that("db_connect validates catalog_type", {
   clean_db_env()
 
   # Invalid catalog type should error (match.arg)
   expect_error(
-    db_lake_connect(catalog_type = "mysql"),
+    db_connect(catalog_type = "mysql"),
     "'arg' should be one of"
   )
 
   expect_error(
-    db_lake_connect(catalog_type = "invalid"),
+    db_connect(catalog_type = "invalid"),
     "'arg' should be one of"
   )
 })
 
-test_that("db_lake_connect validates catalog name", {
+test_that("db_connect validates catalog name", {
   clean_db_env()
 
-  # Note: This will fail at DuckLake attach, but should get past validation
-  # if catalog name is valid. With invalid name, should fail earlier.
   expect_error(
-    db_lake_connect(catalog = "../bad"),
+    db_connect(catalog = "../bad"),
     "potentially dangerous characters"
   )
 
   expect_error(
-    db_lake_connect(catalog = "cat; DROP"),
+    db_connect(catalog = "cat; DROP"),
     "potentially dangerous characters"
   )
-})
-
-test_that("db_lake_connect returns existing connection on second call", {
-  skip("Requires DuckLake extension")
-  # This test would be similar to db_connect test
 })
 
 # Helper to check if DuckLake is available
@@ -493,7 +250,7 @@ ducklake_available <- function() {
   }, error = function(e) FALSE)
 }
 
-test_that("db_lake_connect works with DuckDB catalog", {
+test_that("db_connect works with DuckDB catalog", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
   clean_db_env()
 
@@ -503,7 +260,7 @@ test_that("db_lake_connect works with DuckDB catalog", {
   data_dir <- file.path(temp_dir, "test_data")
   dir.create(data_dir, showWarnings = FALSE)
 
-  con <- db_lake_connect(
+  con <- db_connect(
     catalog = "test",
     catalog_type = "duckdb",
     metadata_path = metadata_file,
@@ -513,7 +270,6 @@ test_that("db_lake_connect works with DuckDB catalog", {
   expect_true(DBI::dbIsValid(con))
 
   status <- db_status(verbose = FALSE)
-  expect_equal(status$mode, "ducklake")
   expect_equal(status$catalog, "test")
   expect_equal(status$catalog_type, "duckdb")
 
@@ -524,7 +280,7 @@ test_that("db_lake_connect works with DuckDB catalog", {
   unlink(data_dir, recursive = TRUE)
 })
 
-test_that("db_lake_connect stores correct state for SQLite catalog", {
+test_that("db_connect stores correct state for SQLite catalog", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
   clean_db_env()
 
@@ -534,7 +290,7 @@ test_that("db_lake_connect stores correct state for SQLite catalog", {
   data_dir <- file.path(temp_dir, "test_data_sqlite")
   dir.create(data_dir, showWarnings = FALSE)
 
-  con <- db_lake_connect(
+  con <- db_connect(
     catalog = "test_sqlite",
     catalog_type = "sqlite",
     metadata_path = metadata_file,
@@ -544,7 +300,6 @@ test_that("db_lake_connect stores correct state for SQLite catalog", {
   expect_true(DBI::dbIsValid(con))
 
   status <- db_status(verbose = FALSE)
-  expect_equal(status$mode, "ducklake")
   expect_equal(status$catalog, "test_sqlite")
   expect_equal(status$catalog_type, "sqlite")
 
@@ -555,32 +310,63 @@ test_that("db_lake_connect stores correct state for SQLite catalog", {
   unlink(data_dir, recursive = TRUE)
 })
 
-test_that("db_status shows concurrency info for DuckLake", {
+test_that("db_connect returns existing connection for same lake", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
   clean_db_env()
 
-  temp_dir <- tempdir()
-  metadata_file <- file.path(temp_dir, "test_conc.sqlite")
-  data_dir <- file.path(temp_dir, "test_data_conc")
-  dir.create(data_dir, showWarnings = FALSE)
+  temp_dir <- tempfile(pattern = "reuse_test_")
+  dir.create(temp_dir)
 
-  db_lake_connect(
-    catalog = "test",
-    catalog_type = "sqlite",
+  metadata_file <- file.path(temp_dir, "catalog.ducklake")
+  data_dir <- temp_dir
+
+  # First connection
+  con1 <- db_connect(
     metadata_path = metadata_file,
     data_path = data_dir
   )
 
-  output <- capture.output(db_status(verbose = TRUE))
+  # Second connection to same lake - should reuse
+  con2 <- db_connect(
+    metadata_path = metadata_file,
+    data_path = data_dir
+  )
 
-  expect_true(any(grepl("sqlite", output)))
-  expect_true(any(grepl("multi-read", output)))
+  expect_identical(con1, con2)
 
   clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
 
-  # Cleanup
-  unlink(metadata_file)
-  unlink(data_dir, recursive = TRUE)
+test_that("db_connect disconnects when connecting to different lake", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir1 <- tempfile(pattern = "lake1_")
+  temp_dir2 <- tempfile(pattern = "lake2_")
+  dir.create(temp_dir1)
+  dir.create(temp_dir2)
+
+  # First connection
+  con1 <- db_connect(
+    metadata_path = file.path(temp_dir1, "catalog.ducklake"),
+    data_path = temp_dir1
+  )
+
+  # Second connection to different lake - should disconnect and reconnect
+  expect_message(
+    con2 <- db_connect(
+      metadata_path = file.path(temp_dir2, "catalog.ducklake"),
+      data_path = temp_dir2
+    ),
+    "Disconnecting"
+  )
+
+  expect_false(identical(con1, con2))
+
+  clean_db_env()
+  unlink(temp_dir1, recursive = TRUE)
+  unlink(temp_dir2, recursive = TRUE)
 })
 
 # ==============================================================================
@@ -592,17 +378,6 @@ test_that(".db_get_con returns NULL when not connected", {
 
   result <- datapond:::.db_get_con()
   expect_null(result)
-})
-
-test_that(".db_get_con returns connection when connected", {
-  clean_db_env()
-
-  db_connect(path = "/test", db = ":memory:")
-
-  result <- datapond:::.db_get_con()
-  expect_true(DBI::dbIsValid(result))
-
-  clean_db_env()
 })
 
 test_that(".db_get_con returns NULL for invalid connection", {
@@ -619,64 +394,4 @@ test_that(".db_get_con returns NULL for invalid connection", {
   expect_null(result)
 
   clean_db_env()
-})
-
-# ==============================================================================
-# Integration Tests
-# ==============================================================================
-
-test_that("full hive mode workflow works", {
-  clean_db_env()
-
-  # Connect
-  con <- db_connect(path = "/integration/test", db = ":memory:", threads = 2)
-  expect_true(DBI::dbIsValid(con))
-
-  # Check status
-  status <- db_status(verbose = FALSE)
-  expect_true(status$connected)
-  expect_equal(status$mode, "hive")
-
-  # Can run queries
-  result <- DBI::dbGetQuery(con, "SELECT 1 + 1 AS answer")
-  expect_equal(result$answer, 2)
-
-  # Disconnect
-  expect_true(db_disconnect())
-
-  # Status reflects disconnection
-  status <- db_status(verbose = FALSE)
-  expect_false(status$connected)
-})
-
-test_that("switching modes auto-disconnects and reconnects", {
-  skip_if_not(ducklake_available(), "DuckLake extension not available")
-  clean_db_env()
-
-  temp_dir <- tempfile(pattern = "mode_test_")
-  dir.create(temp_dir)
-
-  # Connect in hive mode
-
-  con1 <- db_connect(path = temp_dir, db = ":memory:")
-  expect_equal(datapond:::.db_get("mode"), "hive")
-
-  # Connect in DuckLake mode - should auto-switch
-  expect_message(
-    con2 <- db_lake_connect(
-      metadata_path = file.path(temp_dir, "test.ducklake"),
-      data_path = temp_dir
-    ),
-    "Disconnecting"
-  )
-
-  # Should NOT be the same connection (new one was created)
-  expect_false(identical(con1, con2))
-
-  # Mode should now be ducklake
-  status <- db_status(verbose = FALSE)
-  expect_equal(status$mode, "ducklake")
-
-  clean_db_env()
-  unlink(temp_dir, recursive = TRUE)
 })

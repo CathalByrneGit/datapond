@@ -10,31 +10,6 @@ test_that("db_snapshots errors when not connected", {
   expect_error(db_snapshots(), "Not connected")
 })
 
-test_that("db_snapshots errors in hive mode", {
-  clean_db_env()
-  db_connect(path = "/test")
-
-  expect_error(db_snapshots(), "hive mode")
-
-  clean_db_env()
-})
-
-test_that("db_snapshots errors without catalog", {
-  skip_if_not(ducklake_available(), "DuckLake extension not available")
-  clean_db_env()
-
-  # Connect to DuckDB but don't attach a DuckLake catalog
-  # This simulates a misconfigured state
-  # We can't easily test this without internal access, so just verify
-
-  # the basic mode checking works
-  db_connect(path = "/test")
-
-  expect_error(db_snapshots(), "hive mode")
-
-  clean_db_env()
-})
-
 test_that("db_snapshots returns snapshot data", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
   clean_db_env()
@@ -42,7 +17,7 @@ test_that("db_snapshots returns snapshot data", {
   temp_dir <- tempfile(pattern = "snapshots_test_")
   dir.create(temp_dir)
 
-  db_lake_connect(
+  db_connect(
     catalog = "test",
     metadata_path = file.path(temp_dir, "catalog.ducklake"),
     data_path = temp_dir
@@ -74,15 +49,6 @@ test_that("db_catalog errors when not connected", {
   expect_error(db_catalog(), "Not connected")
 })
 
-test_that("db_catalog errors in hive mode", {
-  clean_db_env()
-  db_connect(path = "/test")
-
-  expect_error(db_catalog(), "hive mode")
-
-  clean_db_env()
-})
-
 test_that("db_catalog returns table info", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
   clean_db_env()
@@ -90,7 +56,7 @@ test_that("db_catalog returns table info", {
   temp_dir <- tempfile(pattern = "catalog_test_")
   dir.create(temp_dir)
 
-  db_lake_connect(
+  db_connect(
     catalog = "test",
     metadata_path = file.path(temp_dir, "catalog.ducklake"),
     data_path = temp_dir

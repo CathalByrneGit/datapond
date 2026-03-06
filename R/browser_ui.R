@@ -25,14 +25,10 @@ db_browser_ui <- function(id, height = "500px") {
 
   ns <- shiny::NS(id)
 
-  # Get current mode for conditional UI
-  curr_mode <- .db_get("mode")
-  is_hive <- identical(curr_mode, "hive")
-
   # Sidebar with tree view
   sidebar_content <- shiny::tagList(
     shiny::tags$h5(
-      if (is_hive) "Sections & Datasets" else "Schemas & Tables",
+      "Schemas & Tables",
       style = "margin-bottom: 10px; font-weight: bold;"
     ),
     shiny::uiOutput(ns("tree_view")),
@@ -160,89 +156,46 @@ db_browser_ui <- function(id, height = "500px") {
       )
     ),
 
-    # Public Catalog tab (both modes)
+    # Access Control tab
     bslib::nav_panel(
-      title = "Public Catalog",
-      icon = shiny::icon("globe"),
+      title = "Access Control",
+      icon = shiny::icon("lock"),
       shiny::div(
         style = "padding: 10px;",
-        if (is_hive) {
-          # Hive mode UI
-          shiny::tagList(
-            shiny::fluidRow(
-              shiny::column(4,
-                shiny::actionButton(ns("refresh_public"), "Refresh Catalog",
-                                    icon = shiny::icon("sync"),
-                                    class = "btn-primary")
-              ),
-              shiny::column(4,
-                shiny::actionButton(ns("sync_catalog"), "Sync All",
-                                    icon = shiny::icon("cloud-upload-alt"),
-                                    class = "btn-outline-secondary")
-              )
-            ),
-            shiny::hr(),
-            shiny::h5("Public Datasets"),
-            shiny::p(class = "text-muted",
-                     "Datasets published to the shared catalog for organisation-wide discovery."),
-            DT::dataTableOutput(ns("public_catalog_table"), height = "400px"),
-            shiny::hr(),
-            shiny::h5("Manage Public Status"),
-            shiny::p(class = "text-muted",
-                     "Select a dataset from the tree, then use these buttons to manage its public status."),
-            shiny::fluidRow(
-              shiny::column(6,
-                shiny::uiOutput(ns("public_status_display"))
-              ),
-              shiny::column(3,
-                shiny::actionButton(ns("make_public"), "Make Public",
-                                    icon = shiny::icon("globe"),
-                                    class = "btn-success btn-sm")
-              ),
-              shiny::column(3,
-                shiny::actionButton(ns("make_private"), "Make Private",
-                                    icon = shiny::icon("lock"),
-                                    class = "btn-warning btn-sm")
-              )
-            )
+        shiny::div(
+          class = "alert alert-info",
+          shiny::icon("info-circle"),
+          shiny::tags$strong(" DuckLake Access Control"),
+          shiny::p(class = "mb-0 mt-2",
+            "Access control is managed through schema paths ",
+            "and folder-level permissions (ACLs)."
           )
-        } else {
-          # DuckLake mode - access control via schema paths
-          shiny::tagList(
-            shiny::div(
-              class = "alert alert-info",
-              shiny::icon("info-circle"),
-              shiny::tags$strong(" DuckLake Access Control"),
-              shiny::p(class = "mb-0 mt-2",
-                "In DuckLake mode, access control is managed through schema paths ",
-                "and folder-level permissions (ACLs)."
-              )
-            ),
-            shiny::hr(),
-            shiny::h5("How Access Control Works"),
-            shiny::tags$ul(
-              shiny::tags$li(
-                shiny::tags$strong("Automatic Organization: "),
-                "DuckLake automatically organizes data into ",
-                shiny::tags$code("{schema}/{table}/"), " folders. ",
-                "Simply create schemas with ", shiny::tags$code("db_create_schema('name')"), "."
-              ),
-              shiny::tags$li(
-                shiny::tags$strong("Folder ACLs: "),
-                "Use your file system's access controls (Windows ACLs, POSIX permissions) ",
-                "on the schema data folders to control who can read/write data."
-              ),
-              shiny::tags$li(
-                shiny::tags$strong("Discovery: "),
-                "Use ", shiny::tags$code("db_dictionary()"), " and ",
-                shiny::tags$code("db_search()"), " for data discovery."
-              )
-            ),
-            shiny::hr(),
-            shiny::h5("Example"),
-            shiny::tags$pre(
-              style = "background-color: #f8f9fa; padding: 10px; border-radius: 4px;",
-              '# Create schemas - DuckLake creates folders automatically
+        ),
+        shiny::hr(),
+        shiny::h5("How Access Control Works"),
+        shiny::tags$ul(
+          shiny::tags$li(
+            shiny::tags$strong("Automatic Organization: "),
+            "DuckLake automatically organizes data into ",
+            shiny::tags$code("{schema}/{table}/"), " folders. ",
+            "Simply create schemas with ", shiny::tags$code("db_create_schema('name')"), "."
+          ),
+          shiny::tags$li(
+            shiny::tags$strong("Folder ACLs: "),
+            "Use your file system's access controls (Windows ACLs, POSIX permissions) ",
+            "on the schema data folders to control who can read/write data."
+          ),
+          shiny::tags$li(
+            shiny::tags$strong("Discovery: "),
+            "Use ", shiny::tags$code("db_dictionary()"), " and ",
+            shiny::tags$code("db_search()"), " for data discovery."
+          )
+        ),
+        shiny::hr(),
+        shiny::h5("Example"),
+        shiny::tags$pre(
+          style = "background-color: #f8f9fa; padding: 10px; border-radius: 4px;",
+          '# Create schemas - DuckLake creates folders automatically
 db_create_schema("trade")
 db_create_schema("labour")
 
@@ -251,9 +204,7 @@ db_create_schema("labour")
 
 # Set folder ACLs on //server/DataLake/trade/ to control access
 # Set folder ACLs on //server/DataLake/labour/ to control access'
-            )
-          )
-        }
+        )
       )
     ),
 

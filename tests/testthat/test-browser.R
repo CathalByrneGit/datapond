@@ -23,23 +23,6 @@ test_that(".db_assert_browser_packages checks for required packages", {
   expect_true(datapond:::.db_assert_browser_packages())
 })
 
-test_that("db_browser_ui creates UI without error in hive mode", {
-  skip_if_not_installed("shiny")
-  skip_if_not_installed("bslib")
-  skip_if_not_installed("DT")
-
-  clean_db_env()
-  db_connect(path = tempdir())
-
-  ui <- db_browser_ui("test_id")
-
-
-  # Check it returns a bslib page (which is a shiny.tag.list)
-  expect_true(inherits(ui, "shiny.tag.list") || inherits(ui, "shiny.tag"))
-
-  clean_db_env()
-})
-
 test_that("db_browser_ui creates UI without error in DuckLake mode", {
   skip_if_not_installed("shiny")
   skip_if_not_installed("bslib")
@@ -51,7 +34,7 @@ test_that("db_browser_ui creates UI without error in DuckLake mode", {
   temp_dir <- tempfile(pattern = "browser_lake_")
   dir.create(temp_dir)
 
-  db_lake_connect(
+  db_connect(
     catalog = "test",
     metadata_path = file.path(temp_dir, "catalog.ducklake"),
     data_path = temp_dir
@@ -66,32 +49,6 @@ test_that("db_browser_ui creates UI without error in DuckLake mode", {
   unlink(temp_dir, recursive = TRUE)
 })
 
-test_that(".render_hive_tree returns valid HTML", {
-  skip_if_not_installed("shiny")
-
-  clean_db_env()
-
-  temp_dir <- tempfile(pattern = "tree_test_")
-  dir.create(temp_dir)
-
-  # Create some sections and datasets
-  dir.create(file.path(temp_dir, "Trade", "Imports"), recursive = TRUE)
-  dir.create(file.path(temp_dir, "Trade", "Exports"), recursive = TRUE)
-  dir.create(file.path(temp_dir, "Labour", "Employment"), recursive = TRUE)
-
-  db_connect(path = temp_dir)
-
-  ns <- shiny::NS("test")
-  rv <- shiny::reactiveValues()
-
-  # Should not error
-  result <- datapond:::.render_hive_tree(ns, rv)
-  expect_s3_class(result, "shiny.tag")
-
-  clean_db_env()
-  unlink(temp_dir, recursive = TRUE)
-})
-
 test_that(".render_ducklake_tree returns valid HTML", {
   skip_if_not_installed("shiny")
   skip_if_not(ducklake_available(), "DuckLake extension not available")
@@ -101,7 +58,7 @@ test_that(".render_ducklake_tree returns valid HTML", {
   temp_dir <- tempfile(pattern = "tree_lake_")
   dir.create(temp_dir)
 
-  db_lake_connect(
+  db_connect(
     catalog = "test",
     metadata_path = file.path(temp_dir, "catalog.ducklake"),
     data_path = temp_dir
@@ -125,8 +82,8 @@ test_that(".render_metadata_card returns valid HTML", {
 
   ns <- shiny::NS("test")
   rv <- list(
-    selected_section = "Trade",
-    selected_dataset = "Imports"
+    selected_schema = "main",
+    selected_table = "products"
   )
 
   meta <- list(
@@ -139,6 +96,6 @@ test_that(".render_metadata_card returns valid HTML", {
     )
   )
 
-  result <- datapond:::.render_metadata_card(meta, is_hive = TRUE, rv = rv, ns = ns)
+  result <- datapond:::.render_metadata_card(meta, rv = rv, ns = ns)
   expect_s3_class(result, "shiny.tag")
 })

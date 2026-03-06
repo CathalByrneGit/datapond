@@ -11,7 +11,7 @@ test_that(".db_relation_cols retrieves column names", {
   temp_dir <- tempfile(pattern = "cols_test_")
   dir.create(temp_dir)
 
-  db_lake_connect(
+  db_connect(
     catalog = "test",
     metadata_path = file.path(temp_dir, "catalog.ducklake"),
     data_path = temp_dir
@@ -46,7 +46,7 @@ test_that(".db_table_exists returns TRUE for existing table", {
   temp_dir <- tempfile(pattern = "exists_test_")
   dir.create(temp_dir)
 
-  db_lake_connect(
+  db_connect(
     catalog = "test",
     metadata_path = file.path(temp_dir, "catalog.ducklake"),
     data_path = temp_dir
@@ -75,18 +75,6 @@ test_that("db_table_cols errors when not connected", {
   )
 })
 
-test_that("db_table_cols errors in hive mode", {
-  clean_db_env()
-  db_connect(path = "/test")
-
-  expect_error(
-    db_table_cols(table = "test"),
-    "No DuckLake catalog"
-  )
-
-  clean_db_env()
-})
-
 test_that("db_table_cols returns column names", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
   clean_db_env()
@@ -94,7 +82,7 @@ test_that("db_table_cols returns column names", {
   temp_dir <- tempfile(pattern = "table_cols_test_")
   dir.create(temp_dir)
 
-  db_lake_connect(
+  db_connect(
     catalog = "test",
     metadata_path = file.path(temp_dir, "catalog.ducklake"),
     data_path = temp_dir
@@ -125,7 +113,7 @@ test_that("db_view_cols returns column names for views", {
   temp_dir <- tempfile(pattern = "view_cols_test_")
   dir.create(temp_dir)
 
-  db_lake_connect(
+  db_connect(
     catalog = "test",
     metadata_path = file.path(temp_dir, "catalog.ducklake"),
     data_path = temp_dir
@@ -148,7 +136,7 @@ test_that("db_view_cols returns column names for views", {
 })
 
 # ==============================================================================
-# Tests for db_upsert() - Connection and Mode Checks
+# Tests for db_upsert() - Connection Checks
 # ==============================================================================
 
 test_that("db_upsert errors when not connected", {
@@ -160,18 +148,6 @@ test_that("db_upsert errors when not connected", {
   )
 })
 
-test_that("db_upsert errors in hive mode", {
-  clean_db_env()
-  db_connect(path = "/test")
-
-  expect_error(
-    db_upsert(data.frame(id = 1), table = "test", by = "id"),
-    "hive mode"
-  )
-
-  clean_db_env()
-})
-
 # ==============================================================================
 # Tests for db_upsert() - Input Validation
 # ==============================================================================
@@ -181,7 +157,7 @@ test_that("db_upsert validates data argument", {
   clean_db_env()
 
   temp_dir <- tempdir()
-  db_lake_connect(
+  db_connect(
     metadata_path = file.path(temp_dir, "test_val.ducklake"),
     data_path = temp_dir
   )
@@ -198,7 +174,7 @@ test_that("db_upsert validates by argument", {
   clean_db_env()
 
   temp_dir <- tempdir()
-  db_lake_connect(
+  db_connect(
     metadata_path = file.path(temp_dir, "test_by.ducklake"),
     data_path = temp_dir
   )
@@ -219,7 +195,7 @@ test_that("db_upsert validates key columns exist in data", {
   temp_dir <- tempfile(pattern = "key_val_test_")
   dir.create(temp_dir)
 
-  db_lake_connect(
+  db_connect(
     catalog = "test",
     metadata_path = file.path(temp_dir, "catalog.ducklake"),
     data_path = temp_dir
@@ -248,7 +224,7 @@ test_that("db_upsert validates table exists", {
   temp_dir <- tempfile(pattern = "table_exists_test_")
   dir.create(temp_dir)
 
-  db_lake_connect(
+  db_connect(
     catalog = "test",
     metadata_path = file.path(temp_dir, "catalog.ducklake"),
     data_path = temp_dir
@@ -272,7 +248,7 @@ test_that("db_upsert validates data columns against target table", {
   temp_dir <- tempfile(pattern = "col_gov_test_")
   dir.create(temp_dir)
 
-  db_lake_connect(
+  db_connect(
     catalog = "test",
     metadata_path = file.path(temp_dir, "catalog.ducklake"),
     data_path = temp_dir
@@ -300,7 +276,7 @@ test_that("db_upsert validates key columns exist in target table", {
   temp_dir <- tempfile(pattern = "key_target_test_")
   dir.create(temp_dir)
 
-  db_lake_connect(
+  db_connect(
     catalog = "test",
     metadata_path = file.path(temp_dir, "catalog.ducklake"),
     data_path = temp_dir
@@ -329,7 +305,7 @@ test_that("db_upsert validates update_cols parameter", {
   temp_dir <- tempfile(pattern = "update_cols_test_")
   dir.create(temp_dir)
 
-  db_lake_connect(
+  db_connect(
     catalog = "test",
     metadata_path = file.path(temp_dir, "catalog.ducklake"),
     data_path = temp_dir
@@ -361,7 +337,7 @@ test_that("db_upsert strict mode rejects duplicate keys", {
   temp_dir <- tempfile(pattern = "strict_test_")
   dir.create(temp_dir)
 
-  db_lake_connect(
+  db_connect(
     catalog = "test",
     metadata_path = file.path(temp_dir, "catalog.ducklake"),
     data_path = temp_dir
@@ -392,7 +368,7 @@ test_that("db_upsert strict=FALSE allows duplicate keys", {
   temp_dir <- tempfile(pattern = "non_strict_test_")
   dir.create(temp_dir)
 
-  db_lake_connect(
+  db_connect(
     catalog = "test",
     metadata_path = file.path(temp_dir, "catalog.ducklake"),
     data_path = temp_dir
@@ -429,7 +405,7 @@ test_that("db_upsert inserts new rows", {
   temp_dir <- tempfile(pattern = "upsert_insert_test_")
   dir.create(temp_dir)
 
-  db_lake_connect(
+  db_connect(
     catalog = "test",
     metadata_path = file.path(temp_dir, "catalog.ducklake"),
     data_path = temp_dir
@@ -447,7 +423,7 @@ test_that("db_upsert inserts new rows", {
 
   db_upsert(df, table = "products", by = "id")
 
-  result <- db_lake_read(table = "products") |> dplyr::collect()
+  result <- db_read(table = "products") |> dplyr::collect()
   expect_equal(nrow(result), 3)
   expect_true(all(c(1, 2, 3) %in% result$id))
 
@@ -462,7 +438,7 @@ test_that("db_upsert updates existing rows", {
   temp_dir <- tempfile(pattern = "upsert_update_test_")
   dir.create(temp_dir)
 
-  db_lake_connect(
+  db_connect(
     catalog = "test",
     metadata_path = file.path(temp_dir, "catalog.ducklake"),
     data_path = temp_dir
@@ -483,7 +459,7 @@ test_that("db_upsert updates existing rows", {
 
   db_upsert(df, table = "products", by = "id")
 
-  result <- db_lake_read(table = "products") |> dplyr::collect()
+  result <- db_read(table = "products") |> dplyr::collect()
   expect_equal(nrow(result), 3)
 
   # Check id=1 was updated
@@ -510,7 +486,7 @@ test_that("db_upsert with update_cols=character(0) is insert-only", {
   temp_dir <- tempfile(pattern = "insert_only_test_")
   dir.create(temp_dir)
 
-  db_lake_connect(
+  db_connect(
     catalog = "test",
     metadata_path = file.path(temp_dir, "catalog.ducklake"),
     data_path = temp_dir
@@ -528,7 +504,7 @@ test_that("db_upsert with update_cols=character(0) is insert-only", {
 
   db_upsert(df, table = "events", by = "id", update_cols = character(0))
 
-  result <- db_lake_read(table = "events") |> dplyr::collect()
+  result <- db_read(table = "events") |> dplyr::collect()
   expect_equal(nrow(result), 2)
 
   # id=1 should NOT be updated
@@ -550,7 +526,7 @@ test_that("db_upsert with specific update_cols updates only those columns", {
   temp_dir <- tempfile(pattern = "specific_cols_test_")
   dir.create(temp_dir)
 
-  db_lake_connect(
+  db_connect(
     catalog = "test",
     metadata_path = file.path(temp_dir, "catalog.ducklake"),
     data_path = temp_dir
@@ -569,7 +545,7 @@ test_that("db_upsert with specific update_cols updates only those columns", {
 
   db_upsert(df, table = "products", by = "id", update_cols = "price")
 
-  result <- db_lake_read(table = "products") |> dplyr::collect()
+  result <- db_read(table = "products") |> dplyr::collect()
 
   # Price should be updated
   expect_equal(result$price, 14.99)
@@ -588,7 +564,7 @@ test_that("db_upsert works with composite keys", {
   temp_dir <- tempfile(pattern = "composite_key_test_")
   dir.create(temp_dir)
 
-  db_lake_connect(
+  db_connect(
     catalog = "test",
     metadata_path = file.path(temp_dir, "catalog.ducklake"),
     data_path = temp_dir
@@ -609,7 +585,7 @@ test_that("db_upsert works with composite keys", {
 
   db_upsert(df, table = "sales", by = c("region", "date"))
 
-  result <- db_lake_read(table = "sales") |> dplyr::collect()
+  result <- db_read(table = "sales") |> dplyr::collect()
   expect_equal(nrow(result), 3)
 
   # North should be updated
@@ -635,7 +611,7 @@ test_that("db_upsert works with partial columns when using explicit update_cols"
   temp_dir <- tempfile(pattern = "partial_cols_test_")
   dir.create(temp_dir)
 
-  db_lake_connect(
+  db_connect(
     catalog = "test",
     metadata_path = file.path(temp_dir, "catalog.ducklake"),
     data_path = temp_dir
@@ -661,7 +637,7 @@ test_that("db_upsert works with partial columns when using explicit update_cols"
   # Must specify update_cols when data doesn't have all columns
   db_upsert(df, table = "products", by = "id", update_cols = c("name", "price"))
 
-  result <- db_lake_read(table = "products") |> dplyr::collect()
+  result <- db_read(table = "products") |> dplyr::collect()
   expect_equal(nrow(result), 1)
   expect_equal(result$name, "Updated Widget")
   expect_equal(result$price, 9.99)
@@ -679,7 +655,7 @@ test_that("db_upsert records commit metadata", {
   temp_dir <- tempfile(pattern = "commit_meta_test_")
   dir.create(temp_dir)
 
-  db_lake_connect(
+  db_connect(
     catalog = "test",
     metadata_path = file.path(temp_dir, "catalog.ducklake"),
     data_path = temp_dir
@@ -695,7 +671,7 @@ test_that("db_upsert records commit metadata", {
             commit_message = "Test upsert")
 
   # Verify data was inserted
-  result <- db_lake_read(table = "products") |> dplyr::collect()
+  result <- db_read(table = "products") |> dplyr::collect()
   expect_equal(nrow(result), 1)
 
   # Verify snapshot was created
@@ -713,7 +689,7 @@ test_that("db_upsert handles errors gracefully", {
   temp_dir <- tempfile(pattern = "error_test_")
   dir.create(temp_dir)
 
-  db_lake_connect(
+  db_connect(
     catalog = "test",
     metadata_path = file.path(temp_dir, "catalog.ducklake"),
     data_path = temp_dir
@@ -744,7 +720,7 @@ test_that("db_upsert returns qualified table name", {
   temp_dir <- tempfile(pattern = "return_test_")
   dir.create(temp_dir)
 
-  db_lake_connect(
+  db_connect(
     catalog = "mycat",
     metadata_path = file.path(temp_dir, "catalog.ducklake"),
     data_path = temp_dir
@@ -769,7 +745,7 @@ test_that("db_upsert works with custom schema", {
   temp_dir <- tempfile(pattern = "schema_test_")
   dir.create(temp_dir)
 
-  db_lake_connect(
+  db_connect(
     catalog = "test",
     metadata_path = file.path(temp_dir, "catalog.ducklake"),
     data_path = temp_dir
@@ -786,7 +762,7 @@ test_that("db_upsert works with custom schema", {
   expect_equal(result, "test.sales.orders")
 
   # Verify data
-  read_df <- db_lake_read(schema = "sales", table = "orders") |> dplyr::collect()
+  read_df <- db_read(schema = "sales", table = "orders") |> dplyr::collect()
   expect_equal(nrow(read_df), 1)
 
   clean_db_env()
