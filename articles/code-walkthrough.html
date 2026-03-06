@@ -115,37 +115,24 @@ environment:</p>
 rather than creating new ones.</p>
 </div>
 <div class="section level3">
-<h3 id="mode-tracking-hive-vs-ducklake">2. Mode Tracking (Hive vs DuckLake)<a class="anchor" aria-label="anchor" href="#mode-tracking-hive-vs-ducklake"></a>
-</h3>
-<p>When you connect, the package records which mode you’re in:</p>
-<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/assign.html" class="external-link">assign</a></span><span class="op">(</span><span class="st">"mode"</span>, <span class="st">"hive"</span>, envir <span class="op">=</span> <span class="va">.db_env</span><span class="op">)</span>      <span class="co"># or "ducklake"</span></span></code></pre></div>
-<p>Functions then check this and give helpful errors if you call the
-wrong one:</p>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="kw">if</span> <span class="op">(</span><span class="va">curr_mode</span> <span class="op">!=</span> <span class="st">"hive"</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="kw"><a href="https://rdrr.io/r/base/stop.html" class="external-link">stop</a></span><span class="op">(</span><span class="st">"Connected in DuckLake mode. Use db_lake_read() instead..."</span><span class="op">)</span></span>
-<span><span class="op">}</span></span></code></pre></div>
-</div>
-<div class="section level3">
-<h3 id="input-validation">3. Input Validation<a class="anchor" aria-label="anchor" href="#input-validation"></a>
+<h3 id="input-validation">2. Input Validation<a class="anchor" aria-label="anchor" href="#input-validation"></a>
 </h3>
 <p>All user inputs are validated early with clear error messages:</p>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">.db_validate_name</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">x</span>, <span class="va">arg</span> <span class="op">=</span> <span class="st">"name"</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="co"># Must be single non-empty string</span></span>
 <span>  <span class="co"># Only allows A-Z a-z 0-9 _ -</span></span>
 <span>  <span class="co"># Prevents SQL injection and path traversal</span></span>
 <span><span class="op">}</span></span></code></pre></div>
-<p>This catches problems like
-<code>section = "../../../etc/passwd"</code> before they cause harm.</p>
+<p>This catches problems like <code>table = "../../../etc/passwd"</code>
+before they cause harm.</p>
 </div>
 <div class="section level3">
-<h3 id="lazy-evaluation-with-duckdb">4. Lazy Evaluation with DuckDB<a class="anchor" aria-label="anchor" href="#lazy-evaluation-with-duckdb"></a>
+<h3 id="lazy-evaluation-with-duckdb">3. Lazy Evaluation with DuckDB<a class="anchor" aria-label="anchor" href="#lazy-evaluation-with-duckdb"></a>
 </h3>
 <p>Read functions return <strong>lazy</strong> dplyr tables, not
 collected data:</p>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu">dplyr</span><span class="fu">::</span><span class="fu"><a href="https://dplyr.tidyverse.org/reference/tbl.html" class="external-link">tbl</a></span><span class="op">(</span><span class="va">con</span>, <span class="fu">dplyr</span><span class="fu">::</span><span class="fu"><a href="https://dplyr.tidyverse.org/reference/sql.html" class="external-link">sql</a></span><span class="op">(</span><span class="va">query</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
 <p><strong>Why?</strong></p>
 <ul>
@@ -167,12 +154,11 @@ into R</li>
 <h2 id="rdb_connect-r---connection-management">
 <code>R/db_connect.R</code> - Connection Management<a class="anchor" aria-label="anchor" href="#rdb_connect-r---connection-management"></a>
 </h2>
-<p>This file handles connecting to and disconnecting from the data
-lake.</p>
+<p>This file handles connecting to and disconnecting from DuckLake.</p>
 <div class="section level3">
 <h3 id="private-environment-and-helpers">Private Environment and Helpers<a class="anchor" aria-label="anchor" href="#private-environment-and-helpers"></a>
 </h3>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">.db_env</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/environment.html" class="external-link">new.env</a></span><span class="op">(</span>parent <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/environment.html" class="external-link">emptyenv</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
 <p>This creates an isolated environment that persists for the R session.
 We store:</p>
@@ -180,20 +166,16 @@ We store:</p>
 <li>
 <code>con</code> - the DuckDB connection object</li>
 <li>
-<code>mode</code> - “hive” or “ducklake”</li>
-<li>
 <code>data_path</code> - root path for parquet files</li>
 <li>
-<code>catalog</code> - DuckLake catalog name (DuckLake mode
-only)</li>
+<code>catalog</code> - DuckLake catalog name</li>
 <li>
-<code>catalog_type</code> - “duckdb”, “sqlite”, or “postgres”
-(DuckLake mode only)</li>
+<code>catalog_type</code> - “duckdb”, “sqlite”, or “postgres”</li>
 <li>
-<code>metadata_path</code> - path to catalog file/connection string
-(DuckLake mode only)</li>
+<code>metadata_path</code> - path to catalog file/connection
+string</li>
 </ul>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">.db_get_con</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="co"># Returns the connection if it exists and is valid, NULL otherwise</span></span>
 <span>  <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/exists.html" class="external-link">exists</a></span><span class="op">(</span><span class="st">"con"</span>, envir <span class="op">=</span> <span class="va">.db_env</span><span class="op">)</span> <span class="op">&amp;&amp;</span> <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbIsValid.html" class="external-link">dbIsValid</a></span><span class="op">(</span><span class="va">.db_env</span><span class="op">$</span><span class="va">con</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
@@ -203,7 +185,7 @@ only)</li>
 <span><span class="op">}</span></span></code></pre></div>
 <p>This is the safe way to get the connection - it checks validity, not
 just existence.</p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">.db_get</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">name</span>, <span class="va">default</span> <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="co"># Safe getter with default value</span></span>
 <span>  <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/exists.html" class="external-link">exists</a></span><span class="op">(</span><span class="va">name</span>, envir <span class="op">=</span> <span class="va">.db_env</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
@@ -219,7 +201,7 @@ just existence.</p>
 </h3>
 <p>These internal functions handle the different catalog backend
 types:</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">.db_build_ducklake_dsn</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">catalog_type</span>, <span class="va">metadata_path</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="kw"><a href="https://rdrr.io/r/base/switch.html" class="external-link">switch</a></span><span class="op">(</span><span class="va">catalog_type</span>,</span>
 <span>    duckdb <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="st">"ducklake:"</span>, <span class="va">metadata_path</span><span class="op">)</span>,</span>
@@ -232,12 +214,12 @@ types:</p>
 backend: - DuckDB: <code>ducklake:metadata.ducklake</code> - SQLite:
 <code>ducklake:sqlite:catalog.sqlite</code> - PostgreSQL:
 <code>ducklake:postgres:dbname=... host=...</code></p>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">.db_load_catalog_extensions</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">con</span>, <span class="va">catalog_type</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="co"># Always need ducklake</span></span>
 <span>  <span class="kw"><a href="https://rdrr.io/r/base/try.html" class="external-link">try</a></span><span class="op">(</span><span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbExecute.html" class="external-link">dbExecute</a></span><span class="op">(</span><span class="va">con</span>, <span class="st">"INSTALL ducklake"</span><span class="op">)</span>, silent <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
 <span>  <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbExecute.html" class="external-link">dbExecute</a></span><span class="op">(</span><span class="va">con</span>, <span class="st">"LOAD ducklake"</span><span class="op">)</span></span>
-<span>  </span>
+<span></span>
 <span>  <span class="co"># Load backend-specific extension</span></span>
 <span>  <span class="kw">if</span> <span class="op">(</span><span class="va">catalog_type</span> <span class="op">==</span> <span class="st">"sqlite"</span><span class="op">)</span> <span class="op">{</span></span>
 <span>    <span class="kw"><a href="https://rdrr.io/r/base/try.html" class="external-link">try</a></span><span class="op">(</span><span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbExecute.html" class="external-link">dbExecute</a></span><span class="op">(</span><span class="va">con</span>, <span class="st">"INSTALL sqlite"</span><span class="op">)</span>, silent <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
@@ -251,89 +233,41 @@ backend: - DuckDB: <code>ducklake:metadata.ducklake</code> - SQLite:
 backends.</p>
 </div>
 <div class="section level3">
-<h3 id="db_connect---hive-mode">
-<code>db_connect()</code> - Hive Mode<a class="anchor" aria-label="anchor" href="#db_connect---hive-mode"></a>
+<h3 id="db_connect---ducklake-connection">
+<code>db_connect()</code> - DuckLake Connection<a class="anchor" aria-label="anchor" href="#db_connect---ducklake-connection"></a>
 </h3>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">db_connect</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">path</span> <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake"</span>,</span>
-<span>                       <span class="va">db</span> <span class="op">=</span> <span class="st">":memory:"</span>,</span>
-<span>                       <span class="va">threads</span> <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>                       <span class="va">memory_limit</span> <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>                       <span class="va">load_extensions</span> <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  </span>
-<span>  <span class="co"># Return existing connection if valid</span></span>
-<span>  <span class="va">con</span> <span class="op">&lt;-</span> <span class="fu">.db_get_con</span><span class="op">(</span><span class="op">)</span></span>
-<span>  <span class="kw">if</span> <span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">con</span><span class="op">)</span><span class="op">)</span> <span class="kw"><a href="https://rdrr.io/r/base/function.html" class="external-link">return</a></span><span class="op">(</span><span class="va">con</span><span class="op">)</span></span>
-<span>  </span>
-<span>  <span class="co"># Create new DuckDB connection</span></span>
-<span>  <span class="va">con</span> <span class="op">&lt;-</span> <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbConnect.html" class="external-link">dbConnect</a></span><span class="op">(</span><span class="fu">duckdb</span><span class="fu">::</span><span class="fu"><a href="https://r.duckdb.org/reference/duckdb.html" class="external-link">duckdb</a></span><span class="op">(</span><span class="op">)</span>, dbdir <span class="op">=</span> <span class="va">db</span><span class="op">)</span></span>
-<span>  </span>
-<span>  <span class="co"># Optional performance tuning</span></span>
-<span>  <span class="kw">if</span> <span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">threads</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
-<span>    <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbExecute.html" class="external-link">dbExecute</a></span><span class="op">(</span><span class="va">con</span>, <span class="fu"><a href="https://rdrr.io/r/base/sprintf.html" class="external-link">sprintf</a></span><span class="op">(</span><span class="st">"SET threads=%d"</span>, <span class="fu"><a href="https://rdrr.io/r/base/integer.html" class="external-link">as.integer</a></span><span class="op">(</span><span class="va">threads</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
-<span>  <span class="op">}</span></span>
-<span>  </span>
-<span>  <span class="co"># Store everything in .db_env</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/assign.html" class="external-link">assign</a></span><span class="op">(</span><span class="st">"con"</span>, <span class="va">con</span>, envir <span class="op">=</span> <span class="va">.db_env</span><span class="op">)</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/assign.html" class="external-link">assign</a></span><span class="op">(</span><span class="st">"data_path"</span>, <span class="va">path</span>, envir <span class="op">=</span> <span class="va">.db_env</span><span class="op">)</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/assign.html" class="external-link">assign</a></span><span class="op">(</span><span class="st">"mode"</span>, <span class="st">"hive"</span>, envir <span class="op">=</span> <span class="va">.db_env</span><span class="op">)</span></span>
-<span>  </span>
-<span>  <span class="co"># Register cleanup for session end</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/reg.finalizer.html" class="external-link">reg.finalizer</a></span><span class="op">(</span><span class="va">.db_env</span>, <span class="kw">function</span><span class="op">(</span><span class="va">e</span><span class="op">)</span> <span class="op">{</span></span>
-<span>    <span class="kw"><a href="https://rdrr.io/r/base/try.html" class="external-link">try</a></span><span class="op">(</span><span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbDisconnect.html" class="external-link">dbDisconnect</a></span><span class="op">(</span><span class="va">e</span><span class="op">$</span><span class="va">con</span>, shutdown <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span>, silent <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span>  <span class="op">}</span>, onexit <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span>  </span>
-<span>  <span class="va">con</span></span>
-<span><span class="op">}</span></span></code></pre></div>
-<p><strong>Key points:</strong></p>
-<ul>
-<li>
-<code>db = ":memory:"</code> means DuckDB runs in-memory (fast, no
-disk file)</li>
-<li>
-<code>load_extensions</code> allows loading things like
-<code>httpfs</code> for S3 access</li>
-<li>
-<code>reg.finalizer</code> ensures cleanup even if user forgets to
-disconnect</li>
-</ul>
-</div>
-<div class="section level3">
-<h3 id="db_lake_connect---ducklake-mode">
-<code>db_lake_connect()</code> - DuckLake Mode<a class="anchor" aria-label="anchor" href="#db_lake_connect---ducklake-mode"></a>
-</h3>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">db_lake_connect</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">duckdb_db</span> <span class="op">=</span> <span class="st">":memory:"</span>,</span>
-<span>                            <span class="va">catalog</span> <span class="op">=</span> <span class="st">"cso"</span>,</span>
-<span>                            <span class="va">catalog_type</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"duckdb"</span>, <span class="st">"sqlite"</span>, <span class="st">"postgres"</span><span class="op">)</span>,</span>
-<span>                            <span class="va">metadata_path</span> <span class="op">=</span> <span class="st">"metadata.ducklake"</span>,</span>
-<span>                            <span class="va">data_path</span> <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake"</span>,</span>
-<span>                            <span class="va">snapshot_version</span> <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>                            <span class="va">snapshot_time</span> <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>                            <span class="va">...</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  </span>
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">db_connect</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">duckdb_db</span> <span class="op">=</span> <span class="st">":memory:"</span>,</span>
+<span>                       <span class="va">catalog</span> <span class="op">=</span> <span class="st">"cso"</span>,</span>
+<span>                       <span class="va">catalog_type</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"duckdb"</span>, <span class="st">"sqlite"</span>, <span class="st">"postgres"</span><span class="op">)</span>,</span>
+<span>                       <span class="va">metadata_path</span> <span class="op">=</span> <span class="st">"metadata.ducklake"</span>,</span>
+<span>                       <span class="va">data_path</span> <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake"</span>,</span>
+<span>                       <span class="va">snapshot_version</span> <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>                       <span class="va">snapshot_time</span> <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>                       <span class="va">...</span><span class="op">)</span> <span class="op">{</span></span>
+<span></span>
 <span>  <span class="va">catalog_type</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/match.arg.html" class="external-link">match.arg</a></span><span class="op">(</span><span class="va">catalog_type</span><span class="op">)</span></span>
-<span>  </span>
+<span></span>
 <span>  <span class="co"># Create DuckDB connection</span></span>
 <span>  <span class="va">con</span> <span class="op">&lt;-</span> <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbConnect.html" class="external-link">dbConnect</a></span><span class="op">(</span><span class="fu">duckdb</span><span class="fu">::</span><span class="fu"><a href="https://r.duckdb.org/reference/duckdb.html" class="external-link">duckdb</a></span><span class="op">(</span><span class="op">)</span>, dbdir <span class="op">=</span> <span class="va">duckdb_db</span><span class="op">)</span></span>
-<span>  </span>
+<span></span>
 <span>  <span class="co"># Load DuckLake and backend-specific extensions</span></span>
 <span>  <span class="fu">.db_load_catalog_extensions</span><span class="op">(</span><span class="va">con</span>, <span class="va">catalog_type</span><span class="op">)</span></span>
-<span>  </span>
+<span></span>
 <span>  <span class="co"># Build the backend-specific connection string</span></span>
 <span>  <span class="va">ducklake_dsn</span> <span class="op">&lt;-</span> <span class="fu">.db_build_ducklake_dsn</span><span class="op">(</span><span class="va">catalog_type</span>, <span class="va">metadata_path</span><span class="op">)</span></span>
-<span>  </span>
+<span></span>
 <span>  <span class="co"># Build ATTACH statement with options</span></span>
 <span>  <span class="va">attach_opts</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fu">glue</span><span class="fu">::</span><span class="fu"><a href="https://glue.tidyverse.org/reference/glue.html" class="external-link">glue</a></span><span class="op">(</span><span class="st">"DATA_PATH {.db_sql_quote(data_path)}"</span><span class="op">)</span><span class="op">)</span></span>
-<span>  </span>
+<span></span>
 <span>  <span class="kw">if</span> <span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">snapshot_version</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
 <span>    <span class="va">attach_opts</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">attach_opts</span>, <span class="fu">glue</span><span class="fu">::</span><span class="fu"><a href="https://glue.tidyverse.org/reference/glue.html" class="external-link">glue</a></span><span class="op">(</span><span class="st">"SNAPSHOT_VERSION {as.integer(snapshot_version)}"</span><span class="op">)</span><span class="op">)</span></span>
 <span>  <span class="op">}</span></span>
-<span>  </span>
+<span></span>
 <span>  <span class="va">attach_sql</span> <span class="op">&lt;-</span> <span class="fu">glue</span><span class="fu">::</span><span class="fu"><a href="https://glue.tidyverse.org/reference/glue.html" class="external-link">glue</a></span><span class="op">(</span></span>
 <span>    <span class="st">"ATTACH {.db_sql_quote(ducklake_dsn)} AS {catalog} ({paste(attach_opts, collapse = ', ')})"</span></span>
 <span>  <span class="op">)</span></span>
-<span>  </span>
+<span></span>
 <span>  <span class="co"># Attach with helpful error messages</span></span>
 <span>  <span class="kw"><a href="https://rdrr.io/r/base/conditions.html" class="external-link">tryCatch</a></span><span class="op">(</span><span class="op">{</span></span>
 <span>    <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbExecute.html" class="external-link">dbExecute</a></span><span class="op">(</span><span class="va">con</span>, <span class="va">attach_sql</span><span class="op">)</span></span>
@@ -346,13 +280,15 @@ disconnect</li>
 <span>    <span class="op">)</span></span>
 <span>    <span class="kw"><a href="https://rdrr.io/r/base/stop.html" class="external-link">stop</a></span><span class="op">(</span><span class="st">"Failed to attach DuckLake catalog.\n"</span>, <span class="va">hint</span>, <span class="st">"\n\nOriginal error: "</span>, <span class="va">e</span><span class="op">$</span><span class="va">message</span><span class="op">)</span></span>
 <span>  <span class="op">}</span><span class="op">)</span></span>
-<span>  </span>
+<span></span>
 <span>  <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbExecute.html" class="external-link">dbExecute</a></span><span class="op">(</span><span class="va">con</span>, <span class="fu">glue</span><span class="fu">::</span><span class="fu"><a href="https://glue.tidyverse.org/reference/glue.html" class="external-link">glue</a></span><span class="op">(</span><span class="st">"USE {catalog}"</span><span class="op">)</span><span class="op">)</span></span>
-<span>  </span>
-<span>  <span class="co"># Store DuckLake-specific info including catalog_type</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/assign.html" class="external-link">assign</a></span><span class="op">(</span><span class="st">"mode"</span>, <span class="st">"ducklake"</span>, envir <span class="op">=</span> <span class="va">.db_env</span><span class="op">)</span></span>
+<span></span>
+<span>  <span class="co"># Store connection info</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/assign.html" class="external-link">assign</a></span><span class="op">(</span><span class="st">"con"</span>, <span class="va">con</span>, envir <span class="op">=</span> <span class="va">.db_env</span><span class="op">)</span></span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/base/assign.html" class="external-link">assign</a></span><span class="op">(</span><span class="st">"catalog"</span>, <span class="va">catalog</span>, envir <span class="op">=</span> <span class="va">.db_env</span><span class="op">)</span></span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/base/assign.html" class="external-link">assign</a></span><span class="op">(</span><span class="st">"catalog_type"</span>, <span class="va">catalog_type</span>, envir <span class="op">=</span> <span class="va">.db_env</span><span class="op">)</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/assign.html" class="external-link">assign</a></span><span class="op">(</span><span class="st">"metadata_path"</span>, <span class="va">metadata_path</span>, envir <span class="op">=</span> <span class="va">.db_env</span><span class="op">)</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/assign.html" class="external-link">assign</a></span><span class="op">(</span><span class="st">"data_path"</span>, <span class="va">data_path</span>, envir <span class="op">=</span> <span class="va">.db_env</span><span class="op">)</span></span>
 <span>  <span class="va">...</span></span>
 <span><span class="op">}</span></span></code></pre></div>
 <p><strong>Key points:</strong></p>
@@ -370,87 +306,44 @@ session</li>
 <code>R/db_write.R</code> - Writing Data<a class="anchor" aria-label="anchor" href="#rdb_write-r---writing-data"></a>
 </h2>
 <div class="section level3">
-<h3 id="db_hive_write---partitioned-parquet">
-<code>db_hive_write()</code> - Partitioned Parquet<a class="anchor" aria-label="anchor" href="#db_hive_write---partitioned-parquet"></a>
+<h3 id="db_write---ducklake-tables">
+<code>db_write()</code> - DuckLake Tables<a class="anchor" aria-label="anchor" href="#db_write---ducklake-tables"></a>
 </h3>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">db_hive_write</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">data</span>, <span class="va">section</span>, <span class="va">dataset</span>,</span>
-<span>                          <span class="va">partition_by</span> <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>                          <span class="va">mode</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"overwrite"</span>, <span class="st">"append"</span>, <span class="st">"ignore"</span>, <span class="st">"replace_partitions"</span><span class="op">)</span>,</span>
-<span>                          <span class="va">compression</span> <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>                          <span class="va">filename_pattern</span> <span class="op">=</span> <span class="st">"data_{uuid}"</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  </span>
-<span>  <span class="co"># Validate inputs</span></span>
-<span>  <span class="va">section</span> <span class="op">&lt;-</span> <span class="fu">.db_validate_name</span><span class="op">(</span><span class="va">section</span><span class="op">)</span></span>
-<span>  <span class="va">dataset</span> <span class="op">&lt;-</span> <span class="fu">.db_validate_name</span><span class="op">(</span><span class="va">dataset</span><span class="op">)</span></span>
-<span>  </span>
-<span>  <span class="co"># Mode-specific validation</span></span>
-<span>  <span class="kw">if</span> <span class="op">(</span><span class="va">mode</span> <span class="op">==</span> <span class="st">"append"</span> <span class="op">&amp;&amp;</span> <span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">partition_by</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
-<span>    <span class="kw"><a href="https://rdrr.io/r/base/stop.html" class="external-link">stop</a></span><span class="op">(</span><span class="st">"mode = 'append' requires partition_by..."</span><span class="op">)</span></span>
-<span>  <span class="op">}</span></span>
-<span>  </span>
-<span>  <span class="co"># Register data as temporary view</span></span>
-<span>  <span class="va">temp_name</span> <span class="op">&lt;-</span> <span class="fu">.db_temp_name</span><span class="op">(</span><span class="op">)</span></span>
-<span>  <span class="fu">duckdb</span><span class="fu">::</span><span class="fu"><a href="https://r.duckdb.org/reference/duckdb_register.html" class="external-link">duckdb_register</a></span><span class="op">(</span><span class="va">con</span>, <span class="va">temp_name</span>, <span class="va">data</span><span class="op">)</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/on.exit.html" class="external-link">on.exit</a></span><span class="op">(</span><span class="fu">duckdb</span><span class="fu">::</span><span class="fu"><a href="https://r.duckdb.org/reference/duckdb_register.html" class="external-link">duckdb_unregister</a></span><span class="op">(</span><span class="va">con</span>, <span class="va">temp_name</span><span class="op">)</span><span class="op">)</span></span>
-<span>  </span>
-<span>  <span class="co"># For replace_partitions, delete only affected folders</span></span>
-<span>  <span class="kw">if</span> <span class="op">(</span><span class="va">mode</span> <span class="op">==</span> <span class="st">"replace_partitions"</span><span class="op">)</span> <span class="op">{</span></span>
-<span>    <span class="va">part_vals</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/unique.html" class="external-link">unique</a></span><span class="op">(</span><span class="va">data</span><span class="op">[</span><span class="va">partition_by</span><span class="op">]</span><span class="op">)</span></span>
-<span>    <span class="co"># Build paths like year=2024/month=01</span></span>
-<span>    <span class="co"># Delete existing folders for those partitions</span></span>
-<span>    <span class="fu">fs</span><span class="fu">::</span><span class="fu"><a href="https://fs.r-lib.org/reference/delete.html" class="external-link">dir_delete</a></span><span class="op">(</span><span class="va">existing_partition_folders</span><span class="op">)</span></span>
-<span>  <span class="op">}</span></span>
-<span>  </span>
-<span>  <span class="co"># Build COPY statement</span></span>
-<span>  <span class="va">opts</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"FORMAT PARQUET"</span>, <span class="st">"PARTITION_BY (...)"</span><span class="op">)</span></span>
-<span>  <span class="va">sql</span> <span class="op">&lt;-</span> <span class="fu">glue</span><span class="fu">::</span><span class="fu"><a href="https://glue.tidyverse.org/reference/glue.html" class="external-link">glue</a></span><span class="op">(</span><span class="st">"COPY {temp_name} TO '{path}' ({opts})"</span><span class="op">)</span></span>
-<span>  <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbExecute.html" class="external-link">dbExecute</a></span><span class="op">(</span><span class="va">con</span>, <span class="va">sql</span><span class="op">)</span></span>
-<span><span class="op">}</span></span></code></pre></div>
-<p><strong>Key points:</strong></p>
-<ul>
-<li>
-<code>duckdb_register()</code> makes R data.frames available as SQL
-tables without copying</li>
-<li>
-<code>replace_partitions</code> mode deletes only the partition
-folders being updated</li>
-<li>DuckDB’s <code>COPY ... PARTITION_BY</code> creates hive-style
-folders automatically</li>
-</ul>
-</div>
-<div class="section level3">
-<h3 id="db_lake_write---ducklake-tables">
-<code>db_lake_write()</code> - DuckLake Tables<a class="anchor" aria-label="anchor" href="#db_lake_write---ducklake-tables"></a>
-</h3>
-<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">db_lake_write</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">data</span>, <span class="va">schema</span> <span class="op">=</span> <span class="st">"main"</span>, <span class="va">table</span>,</span>
-<span>                          <span class="va">mode</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"overwrite"</span>, <span class="st">"append"</span><span class="op">)</span>,</span>
-<span>                          <span class="va">commit_author</span> <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>                          <span class="va">commit_message</span> <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  </span>
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">db_write</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">data</span>, <span class="va">schema</span> <span class="op">=</span> <span class="st">"main"</span>, <span class="va">table</span>,</span>
+<span>                     <span class="va">mode</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"overwrite"</span>, <span class="st">"append"</span><span class="op">)</span>,</span>
+<span>                     <span class="va">partition_by</span> <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>                     <span class="va">commit_author</span> <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>                     <span class="va">commit_message</span> <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span> <span class="op">{</span></span>
+<span></span>
 <span>  <span class="co"># Register data temporarily</span></span>
 <span>  <span class="va">tmp</span> <span class="op">&lt;-</span> <span class="fu">.db_temp_name</span><span class="op">(</span><span class="op">)</span></span>
 <span>  <span class="fu">duckdb</span><span class="fu">::</span><span class="fu"><a href="https://r.duckdb.org/reference/duckdb_register.html" class="external-link">duckdb_register</a></span><span class="op">(</span><span class="va">con</span>, <span class="va">tmp</span>, <span class="va">data</span><span class="op">)</span></span>
-<span>  </span>
+<span></span>
 <span>  <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbExecute.html" class="external-link">dbExecute</a></span><span class="op">(</span><span class="va">con</span>, <span class="st">"BEGIN"</span><span class="op">)</span></span>
-<span>  </span>
+<span></span>
 <span>  <span class="co"># Set commit metadata if provided</span></span>
 <span>  <span class="kw">if</span> <span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">commit_author</span><span class="op">)</span> <span class="op">||</span> <span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">commit_message</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
 <span>    <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbExecute.html" class="external-link">dbExecute</a></span><span class="op">(</span><span class="va">con</span>, <span class="fu">glue</span><span class="fu">::</span><span class="fu"><a href="https://glue.tidyverse.org/reference/glue.html" class="external-link">glue</a></span><span class="op">(</span></span>
 <span>      <span class="st">"CALL ducklake_set_commit_message({.db_sql_quote(catalog)}, {author}, {msg})"</span></span>
 <span>    <span class="op">)</span><span class="op">)</span></span>
 <span>  <span class="op">}</span></span>
-<span>  </span>
+<span></span>
 <span>  <span class="co"># Write data</span></span>
 <span>  <span class="kw">if</span> <span class="op">(</span><span class="va">mode</span> <span class="op">==</span> <span class="st">"overwrite"</span><span class="op">)</span> <span class="op">{</span></span>
 <span>    <span class="va">sql</span> <span class="op">&lt;-</span> <span class="fu">glue</span><span class="fu">::</span><span class="fu"><a href="https://glue.tidyverse.org/reference/glue.html" class="external-link">glue</a></span><span class="op">(</span><span class="st">"CREATE OR REPLACE TABLE {qname} AS SELECT * FROM {tmp}"</span><span class="op">)</span></span>
 <span>  <span class="op">}</span> <span class="kw">else</span> <span class="op">{</span></span>
 <span>    <span class="va">sql</span> <span class="op">&lt;-</span> <span class="fu">glue</span><span class="fu">::</span><span class="fu"><a href="https://glue.tidyverse.org/reference/glue.html" class="external-link">glue</a></span><span class="op">(</span><span class="st">"INSERT INTO {qname} SELECT * FROM {tmp}"</span><span class="op">)</span></span>
 <span>  <span class="op">}</span></span>
-<span>  </span>
+<span></span>
 <span>  <span class="kw"><a href="https://rdrr.io/r/base/conditions.html" class="external-link">tryCatch</a></span><span class="op">(</span><span class="op">{</span></span>
 <span>    <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbExecute.html" class="external-link">dbExecute</a></span><span class="op">(</span><span class="va">con</span>, <span class="va">sql</span><span class="op">)</span></span>
+<span></span>
+<span>    <span class="co"># Set partitioning if specified</span></span>
+<span>    <span class="kw">if</span> <span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">partition_by</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
+<span>      <span class="fu"><a href="../reference/db_set_partitioning.html">db_set_partitioning</a></span><span class="op">(</span><span class="va">schema</span>, <span class="va">table</span>, <span class="va">partition_by</span><span class="op">)</span></span>
+<span>    <span class="op">}</span></span>
+<span></span>
 <span>    <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbExecute.html" class="external-link">dbExecute</a></span><span class="op">(</span><span class="va">con</span>, <span class="st">"COMMIT"</span><span class="op">)</span></span>
 <span>  <span class="op">}</span>, error <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">e</span><span class="op">)</span> <span class="op">{</span></span>
 <span>    <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbExecute.html" class="external-link">dbExecute</a></span><span class="op">(</span><span class="va">con</span>, <span class="st">"ROLLBACK"</span><span class="op">)</span></span>
@@ -466,6 +359,7 @@ atomicity</li>
 <li>
 <code>ducklake_set_commit_message(catalog, author, message)</code>
 records metadata in the snapshot</li>
+<li>Partitioning is set after table creation</li>
 </ul>
 <hr>
 </div>
@@ -478,15 +372,15 @@ records metadata in the snapshot</li>
 <h3 id="db_upsert---update-insert">
 <code>db_upsert()</code> - Update + Insert<a class="anchor" aria-label="anchor" href="#db_upsert---update-insert"></a>
 </h3>
-<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">db_upsert</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">data</span>, <span class="va">schema</span> <span class="op">=</span> <span class="st">"main"</span>, <span class="va">table</span>, <span class="va">by</span>,</span>
 <span>                      <span class="va">strict</span> <span class="op">=</span> <span class="cn">TRUE</span>, <span class="va">update_cols</span> <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>                      <span class="va">commit_author</span> <span class="op">=</span> <span class="cn">NULL</span>, <span class="va">commit_message</span> <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  </span>
+<span></span>
 <span>  <span class="co"># Validate key columns exist in both data and target</span></span>
 <span>  <span class="va">missing_keys</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/sets.html" class="external-link">setdiff</a></span><span class="op">(</span><span class="va">by</span>, <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">data</span><span class="op">)</span><span class="op">)</span></span>
 <span>  <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">missing_keys</span><span class="op">)</span> <span class="op">&gt;</span> <span class="fl">0</span><span class="op">)</span> <span class="kw"><a href="https://rdrr.io/r/base/stop.html" class="external-link">stop</a></span><span class="op">(</span><span class="va">...</span><span class="op">)</span></span>
-<span>  </span>
+<span></span>
 <span>  <span class="co"># Strict mode: reject duplicate keys in incoming data</span></span>
 <span>  <span class="kw">if</span> <span class="op">(</span><span class="va">strict</span><span class="op">)</span> <span class="op">{</span></span>
 <span>    <span class="va">dup_check_sql</span> <span class="op">&lt;-</span> <span class="fu">glue</span><span class="fu">::</span><span class="fu"><a href="https://glue.tidyverse.org/reference/glue.html" class="external-link">glue</a></span><span class="op">(</span><span class="st">"</span></span>
@@ -498,10 +392,10 @@ records metadata in the snapshot</li>
 <span>    <span class="va">dups</span> <span class="op">&lt;-</span> <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbGetQuery.html" class="external-link">dbGetQuery</a></span><span class="op">(</span><span class="va">con</span>, <span class="va">dup_check_sql</span><span class="op">)</span></span>
 <span>    <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">dups</span><span class="op">)</span> <span class="op">&gt;</span> <span class="fl">0</span><span class="op">)</span> <span class="kw"><a href="https://rdrr.io/r/base/stop.html" class="external-link">stop</a></span><span class="op">(</span><span class="st">"Duplicate keys found..."</span><span class="op">)</span></span>
 <span>  <span class="op">}</span></span>
-<span>  </span>
+<span></span>
 <span>  <span class="co"># Build MERGE statement</span></span>
 <span>  <span class="va">on_sql</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste</a></span><span class="op">(</span><span class="fu">glue</span><span class="fu">::</span><span class="fu"><a href="https://glue.tidyverse.org/reference/glue.html" class="external-link">glue</a></span><span class="op">(</span><span class="st">"t.{by} = s.{by}"</span><span class="op">)</span>, collapse <span class="op">=</span> <span class="st">" AND "</span><span class="op">)</span></span>
-<span>  </span>
+<span></span>
 <span>  <span class="co"># UPDATE clause depends on update_cols</span></span>
 <span>  <span class="va">update_clause</span> <span class="op">&lt;-</span> <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">update_cols</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
 <span>    <span class="st">"WHEN MATCHED THEN UPDATE"</span>  <span class="co"># DuckDB shorthand: update all</span></span>
@@ -510,7 +404,7 @@ records metadata in the snapshot</li>
 <span>  <span class="op">}</span> <span class="kw">else</span> <span class="op">{</span></span>
 <span>    <span class="fu">glue</span><span class="fu">::</span><span class="fu"><a href="https://glue.tidyverse.org/reference/glue.html" class="external-link">glue</a></span><span class="op">(</span><span class="st">"WHEN MATCHED THEN UPDATE SET {update_sql}"</span><span class="op">)</span></span>
 <span>  <span class="op">}</span></span>
-<span>  </span>
+<span></span>
 <span>  <span class="va">merge_sql</span> <span class="op">&lt;-</span> <span class="fu">glue</span><span class="fu">::</span><span class="fu"><a href="https://glue.tidyverse.org/reference/glue.html" class="external-link">glue</a></span><span class="op">(</span><span class="st">"</span></span>
 <span><span class="st">    MERGE INTO {qname} AS t</span></span>
 <span><span class="st">    USING {tmp} AS s</span></span>
@@ -518,7 +412,7 @@ records metadata in the snapshot</li>
 <span><span class="st">    {update_clause}</span></span>
 <span><span class="st">    WHEN NOT MATCHED THEN INSERT ...</span></span>
 <span><span class="st">  "</span><span class="op">)</span></span>
-<span>  </span>
+<span></span>
 <span>  <span class="co"># Execute in transaction</span></span>
 <span>  <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbExecute.html" class="external-link">dbExecute</a></span><span class="op">(</span><span class="va">con</span>, <span class="st">"BEGIN"</span><span class="op">)</span></span>
 <span>  <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbExecute.html" class="external-link">dbExecute</a></span><span class="op">(</span><span class="va">con</span>, <span class="va">merge_sql</span><span class="op">)</span></span>
@@ -546,15 +440,9 @@ data quality issue)</li>
 <div class="section level3">
 <h3 id="metadata-storage">Metadata Storage<a class="anchor" aria-label="anchor" href="#metadata-storage"></a>
 </h3>
-<p>Documentation metadata is stored differently in each mode:</p>
-<p><strong>Hive mode</strong>: JSON sidecar files</p>
-<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">.db_metadata_path</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">section</span>, <span class="va">dataset</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">base_path</span>, <span class="va">section</span>, <span class="va">dataset</span>, <span class="st">"_metadata.json"</span><span class="op">)</span></span>
-<span><span class="op">}</span></span></code></pre></div>
-<p><strong>DuckLake mode</strong>: Tables in a <code>_metadata</code>
-schema</p>
-<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
+<p>Documentation metadata is stored in a <code>_metadata</code> schema
+within the DuckLake catalog:</p>
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">.db_ensure_metadata_table</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">con</span>, <span class="va">catalog</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbExecute.html" class="external-link">dbExecute</a></span><span class="op">(</span><span class="va">con</span>, <span class="st">"CREATE SCHEMA IF NOT EXISTS {catalog}._metadata"</span><span class="op">)</span></span>
 <span>  <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbExecute.html" class="external-link">dbExecute</a></span><span class="op">(</span><span class="va">con</span>, <span class="st">"CREATE TABLE IF NOT EXISTS {catalog}._metadata.table_docs (...)"</span><span class="op">)</span></span>
@@ -562,74 +450,43 @@ schema</p>
 <span><span class="op">}</span></span></code></pre></div>
 </div>
 <div class="section level3">
-<h3 id="db_describe---document-a-dataset">
-<code>db_describe()</code> - Document a Dataset<a class="anchor" aria-label="anchor" href="#db_describe---document-a-dataset"></a>
+<h3 id="db_describe---document-a-table">
+<code>db_describe()</code> - Document a Table<a class="anchor" aria-label="anchor" href="#db_describe---document-a-table"></a>
 </h3>
-<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">db_describe</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">section</span> <span class="op">=</span> <span class="cn">NULL</span>, <span class="va">dataset</span> <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>                        <span class="va">schema</span> <span class="op">=</span> <span class="st">"main"</span>, <span class="va">table</span> <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">db_describe</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">schema</span> <span class="op">=</span> <span class="st">"main"</span>, <span class="va">table</span> <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>                        <span class="va">description</span> <span class="op">=</span> <span class="cn">NULL</span>, <span class="va">owner</span> <span class="op">=</span> <span class="cn">NULL</span>, <span class="va">tags</span> <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  </span>
-<span>  <span class="kw">if</span> <span class="op">(</span><span class="va">curr_mode</span> <span class="op">==</span> <span class="st">"hive"</span><span class="op">)</span> <span class="op">{</span></span>
-<span>    <span class="co"># Read existing metadata, update fields, write back</span></span>
-<span>    <span class="va">meta_path</span> <span class="op">&lt;-</span> <span class="fu">.db_metadata_path</span><span class="op">(</span><span class="va">section</span>, <span class="va">dataset</span><span class="op">)</span></span>
-<span>    <span class="va">metadata</span> <span class="op">&lt;-</span> <span class="fu">.db_read_metadata</span><span class="op">(</span><span class="va">meta_path</span><span class="op">)</span></span>
-<span>    </span>
-<span>    <span class="kw">if</span> <span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">description</span><span class="op">)</span><span class="op">)</span> <span class="va">metadata</span><span class="op">$</span><span class="va">description</span> <span class="op">&lt;-</span> <span class="va">description</span></span>
-<span>    <span class="kw">if</span> <span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">owner</span><span class="op">)</span><span class="op">)</span> <span class="va">metadata</span><span class="op">$</span><span class="va">owner</span> <span class="op">&lt;-</span> <span class="va">owner</span></span>
-<span>    <span class="kw">if</span> <span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">tags</span><span class="op">)</span><span class="op">)</span> <span class="va">metadata</span><span class="op">$</span><span class="va">tags</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">as.character</a></span><span class="op">(</span><span class="va">tags</span><span class="op">)</span></span>
-<span>    </span>
-<span>    <span class="fu">.db_write_metadata</span><span class="op">(</span><span class="va">metadata</span>, <span class="va">meta_path</span><span class="op">)</span></span>
-<span>    </span>
-<span>  <span class="op">}</span> <span class="kw">else</span> <span class="op">{</span></span>
-<span>    <span class="co"># DuckLake - upsert into _metadata.table_docs</span></span>
-<span>    <span class="fu">.db_ensure_metadata_table</span><span class="op">(</span><span class="va">con</span>, <span class="va">catalog</span><span class="op">)</span></span>
-<span>    </span>
-<span>    <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbExecute.html" class="external-link">dbExecute</a></span><span class="op">(</span><span class="va">con</span>, <span class="st">"DELETE FROM ... WHERE schema = ... AND table = ..."</span><span class="op">)</span></span>
-<span>    <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbExecute.html" class="external-link">dbExecute</a></span><span class="op">(</span><span class="va">con</span>, <span class="st">"INSERT INTO ... VALUES (...)"</span><span class="op">)</span></span>
-<span>  <span class="op">}</span></span>
+<span></span>
+<span>  <span class="co"># Upsert into _metadata.table_docs</span></span>
+<span>  <span class="fu">.db_ensure_metadata_table</span><span class="op">(</span><span class="va">con</span>, <span class="va">catalog</span><span class="op">)</span></span>
+<span></span>
+<span>  <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbExecute.html" class="external-link">dbExecute</a></span><span class="op">(</span><span class="va">con</span>, <span class="st">"DELETE FROM ... WHERE schema = ... AND table = ..."</span><span class="op">)</span></span>
+<span>  <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbExecute.html" class="external-link">dbExecute</a></span><span class="op">(</span><span class="va">con</span>, <span class="st">"INSERT INTO ... VALUES (...)"</span><span class="op">)</span></span>
 <span><span class="op">}</span></span></code></pre></div>
 </div>
 <div class="section level3">
 <h3 id="db_dictionary---generate-data-dictionary">
 <code>db_dictionary()</code> - Generate Data Dictionary<a class="anchor" aria-label="anchor" href="#db_dictionary---generate-data-dictionary"></a>
 </h3>
-<div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">db_dictionary</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">section</span> <span class="op">=</span> <span class="cn">NULL</span>, <span class="va">schema</span> <span class="op">=</span> <span class="cn">NULL</span>, <span class="va">include_columns</span> <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  </span>
-<span>  <span class="kw">if</span> <span class="op">(</span><span class="va">curr_mode</span> <span class="op">==</span> <span class="st">"hive"</span><span class="op">)</span> <span class="op">{</span></span>
-<span>    <span class="co"># Iterate through sections and datasets</span></span>
-<span>    <span class="kw">for</span> <span class="op">(</span><span class="va">sec</span> <span class="kw">in</span> <span class="fu"><a href="../reference/db_list_sections.html">db_list_sections</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
-<span>      <span class="kw">for</span> <span class="op">(</span><span class="va">ds</span> <span class="kw">in</span> <span class="fu"><a href="../reference/db_list_datasets.html">db_list_datasets</a></span><span class="op">(</span><span class="va">sec</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
-<span>        <span class="co"># Get metadata</span></span>
-<span>        <span class="va">meta</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/db_get_docs.html">db_get_docs</a></span><span class="op">(</span>section <span class="op">=</span> <span class="va">sec</span>, dataset <span class="op">=</span> <span class="va">ds</span><span class="op">)</span></span>
-<span>        </span>
-<span>        <span class="co"># Get columns from parquet schema</span></span>
-<span>        <span class="va">cols_info</span> <span class="op">&lt;-</span> <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbGetQuery.html" class="external-link">dbGetQuery</a></span><span class="op">(</span><span class="va">con</span>, <span class="fu">glue</span><span class="fu">::</span><span class="fu"><a href="https://glue.tidyverse.org/reference/glue.html" class="external-link">glue</a></span><span class="op">(</span></span>
-<span>          <span class="st">"DESCRIBE SELECT * FROM read_parquet('{path}/**/*.parquet')"</span></span>
-<span>        <span class="op">)</span><span class="op">)</span></span>
-<span>        </span>
-<span>        <span class="co"># Combine into rows</span></span>
-<span>      <span class="op">}</span></span>
-<span>    <span class="op">}</span></span>
-<span>  <span class="op">}</span> <span class="kw">else</span> <span class="op">{</span></span>
-<span>    <span class="co"># DuckLake - query information_schema and _metadata tables</span></span>
-<span>    <span class="va">tables</span> <span class="op">&lt;-</span> <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbGetQuery.html" class="external-link">dbGetQuery</a></span><span class="op">(</span><span class="va">con</span>, <span class="st">"SELECT * FROM information_schema.tables ..."</span><span class="op">)</span></span>
-<span>    </span>
-<span>    <span class="kw">for</span> <span class="op">(</span><span class="va">tbl</span> <span class="kw">in</span> <span class="va">tables</span><span class="op">)</span> <span class="op">{</span></span>
-<span>      <span class="va">meta</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/db_get_docs.html">db_get_docs</a></span><span class="op">(</span>schema <span class="op">=</span> <span class="va">...</span>, table <span class="op">=</span> <span class="va">...</span><span class="op">)</span></span>
-<span>      <span class="va">cols</span> <span class="op">&lt;-</span> <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbGetQuery.html" class="external-link">dbGetQuery</a></span><span class="op">(</span><span class="va">con</span>, <span class="st">"SELECT * FROM information_schema.columns ..."</span><span class="op">)</span></span>
-<span>    <span class="op">}</span></span>
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">db_dictionary</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">schema</span> <span class="op">=</span> <span class="cn">NULL</span>, <span class="va">include_columns</span> <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span> <span class="op">{</span></span>
+<span></span>
+<span>  <span class="co"># Query information_schema and _metadata tables</span></span>
+<span>  <span class="va">tables</span> <span class="op">&lt;-</span> <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbGetQuery.html" class="external-link">dbGetQuery</a></span><span class="op">(</span><span class="va">con</span>, <span class="st">"SELECT * FROM information_schema.tables ..."</span><span class="op">)</span></span>
+<span></span>
+<span>  <span class="kw">for</span> <span class="op">(</span><span class="va">tbl</span> <span class="kw">in</span> <span class="va">tables</span><span class="op">)</span> <span class="op">{</span></span>
+<span>    <span class="va">meta</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/db_get_docs.html">db_get_docs</a></span><span class="op">(</span>schema <span class="op">=</span> <span class="va">...</span>, table <span class="op">=</span> <span class="va">...</span><span class="op">)</span></span>
+<span>    <span class="va">cols</span> <span class="op">&lt;-</span> <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbGetQuery.html" class="external-link">dbGetQuery</a></span><span class="op">(</span><span class="va">con</span>, <span class="st">"SELECT * FROM information_schema.columns ..."</span><span class="op">)</span></span>
 <span>  <span class="op">}</span></span>
-<span>  </span>
+<span></span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/base/do.call.html" class="external-link">do.call</a></span><span class="op">(</span><span class="va">rbind</span>, <span class="va">rows</span><span class="op">)</span></span>
 <span><span class="op">}</span></span></code></pre></div>
 </div>
 <div class="section level3">
-<h3 id="db_search---find-datasets">
-<code>db_search()</code> - Find Datasets<a class="anchor" aria-label="anchor" href="#db_search---find-datasets"></a>
+<h3 id="db_search---find-tables">
+<code>db_search()</code> - Find Tables<a class="anchor" aria-label="anchor" href="#db_search---find-tables"></a>
 </h3>
-<div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">db_search</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">pattern</span>, <span class="va">field</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"all"</span>, <span class="st">"name"</span>, <span class="st">"description"</span>, <span class="st">"owner"</span>, <span class="st">"tags"</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="co"># Get full dictionary (without columns for speed)</span></span>
 <span>  <span class="va">dict</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/db_dictionary.html">db_dictionary</a></span><span class="op">(</span>include_columns <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
@@ -644,88 +501,6 @@ schema</p>
 <span></span>
 <span>  <span class="va">dict</span><span class="op">[</span><span class="va">matches</span>, <span class="op">]</span></span>
 <span><span class="op">}</span></span></code></pre></div>
-</div>
-<div class="section level3">
-<h3 id="public-catalog-functions">Public Catalog Functions<a class="anchor" aria-label="anchor" href="#public-catalog-functions"></a>
-</h3>
-<p>The public catalog enables organisation-wide data discovery without
-requiring access to the actual data.</p>
-<div class="section level4">
-<h4 id="hive-mode-_catalog-folder">Hive Mode: <code>_catalog/</code> Folder<a class="anchor" aria-label="anchor" href="#hive-mode-_catalog-folder"></a>
-</h4>
-<div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Get path to public catalog</span></span>
-<span><span class="va">.db_catalog_path</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="fu">.db_get</span><span class="op">(</span><span class="st">"data_path"</span><span class="op">)</span>, <span class="st">"_catalog"</span><span class="op">)</span></span>
-<span><span class="op">}</span></span>
-<span></span>
-<span><span class="co"># Publish metadata to public catalog</span></span>
-<span><span class="va">.db_publish_metadata</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">section</span>, <span class="va">dataset</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="va">source_path</span> <span class="op">&lt;-</span> <span class="fu">.db_metadata_path</span><span class="op">(</span><span class="va">section</span>, <span class="va">dataset</span><span class="op">)</span></span>
-<span>  <span class="va">dest_path</span> <span class="op">&lt;-</span> <span class="fu">.db_public_metadata_path</span><span class="op">(</span><span class="va">section</span>, <span class="va">dataset</span><span class="op">)</span></span>
-<span></span>
-<span>  <span class="co"># Copy metadata with public flag</span></span>
-<span>  <span class="va">metadata</span> <span class="op">&lt;-</span> <span class="fu">.db_read_metadata</span><span class="op">(</span><span class="va">source_path</span><span class="op">)</span></span>
-<span>  <span class="va">metadata</span><span class="op">$</span><span class="va">public</span> <span class="op">&lt;-</span> <span class="cn">TRUE</span></span>
-<span>  <span class="va">metadata</span><span class="op">$</span><span class="va">catalog_published_at</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Sys.time.html" class="external-link">Sys.time</a></span><span class="op">(</span><span class="op">)</span></span>
-<span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/files2.html" class="external-link">dir.create</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/basename.html" class="external-link">dirname</a></span><span class="op">(</span><span class="va">dest_path</span><span class="op">)</span>, recursive <span class="op">=</span> <span class="cn">TRUE</span>, showWarnings <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
-<span>  <span class="fu">jsonlite</span><span class="fu">::</span><span class="fu"><a href="https://jeroen.r-universe.dev/jsonlite/reference/read_json.html" class="external-link">write_json</a></span><span class="op">(</span><span class="va">metadata</span>, <span class="va">dest_path</span>, pretty <span class="op">=</span> <span class="cn">TRUE</span>, auto_unbox <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="op">}</span></span></code></pre></div>
-</div>
-<div class="section level4">
-<h4 id="ducklake-mode-master-sqlite-catalog">DuckLake Mode: Master SQLite Catalog<a class="anchor" aria-label="anchor" href="#ducklake-mode-master-sqlite-catalog"></a>
-</h4>
-<div class="sourceCode" id="cb23"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Connect to master catalog</span></span>
-<span><span class="va">.db_master_connect</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">master_path</span> <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">master_path</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
-<span>    <span class="va">master_path</span> <span class="op">&lt;-</span> <span class="fu">.db_master_path</span><span class="op">(</span><span class="op">)</span>  <span class="co"># From option or default</span></span>
-<span>  <span class="op">}</span></span>
-<span>  <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbConnect.html" class="external-link">dbConnect</a></span><span class="op">(</span><span class="fu">RSQLite</span><span class="fu">::</span><span class="fu"><a href="https://rsqlite.r-dbi.org/reference/SQLite.html" class="external-link">SQLite</a></span><span class="op">(</span><span class="op">)</span>, <span class="va">master_path</span><span class="op">)</span></span>
-<span><span class="op">}</span></span>
-<span></span>
-<span><span class="co"># Publish to master catalog</span></span>
-<span><span class="va">.db_publish_to_master</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">schema</span>, <span class="va">table</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="va">section</span> <span class="op">&lt;-</span> <span class="fu">.db_get</span><span class="op">(</span><span class="st">"section"</span><span class="op">)</span></span>
-<span>  <span class="va">master_con</span> <span class="op">&lt;-</span> <span class="fu">.db_master_connect</span><span class="op">(</span><span class="op">)</span></span>
-<span></span>
-<span>  <span class="co"># Get column info and docs from DuckLake catalog</span></span>
-<span>  <span class="va">cols</span> <span class="op">&lt;-</span> <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbGetQuery.html" class="external-link">dbGetQuery</a></span><span class="op">(</span><span class="va">con</span>, <span class="st">"SELECT ... FROM information_schema.columns"</span><span class="op">)</span></span>
-<span>  <span class="va">docs</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/db_get_docs.html">db_get_docs</a></span><span class="op">(</span>schema <span class="op">=</span> <span class="va">schema</span>, table <span class="op">=</span> <span class="va">table</span><span class="op">)</span></span>
-<span></span>
-<span>  <span class="co"># Upsert to master</span></span>
-<span>  <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbExecute.html" class="external-link">dbExecute</a></span><span class="op">(</span><span class="va">master_con</span>, <span class="st">"</span></span>
-<span><span class="st">    INSERT OR REPLACE INTO tables</span></span>
-<span><span class="st">    (section_name, schema_name, table_name, description, owner, ...)</span></span>
-<span><span class="st">    VALUES (?, ?, ?, ?, ?, ...)</span></span>
-<span><span class="st">  "</span><span class="op">)</span></span>
-<span><span class="op">}</span></span></code></pre></div>
-</div>
-</div>
-<div class="section level3">
-<h3 id="unified-api-pattern">Unified API Pattern<a class="anchor" aria-label="anchor" href="#unified-api-pattern"></a>
-</h3>
-<p>Both modes use the same user-facing functions:</p>
-<div class="sourceCode" id="cb24"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">db_set_public</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">section</span> <span class="op">=</span> <span class="cn">NULL</span>, <span class="va">dataset</span> <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>                          <span class="va">schema</span> <span class="op">=</span> <span class="st">"main"</span>, <span class="va">table</span> <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="va">curr_mode</span> <span class="op">&lt;-</span> <span class="fu">.db_get</span><span class="op">(</span><span class="st">"mode"</span><span class="op">)</span></span>
-<span></span>
-<span>  <span class="kw">if</span> <span class="op">(</span><span class="va">curr_mode</span> <span class="op">==</span> <span class="st">"hive"</span><span class="op">)</span> <span class="op">{</span></span>
-<span>    <span class="fu">.db_publish_metadata</span><span class="op">(</span><span class="va">section</span>, <span class="va">dataset</span><span class="op">)</span></span>
-<span>  <span class="op">}</span> <span class="kw">else</span> <span class="op">{</span></span>
-<span>    <span class="fu">.db_publish_to_master</span><span class="op">(</span><span class="va">schema</span>, <span class="va">table</span><span class="op">)</span></span>
-<span>  <span class="op">}</span></span>
-<span><span class="op">}</span></span></code></pre></div>
-<p><strong>Key points:</strong></p>
-<ul>
-<li>Same API regardless of mode</li>
-<li>Mode detection determines which backend to use</li>
-<li>
-<code>db_describe(public = TRUE)</code> integrates publishing with
-documentation</li>
-</ul>
 <hr>
 </div>
 </div>
@@ -734,53 +509,40 @@ documentation</li>
 <code>R/preview.R</code> - Write Previews<a class="anchor" aria-label="anchor" href="#rpreview-r---write-previews"></a>
 </h2>
 <div class="section level3">
-<h3 id="db_preview_hive_write---preview-before-writing">
-<code>db_preview_hive_write()</code> - Preview Before Writing<a class="anchor" aria-label="anchor" href="#db_preview_hive_write---preview-before-writing"></a>
+<h3 id="db_preview_write---preview-before-writing">
+<code>db_preview_write()</code> - Preview Before Writing<a class="anchor" aria-label="anchor" href="#db_preview_write---preview-before-writing"></a>
 </h3>
-<div class="sourceCode" id="cb25"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">db_preview_hive_write</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">data</span>, <span class="va">section</span>, <span class="va">dataset</span>,</span>
-<span>                                   <span class="va">partition_by</span> <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>                                   <span class="va">mode</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"overwrite"</span>, <span class="st">"append"</span>, <span class="st">"ignore"</span>, <span class="st">"replace_partitions"</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  </span>
+<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">db_preview_write</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">data</span>, <span class="va">schema</span> <span class="op">=</span> <span class="st">"main"</span>, <span class="va">table</span>,</span>
+<span>                             <span class="va">mode</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"overwrite"</span>, <span class="st">"append"</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
+<span></span>
 <span>  <span class="va">preview</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
 <span>    mode <span class="op">=</span> <span class="va">mode</span>,</span>
-<span>    target_exists <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/files2.html" class="external-link">dir.exists</a></span><span class="op">(</span><span class="va">output_path</span><span class="op">)</span>,</span>
+<span>    table_exists <span class="op">=</span> <span class="fu"><a href="../reference/db_table_exists.html">db_table_exists</a></span><span class="op">(</span>schema <span class="op">=</span> <span class="va">schema</span>, table <span class="op">=</span> <span class="va">table</span><span class="op">)</span>,</span>
 <span>    incoming <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
 <span>      rows <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">data</span><span class="op">)</span>,</span>
 <span>      cols <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">ncol</a></span><span class="op">(</span><span class="va">data</span><span class="op">)</span>,</span>
 <span>      columns <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">data</span><span class="op">)</span></span>
 <span>    <span class="op">)</span></span>
 <span>  <span class="op">)</span></span>
-<span>  </span>
+<span></span>
 <span>  <span class="co"># If target exists, compare schemas</span></span>
-<span>  <span class="kw">if</span> <span class="op">(</span><span class="va">preview</span><span class="op">$</span><span class="va">target_exists</span><span class="op">)</span> <span class="op">{</span></span>
-<span>    <span class="va">existing_schema</span> <span class="op">&lt;-</span> <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbGetQuery.html" class="external-link">dbGetQuery</a></span><span class="op">(</span><span class="va">con</span>, <span class="st">"DESCRIBE SELECT * FROM read_parquet(...)"</span><span class="op">)</span></span>
-<span>    </span>
+<span>  <span class="kw">if</span> <span class="op">(</span><span class="va">preview</span><span class="op">$</span><span class="va">table_exists</span><span class="op">)</span> <span class="op">{</span></span>
+<span>    <span class="va">existing_cols</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/db_table_cols.html">db_table_cols</a></span><span class="op">(</span>schema <span class="op">=</span> <span class="va">schema</span>, table <span class="op">=</span> <span class="va">table</span><span class="op">)</span></span>
+<span></span>
 <span>    <span class="va">preview</span><span class="op">$</span><span class="va">schema_changes</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
-<span>      new_columns <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/sets.html" class="external-link">setdiff</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">data</span><span class="op">)</span>, <span class="va">existing_schema</span><span class="op">$</span><span class="va">name</span><span class="op">)</span>,</span>
-<span>      removed_columns <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/sets.html" class="external-link">setdiff</a></span><span class="op">(</span><span class="va">existing_schema</span><span class="op">$</span><span class="va">name</span>, <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">data</span><span class="op">)</span><span class="op">)</span>,</span>
-<span>      type_changes <span class="op">=</span> <span class="va">...</span></span>
+<span>      new_columns <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/sets.html" class="external-link">setdiff</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">data</span><span class="op">)</span>, <span class="va">existing_cols</span><span class="op">)</span>,</span>
+<span>      removed_columns <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/sets.html" class="external-link">setdiff</a></span><span class="op">(</span><span class="va">existing_cols</span>, <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">data</span><span class="op">)</span><span class="op">)</span></span>
 <span>    <span class="op">)</span></span>
 <span>  <span class="op">}</span></span>
-<span>  </span>
-<span>  <span class="co"># For partitioned writes, show impact</span></span>
-<span>  <span class="kw">if</span> <span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">partition_by</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
-<span>    <span class="va">part_vals</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/unique.html" class="external-link">unique</a></span><span class="op">(</span><span class="va">data</span><span class="op">[</span><span class="va">partition_by</span><span class="op">]</span><span class="op">)</span></span>
-<span>    <span class="va">preview</span><span class="op">$</span><span class="va">partition_impact</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
-<span>      partitions_in_data <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">part_vals</span><span class="op">)</span>,</span>
-<span>      existing_partitions_to_replace <span class="op">=</span> <span class="va">...</span></span>
-<span>    <span class="op">)</span></span>
-<span>  <span class="op">}</span></span>
-<span>  </span>
-<span>  <span class="fu">.print_hive_preview</span><span class="op">(</span><span class="va">preview</span><span class="op">)</span></span>
+<span></span>
+<span>  <span class="fu">.print_preview</span><span class="op">(</span><span class="va">preview</span><span class="op">)</span></span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="va">preview</span><span class="op">)</span></span>
 <span><span class="op">}</span></span></code></pre></div>
 <p><strong>Key points:</strong></p>
 <ul>
 <li>Gathers all relevant information without making any changes</li>
 <li>Compares incoming schema with existing schema</li>
-<li>For <code>replace_partitions</code>, shows which folders will be
-affected</li>
 <li>Returns structured data for programmatic use, prints human-readable
 summary</li>
 </ul>
@@ -790,33 +552,33 @@ summary</li>
 <code>db_preview_upsert()</code> - Preview Insert vs Update
 Counts<a class="anchor" aria-label="anchor" href="#db_preview_upsert---preview-insert-vs-update-counts"></a>
 </h3>
-<div class="sourceCode" id="cb26"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">db_preview_upsert</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">data</span>, <span class="va">schema</span>, <span class="va">table</span>, <span class="va">by</span>, <span class="va">update_cols</span> <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  </span>
+<span></span>
 <span>  <span class="co"># Register data temporarily</span></span>
 <span>  <span class="va">tmp</span> <span class="op">&lt;-</span> <span class="fu">.db_temp_name</span><span class="op">(</span><span class="op">)</span></span>
 <span>  <span class="fu">duckdb</span><span class="fu">::</span><span class="fu"><a href="https://r.duckdb.org/reference/duckdb_register.html" class="external-link">duckdb_register</a></span><span class="op">(</span><span class="va">con</span>, <span class="va">tmp</span>, <span class="va">data</span><span class="op">)</span></span>
-<span>  </span>
+<span></span>
 <span>  <span class="co"># Count matches (updates)</span></span>
 <span>  <span class="va">match_sql</span> <span class="op">&lt;-</span> <span class="fu">glue</span><span class="fu">::</span><span class="fu"><a href="https://glue.tidyverse.org/reference/glue.html" class="external-link">glue</a></span><span class="op">(</span><span class="st">"</span></span>
 <span><span class="st">    SELECT COUNT(*) FROM {tmp} s</span></span>
 <span><span class="st">    INNER JOIN {qname} t ON {join_on_keys}</span></span>
 <span><span class="st">  "</span><span class="op">)</span></span>
 <span>  <span class="va">matches</span> <span class="op">&lt;-</span> <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbGetQuery.html" class="external-link">dbGetQuery</a></span><span class="op">(</span><span class="va">con</span>, <span class="va">match_sql</span><span class="op">)</span><span class="op">$</span><span class="va">n</span></span>
-<span>  </span>
+<span></span>
 <span>  <span class="co"># Check for duplicate keys</span></span>
 <span>  <span class="va">dup_sql</span> <span class="op">&lt;-</span> <span class="fu">glue</span><span class="fu">::</span><span class="fu"><a href="https://glue.tidyverse.org/reference/glue.html" class="external-link">glue</a></span><span class="op">(</span><span class="st">"</span></span>
 <span><span class="st">    SELECT {key_cols}, COUNT(*) FROM {tmp}</span></span>
 <span><span class="st">    GROUP BY {key_cols} HAVING COUNT(*) &gt; 1</span></span>
 <span><span class="st">  "</span><span class="op">)</span></span>
 <span>  <span class="va">dups</span> <span class="op">&lt;-</span> <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbGetQuery.html" class="external-link">dbGetQuery</a></span><span class="op">(</span><span class="va">con</span>, <span class="va">dup_sql</span><span class="op">)</span></span>
-<span>  </span>
+<span></span>
 <span>  <span class="va">preview</span><span class="op">$</span><span class="va">impact</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
 <span>    inserts <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">data</span><span class="op">)</span> <span class="op">-</span> <span class="va">matches</span>,</span>
 <span>    updates <span class="op">=</span> <span class="va">matches</span>,</span>
 <span>    duplicates_in_incoming <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">dups</span><span class="op">)</span></span>
 <span>  <span class="op">)</span></span>
-<span>  </span>
+<span></span>
 <span>  <span class="fu">.print_upsert_preview</span><span class="op">(</span><span class="va">preview</span><span class="op">)</span></span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="va">preview</span><span class="op">)</span></span>
 <span><span class="op">}</span></span></code></pre></div>
@@ -828,38 +590,10 @@ Counts<a class="anchor" aria-label="anchor" href="#db_preview_upsert---preview-i
 <code>R/discovery.R</code> - Finding Data<a class="anchor" aria-label="anchor" href="#rdiscovery-r---finding-data"></a>
 </h2>
 <div class="section level3">
-<h3 id="hive-discovery">Hive Discovery<a class="anchor" aria-label="anchor" href="#hive-discovery"></a>
-</h3>
-<div class="sourceCode" id="cb27"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">db_list_sections</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="va">base_path</span> <span class="op">&lt;-</span> <span class="fu">.db_get</span><span class="op">(</span><span class="st">"data_path"</span><span class="op">)</span></span>
-<span>  </span>
-<span>  <span class="co"># List directories (sections are top-level folders)</span></span>
-<span>  <span class="va">all_items</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.files.html" class="external-link">list.dirs</a></span><span class="op">(</span><span class="va">base_path</span>, full.names <span class="op">=</span> <span class="cn">FALSE</span>, recursive <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
-<span>  </span>
-<span>  <span class="co"># Filter out hidden folders</span></span>
-<span>  <span class="va">all_items</span><span class="op">[</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/grep.html" class="external-link">grepl</a></span><span class="op">(</span><span class="st">"^\\."</span>, <span class="va">all_items</span><span class="op">)</span><span class="op">]</span></span>
-<span><span class="op">}</span></span>
-<span></span>
-<span><span class="va">db_list_datasets</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">section</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="va">section_path</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">base_path</span>, <span class="va">section</span><span class="op">)</span></span>
-<span>  <span class="va">all_items</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.files.html" class="external-link">list.dirs</a></span><span class="op">(</span><span class="va">section_path</span>, full.names <span class="op">=</span> <span class="cn">FALSE</span>, recursive <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
-<span>  </span>
-<span>  <span class="co"># Filter out partition folders (contain '=')</span></span>
-<span>  <span class="va">all_items</span><span class="op">[</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/grep.html" class="external-link">grepl</a></span><span class="op">(</span><span class="st">"="</span>, <span class="va">all_items</span><span class="op">)</span><span class="op">]</span></span>
-<span><span class="op">}</span></span></code></pre></div>
-<p><strong>Key points:</strong></p>
-<ul>
-<li>Uses file system operations (<code>list.dirs</code>)</li>
-<li>Filters out hidden folders (<code>.git</code>, etc.) and partition
-folders (<code>year=2024</code>)</li>
-</ul>
-</div>
-<div class="section level3">
 <h3 id="ducklake-discovery">DuckLake Discovery<a class="anchor" aria-label="anchor" href="#ducklake-discovery"></a>
 </h3>
-<div class="sourceCode" id="cb28"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">db_list_tables</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">schema</span> <span class="op">=</span> <span class="st">"main"</span><span class="op">)</span> <span class="op">{</span></span>
+<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">db_tables</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">schema</span> <span class="op">=</span> <span class="st">"main"</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">sql</span> <span class="op">&lt;-</span> <span class="fu">glue</span><span class="fu">::</span><span class="fu"><a href="https://glue.tidyverse.org/reference/glue.html" class="external-link">glue</a></span><span class="op">(</span><span class="st">"</span></span>
 <span><span class="st">    SELECT table_name</span></span>
 <span><span class="st">    FROM information_schema.tables</span></span>
@@ -886,17 +620,17 @@ databases</li>
 <h3 id="db_vacuum---clean-up-old-snapshots">
 <code>db_vacuum()</code> - Clean Up Old Snapshots<a class="anchor" aria-label="anchor" href="#db_vacuum---clean-up-old-snapshots"></a>
 </h3>
-<div class="sourceCode" id="cb29"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">db_vacuum</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">older_than</span> <span class="op">=</span> <span class="st">"30 days"</span>, <span class="va">dry_run</span> <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="co"># Get snapshots before</span></span>
 <span>  <span class="va">snapshots_before</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/db_snapshots.html">db_snapshots</a></span><span class="op">(</span><span class="op">)</span></span>
-<span>  </span>
+<span></span>
 <span>  <span class="kw">if</span> <span class="op">(</span><span class="va">dry_run</span><span class="op">)</span> <span class="op">{</span></span>
 <span>    <span class="co"># Calculate what would be removed</span></span>
 <span>    <span class="co"># Show preview</span></span>
 <span>    <span class="kw"><a href="https://rdrr.io/r/base/function.html" class="external-link">return</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="va">to_remove</span><span class="op">)</span><span class="op">)</span></span>
 <span>  <span class="op">}</span></span>
-<span>  </span>
+<span></span>
 <span>  <span class="co"># Actually vacuum</span></span>
 <span>  <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbExecute.html" class="external-link">dbExecute</a></span><span class="op">(</span><span class="va">con</span>, <span class="fu">glue</span><span class="fu">::</span><span class="fu"><a href="https://glue.tidyverse.org/reference/glue.html" class="external-link">glue</a></span><span class="op">(</span></span>
 <span>    <span class="st">"CALL ducklake_vacuum({.db_sql_quote(catalog)}, INTERVAL '30 days')"</span></span>
@@ -914,16 +648,16 @@ deletion</li>
 <h3 id="db_rollback---restore-previous-version">
 <code>db_rollback()</code> - Restore Previous Version<a class="anchor" aria-label="anchor" href="#db_rollback---restore-previous-version"></a>
 </h3>
-<div class="sourceCode" id="cb30"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">db_rollback</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">schema</span>, <span class="va">table</span>, <span class="va">version</span> <span class="op">=</span> <span class="cn">NULL</span>, <span class="va">timestamp</span> <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="co"># Build time travel clause</span></span>
 <span>  <span class="va">at_clause</span> <span class="op">&lt;-</span> <span class="fu">glue</span><span class="fu">::</span><span class="fu"><a href="https://glue.tidyverse.org/reference/glue.html" class="external-link">glue</a></span><span class="op">(</span><span class="st">"AT (VERSION =&gt; {version})"</span><span class="op">)</span></span>
-<span>  </span>
+<span></span>
 <span>  <span class="co"># Rollback = create new version with old data</span></span>
 <span>  <span class="va">rollback_sql</span> <span class="op">&lt;-</span> <span class="fu">glue</span><span class="fu">::</span><span class="fu"><a href="https://glue.tidyverse.org/reference/glue.html" class="external-link">glue</a></span><span class="op">(</span></span>
 <span>    <span class="st">"CREATE OR REPLACE TABLE {qname} AS SELECT * FROM {qname} {at_clause}"</span></span>
 <span>  <span class="op">)</span></span>
-<span>  </span>
+<span></span>
 <span>  <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbExecute.html" class="external-link">dbExecute</a></span><span class="op">(</span><span class="va">con</span>, <span class="va">rollback_sql</span><span class="op">)</span></span>
 <span><span class="op">}</span></span></code></pre></div>
 <p><strong>Key points:</strong></p>
@@ -938,31 +672,31 @@ version</li>
 <h3 id="db_diff---compare-versions">
 <code>db_diff()</code> - Compare Versions<a class="anchor" aria-label="anchor" href="#db_diff---compare-versions"></a>
 </h3>
-<div class="sourceCode" id="cb31"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">db_diff</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">schema</span>, <span class="va">table</span>, <span class="va">from_version</span>, <span class="va">to_version</span>, <span class="va">key_cols</span> <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="co"># ADDED: rows in 'to' but not in 'from'</span></span>
 <span>  <span class="va">added_sql</span> <span class="op">&lt;-</span> <span class="fu">glue</span><span class="fu">::</span><span class="fu"><a href="https://glue.tidyverse.org/reference/glue.html" class="external-link">glue</a></span><span class="op">(</span><span class="st">"SELECT * FROM {to_ref} EXCEPT SELECT * FROM {from_ref}"</span><span class="op">)</span></span>
-<span>  </span>
+<span></span>
 <span>  <span class="co"># REMOVED: rows in 'from' but not in 'to'</span></span>
 <span>  <span class="va">removed_sql</span> <span class="op">&lt;-</span> <span class="fu">glue</span><span class="fu">::</span><span class="fu"><a href="https://glue.tidyverse.org/reference/glue.html" class="external-link">glue</a></span><span class="op">(</span><span class="st">"SELECT * FROM {from_ref} EXCEPT SELECT * FROM {to_ref}"</span><span class="op">)</span></span>
-<span>  </span>
+<span></span>
 <span>  <span class="va">result</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
 <span>    added <span class="op">=</span> <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbGetQuery.html" class="external-link">dbGetQuery</a></span><span class="op">(</span><span class="va">con</span>, <span class="va">added_sql</span><span class="op">)</span>,</span>
 <span>    removed <span class="op">=</span> <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbGetQuery.html" class="external-link">dbGetQuery</a></span><span class="op">(</span><span class="va">con</span>, <span class="va">removed_sql</span><span class="op">)</span></span>
 <span>  <span class="op">)</span></span>
-<span>  </span>
+<span></span>
 <span>  <span class="co"># If key_cols provided, find modified rows (same key, different values)</span></span>
 <span>  <span class="kw">if</span> <span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">key_cols</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
 <span>    <span class="co"># Modified = key appears in both added and removed</span></span>
 <span>    <span class="va">modified_sql</span> <span class="op">&lt;-</span> <span class="fu">glue</span><span class="fu">::</span><span class="fu"><a href="https://glue.tidyverse.org/reference/glue.html" class="external-link">glue</a></span><span class="op">(</span><span class="st">"</span></span>
-<span><span class="st">      SELECT new_tbl.* </span></span>
+<span><span class="st">      SELECT new_tbl.*</span></span>
 <span><span class="st">      FROM ({added_sql}) AS new_tbl</span></span>
 <span><span class="st">      INNER JOIN ({removed_sql}) AS old_tbl</span></span>
 <span><span class="st">      ON {join_on_keys}</span></span>
 <span><span class="st">    "</span><span class="op">)</span></span>
 <span>    <span class="va">result</span><span class="op">$</span><span class="va">modified</span> <span class="op">&lt;-</span> <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbGetQuery.html" class="external-link">dbGetQuery</a></span><span class="op">(</span><span class="va">con</span>, <span class="va">modified_sql</span><span class="op">)</span></span>
 <span>  <span class="op">}</span></span>
-<span>  </span>
+<span></span>
 <span>  <span class="va">result</span></span>
 <span><span class="op">}</span></span></code></pre></div>
 <p><strong>Key points:</strong></p>
@@ -978,14 +712,14 @@ version</li>
 <h2 id="rzzz-r---package-hooks">
 <code>R/zzz.R</code> - Package Hooks<a class="anchor" aria-label="anchor" href="#rzzz-r---package-hooks"></a>
 </h2>
-<div class="sourceCode" id="cb32"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb23"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Null coalesce operator used throughout</span></span>
 <span><span class="va">`%||%`</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">x</span>, <span class="va">y</span><span class="op">)</span> <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="op">||</span> <span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="op">==</span> <span class="fl">0</span><span class="op">)</span> <span class="va">y</span> <span class="kw">else</span> <span class="va">x</span></span>
 <span></span>
 <span><span class="va">.onAttach</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">libname</span>, <span class="va">pkgname</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/base/message.html" class="external-link">packageStartupMessage</a></span><span class="op">(</span></span>
 <span>    <span class="st">"datapond "</span>, <span class="fu">utils</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/r/utils/packageDescription.html" class="external-link">packageVersion</a></span><span class="op">(</span><span class="st">"datapond"</span><span class="op">)</span>, <span class="st">"\n"</span>,</span>
-<span>    <span class="st">"Use db_connect() for hive mode or db_lake_connect() for DuckLake mode."</span></span>
+<span>    <span class="st">"Use db_connect() to connect to a DuckLake catalog."</span></span>
 <span>  <span class="op">)</span></span>
 <span><span class="op">}</span></span>
 <span></span>
@@ -1024,7 +758,7 @@ data lake.</p>
 allows it to be: 1. Used standalone via <code><a href="../reference/db_browser.html">db_browser()</a></code> 2.
 Embedded in other Shiny apps via <code><a href="../reference/db_browser_ui.html">db_browser_ui()</a></code> +
 <code><a href="../reference/db_browser_server.html">db_browser_server()</a></code></p>
-<div class="sourceCode" id="cb33"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb24"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Standalone usage</span></span>
 <span><span class="fu"><a href="../reference/db_browser.html">db_browser</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
@@ -1040,18 +774,18 @@ Embedded in other Shiny apps via <code><a href="../reference/db_browser_ui.html"
 <h3 id="browser-r---launcher">
 <code>browser.R</code> - Launcher<a class="anchor" aria-label="anchor" href="#browser-r---launcher"></a>
 </h3>
-<div class="sourceCode" id="cb34"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb25"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">db_browser</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">height</span> <span class="op">=</span> <span class="st">"500px"</span>, <span class="va">viewer</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"dialog"</span>, <span class="st">"browser"</span>, <span class="st">"pane"</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="co"># Check packages are available</span></span>
 <span>  <span class="fu">.db_assert_browser_packages</span><span class="op">(</span><span class="op">)</span></span>
-<span>  </span>
+<span></span>
 <span>  <span class="co"># Build app</span></span>
 <span>  <span class="va">ui</span> <span class="op">&lt;-</span> <span class="fu">db_browser_app_ui</span><span class="op">(</span>height <span class="op">=</span> <span class="va">height</span><span class="op">)</span></span>
 <span>  <span class="va">server</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">input</span>, <span class="va">output</span>, <span class="va">session</span><span class="op">)</span> <span class="op">{</span></span>
 <span>    <span class="fu"><a href="../reference/db_browser_server.html">db_browser_server</a></span><span class="op">(</span>id <span class="op">=</span> <span class="st">"db_browser"</span>, height <span class="op">=</span> <span class="va">height</span><span class="op">)</span></span>
 <span>  <span class="op">}</span></span>
 <span>  <span class="va">app</span> <span class="op">&lt;-</span> <span class="fu">shiny</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/shiny/man/shinyApp.html" class="external-link">shinyApp</a></span><span class="op">(</span>ui <span class="op">=</span> <span class="va">ui</span>, server <span class="op">=</span> <span class="va">server</span><span class="op">)</span></span>
-<span>  </span>
+<span></span>
 <span>  <span class="co"># Run as gadget</span></span>
 <span>  <span class="fu">shiny</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/shiny/man/runGadget.html" class="external-link">runGadget</a></span><span class="op">(</span><span class="va">app</span>, viewer <span class="op">=</span> <span class="va">viewer_func</span>, stopOnCancel <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
 <span><span class="op">}</span></span></code></pre></div>
@@ -1062,16 +796,16 @@ Embedded in other Shiny apps via <code><a href="../reference/db_browser_ui.html"
 </h3>
 <p>The UI is built with <code>bslib</code> for modern Bootstrap 5
 styling:</p>
-<div class="sourceCode" id="cb35"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb26"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">db_browser_ui</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">id</span>, <span class="va">height</span> <span class="op">=</span> <span class="st">"500px"</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">ns</span> <span class="op">&lt;-</span> <span class="fu">shiny</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/shiny/man/NS.html" class="external-link">NS</a></span><span class="op">(</span><span class="va">id</span><span class="op">)</span>  <span class="co"># Namespace for module</span></span>
-<span>  </span>
+<span></span>
 <span>  <span class="co"># Sidebar with tree view</span></span>
 <span>  <span class="va">sidebar</span> <span class="op">&lt;-</span> <span class="fu">bslib</span><span class="fu">::</span><span class="fu"><a href="https://rstudio.github.io/bslib/reference/sidebar.html" class="external-link">sidebar</a></span><span class="op">(</span></span>
 <span>    <span class="fu">shiny</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/shiny/man/htmlOutput.html" class="external-link">uiOutput</a></span><span class="op">(</span><span class="fu">ns</span><span class="op">(</span><span class="st">"tree_view"</span><span class="op">)</span><span class="op">)</span>,</span>
 <span>    <span class="fu">shiny</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/shiny/man/actionButton.html" class="external-link">actionButton</a></span><span class="op">(</span><span class="fu">ns</span><span class="op">(</span><span class="st">"refresh_tree"</span><span class="op">)</span>, <span class="st">"Refresh"</span><span class="op">)</span></span>
 <span>  <span class="op">)</span></span>
-<span>  </span>
+<span></span>
 <span>  <span class="co"># Main content with tabs</span></span>
 <span>  <span class="va">main_content</span> <span class="op">&lt;-</span> <span class="fu">bslib</span><span class="fu">::</span><span class="fu"><a href="https://rstudio.github.io/bslib/reference/navset.html" class="external-link">navset_card_tab</a></span><span class="op">(</span></span>
 <span>    <span class="fu">bslib</span><span class="fu">::</span><span class="fu"><a href="https://rstudio.github.io/bslib/reference/nav-items.html" class="external-link">nav_panel</a></span><span class="op">(</span><span class="st">"Preview"</span>, <span class="va">...</span><span class="op">)</span>,</span>
@@ -1079,7 +813,7 @@ styling:</p>
 <span>    <span class="fu">bslib</span><span class="fu">::</span><span class="fu"><a href="https://rstudio.github.io/bslib/reference/nav-items.html" class="external-link">nav_panel</a></span><span class="op">(</span><span class="st">"Search"</span>, <span class="va">...</span><span class="op">)</span>,</span>
 <span>    <span class="fu">bslib</span><span class="fu">::</span><span class="fu"><a href="https://rstudio.github.io/bslib/reference/nav-items.html" class="external-link">nav_panel</a></span><span class="op">(</span><span class="st">"Dictionary"</span>, <span class="va">...</span><span class="op">)</span></span>
 <span>  <span class="op">)</span></span>
-<span>  </span>
+<span></span>
 <span>  <span class="fu">bslib</span><span class="fu">::</span><span class="fu"><a href="https://rstudio.github.io/bslib/reference/page_sidebar.html" class="external-link">page_sidebar</a></span><span class="op">(</span>sidebar <span class="op">=</span> <span class="va">sidebar</span>, <span class="va">main_content</span><span class="op">)</span></span>
 <span><span class="op">}</span></span></code></pre></div>
 <p><strong>Key points:</strong></p>
@@ -1089,46 +823,45 @@ styling:</p>
 don’t conflict</li>
 <li>
 <code>bslib</code> provides modern Bootstrap 5 components</li>
-<li>Tree view is rendered dynamically based on hive vs DuckLake
-mode</li>
+<li>Tree view is rendered dynamically based on available schemas and
+tables</li>
 </ul>
 </div>
 <div class="section level3">
 <h3 id="browser_server-r---module-server">
 <code>browser_server.R</code> - Module Server<a class="anchor" aria-label="anchor" href="#browser_server-r---module-server"></a>
 </h3>
-<div class="sourceCode" id="cb36"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb27"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">db_browser_server</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">id</span>, <span class="va">height</span> <span class="op">=</span> <span class="st">"500px"</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="fu">shiny</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/shiny/man/moduleServer.html" class="external-link">moduleServer</a></span><span class="op">(</span><span class="va">id</span>, <span class="kw">function</span><span class="op">(</span><span class="va">input</span>, <span class="va">output</span>, <span class="va">session</span><span class="op">)</span> <span class="op">{</span></span>
-<span>    </span>
+<span></span>
 <span>    <span class="co"># Reactive values for selection state</span></span>
 <span>    <span class="va">rv</span> <span class="op">&lt;-</span> <span class="fu">shiny</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/shiny/man/reactiveValues.html" class="external-link">reactiveValues</a></span><span class="op">(</span></span>
-<span>      selected_section <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>      selected_dataset <span class="op">=</span> <span class="cn">NULL</span></span>
+<span>      selected_schema <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>      selected_table <span class="op">=</span> <span class="cn">NULL</span></span>
 <span>    <span class="op">)</span></span>
-<span>    </span>
-<span>    <span class="co"># Tree view - renders differently for hive vs DuckLake</span></span>
+<span></span>
+<span>    <span class="co"># Tree view</span></span>
 <span>    <span class="va">output</span><span class="op">$</span><span class="va">tree_view</span> <span class="op">&lt;-</span> <span class="fu">shiny</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/shiny/man/renderUI.html" class="external-link">renderUI</a></span><span class="op">(</span><span class="op">{</span></span>
-<span>      <span class="kw">if</span> <span class="op">(</span><span class="va">is_hive</span><span class="op">)</span> <span class="fu">.render_hive_tree</span><span class="op">(</span><span class="va">ns</span>, <span class="va">rv</span><span class="op">)</span></span>
-<span>      <span class="kw">else</span> <span class="fu">.render_ducklake_tree</span><span class="op">(</span><span class="va">ns</span>, <span class="va">rv</span><span class="op">)</span></span>
+<span>      <span class="fu">.render_ducklake_tree</span><span class="op">(</span><span class="va">ns</span>, <span class="va">rv</span><span class="op">)</span></span>
 <span>    <span class="op">}</span><span class="op">)</span></span>
-<span>    </span>
+<span></span>
 <span>    <span class="co"># Preview - loads data on button click</span></span>
 <span>    <span class="va">preview_data</span> <span class="op">&lt;-</span> <span class="fu">shiny</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/shiny/man/observeEvent.html" class="external-link">eventReactive</a></span><span class="op">(</span><span class="va">input</span><span class="op">$</span><span class="va">load_preview</span>, <span class="op">{</span></span>
-<span>      <span class="fu"><a href="../reference/db_hive_read.html">db_hive_read</a></span><span class="op">(</span><span class="va">rv</span><span class="op">$</span><span class="va">selected_section</span>, <span class="va">rv</span><span class="op">$</span><span class="va">selected_dataset</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>      <span class="fu">db_read</span><span class="op">(</span><span class="va">rv</span><span class="op">$</span><span class="va">selected_schema</span>, <span class="va">rv</span><span class="op">$</span><span class="va">selected_table</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>        <span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">input</span><span class="op">$</span><span class="va">preview_rows</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>        <span class="fu">collect</span><span class="op">(</span><span class="op">)</span></span>
 <span>    <span class="op">}</span><span class="op">)</span></span>
-<span>    </span>
+<span></span>
 <span>    <span class="va">output</span><span class="op">$</span><span class="va">preview_table</span> <span class="op">&lt;-</span> <span class="fu">DT</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/DT/man/dataTableOutput.html" class="external-link">renderDataTable</a></span><span class="op">(</span><span class="op">{</span></span>
 <span>      <span class="fu">DT</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/DT/man/datatable.html" class="external-link">datatable</a></span><span class="op">(</span><span class="fu">preview_data</span><span class="op">(</span><span class="op">)</span>, filter <span class="op">=</span> <span class="st">"top"</span><span class="op">)</span></span>
 <span>    <span class="op">}</span><span class="op">)</span></span>
-<span>    </span>
+<span></span>
 <span>    <span class="co"># Search</span></span>
 <span>    <span class="va">search_results</span> <span class="op">&lt;-</span> <span class="fu">shiny</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/shiny/man/observeEvent.html" class="external-link">eventReactive</a></span><span class="op">(</span><span class="va">input</span><span class="op">$</span><span class="va">do_search</span>, <span class="op">{</span></span>
 <span>      <span class="fu"><a href="../reference/db_search.html">db_search</a></span><span class="op">(</span><span class="va">input</span><span class="op">$</span><span class="va">search_pattern</span>, field <span class="op">=</span> <span class="va">input</span><span class="op">$</span><span class="va">search_field</span><span class="op">)</span></span>
 <span>    <span class="op">}</span><span class="op">)</span></span>
-<span>    </span>
+<span></span>
 <span>    <span class="co"># Dictionary with download</span></span>
 <span>    <span class="va">output</span><span class="op">$</span><span class="va">download_dict</span> <span class="op">&lt;-</span> <span class="fu">shiny</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/shiny/man/downloadHandler.html" class="external-link">downloadHandler</a></span><span class="op">(</span></span>
 <span>      filename <span class="op">=</span> <span class="st">"data_dictionary.csv"</span>,</span>
@@ -1170,10 +903,10 @@ filtering</li>
 <strong>Quoted</strong> with <code>.db_sql_quote()</code> (escapes
 single quotes)</li>
 </ol>
-<div class="sourceCode" id="cb37"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb28"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># This is safe:</span></span>
-<span><span class="va">section</span> <span class="op">&lt;-</span> <span class="fu">.db_validate_name</span><span class="op">(</span><span class="va">section</span><span class="op">)</span>  <span class="co"># Rejects "../../../etc"</span></span>
-<span><span class="va">path</span> <span class="op">&lt;-</span> <span class="fu">.db_sql_quote</span><span class="op">(</span><span class="va">glob_path</span><span class="op">)</span>       <span class="co"># Escapes quotes properly</span></span></code></pre></div>
+<span><span class="va">table</span> <span class="op">&lt;-</span> <span class="fu">.db_validate_name</span><span class="op">(</span><span class="va">table</span><span class="op">)</span>  <span class="co"># Rejects "../../../etc"</span></span>
+<span><span class="va">path</span> <span class="op">&lt;-</span> <span class="fu">.db_sql_quote</span><span class="op">(</span><span class="va">glob_path</span><span class="op">)</span>   <span class="co"># Escapes quotes properly</span></span></code></pre></div>
 </div>
 <div class="section level3">
 <h3 id="path-traversal-prevention">Path Traversal Prevention<a class="anchor" aria-label="anchor" href="#path-traversal-prevention"></a>
@@ -1182,8 +915,8 @@ single quotes)</li>
 separators (<code>/</code>, <code>\</code>) - Parent directory
 references (<code>..</code>) - Special characters</p>
 <p>This prevents attacks like:</p>
-<div class="sourceCode" id="cb38"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="../reference/db_hive_read.html">db_hive_read</a></span><span class="op">(</span><span class="st">"../../../etc"</span>, <span class="st">"passwd"</span><span class="op">)</span>  <span class="co"># Rejected!</span></span></code></pre></div>
+<div class="sourceCode" id="cb29"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu">db_read</span><span class="op">(</span>table <span class="op">=</span> <span class="st">"../../../etc/passwd"</span><span class="op">)</span>  <span class="co"># Rejected!</span></span></code></pre></div>
 <hr>
 </div>
 </div>
@@ -1194,20 +927,16 @@ references (<code>..</code>) - Special characters</p>
 <ol style="list-style-type: decimal">
 <li>Why do we use <code>.db_get_con()</code> instead of accessing
 <code>.db_env$con</code> directly?</li>
-<li>What happens if <code><a href="../reference/db_lake_write.html">db_lake_write()</a></code> fails halfway
-through?</li>
-<li>Why does <code><a href="../reference/db_hive_read.html">db_hive_read()</a></code> return a lazy table instead of
+<li>What happens if <code>db_write()</code> fails halfway through?</li>
+<li>Why does <code>db_read()</code> return a lazy table instead of
 collected data?</li>
-<li>How does <code>replace_partitions</code> mode know which folders to
-delete?</li>
 <li>What’s the difference between <code>update_cols = NULL</code> and
 <code>update_cols = character(0)</code> in
 <code><a href="../reference/db_upsert.html">db_upsert()</a></code>?</li>
 <li>Why would you choose SQLite over DuckDB as a catalog backend?</li>
 <li>How does <code><a href="../reference/db_preview_upsert.html">db_preview_upsert()</a></code> know how many rows will be
 updated vs inserted?</li>
-<li>Where is documentation metadata stored in hive mode vs DuckLake
-mode?</li>
+<li>Where is documentation metadata stored?</li>
 </ol>
 <hr>
 </div>
@@ -1220,7 +949,7 @@ mode?</li>
 <strong>Always validate inputs</strong> with
 <code>.db_validate_name()</code> or custom validation</li>
 <li>
-<strong>Check connection and mode</strong> at the start of every
+<strong>Check connection</strong> at the start of every
 function</li>
 <li>
 <strong>Use <code>.db_get()</code> and

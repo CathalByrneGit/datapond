@@ -50,8 +50,6 @@
   : List schemas in the DuckLake catalog
 - [`db_list_sections()`](https://cathalbyrnegit.github.io/datapond/reference/db_list_sections.md)
   : List sections in the hive data lake
-- [`db_list_tables()`](https://cathalbyrnegit.github.io/datapond/reference/db_list_tables.md)
-  : List tables in a DuckLake schema
 - [`db_list_views()`](https://cathalbyrnegit.github.io/datapond/reference/db_list_views.md)
   : List views in a DuckLake schema
 - [`db_preview_hive_write()`](https://cathalbyrnegit.github.io/datapond/reference/db_preview_hive_write.md)
@@ -84,6 +82,8 @@
   : Get column names for a DuckLake table
 - [`db_table_exists()`](https://cathalbyrnegit.github.io/datapond/reference/db_table_exists.md)
   : Check if a DuckLake table exists
+- [`db_tables()`](https://cathalbyrnegit.github.io/datapond/reference/db_tables.md)
+  : List tables in a DuckLake schema
 - [`db_upsert()`](https://cathalbyrnegit.github.io/datapond/reference/db_upsert.md)
   : Upsert into a DuckLake table using MERGE INTO
 - [`db_vacuum()`](https://cathalbyrnegit.github.io/datapond/reference/db_vacuum.md)

@@ -31,7 +31,6 @@
 <url><loc>https://cathalbyrnegit.github.io/datapond/reference/db_list_public.html</loc></url>
 <url><loc>https://cathalbyrnegit.github.io/datapond/reference/db_list_schemas.html</loc></url>
 <url><loc>https://cathalbyrnegit.github.io/datapond/reference/db_list_sections.html</loc></url>
-<url><loc>https://cathalbyrnegit.github.io/datapond/reference/db_list_tables.html</loc></url>
 <url><loc>https://cathalbyrnegit.github.io/datapond/reference/db_list_views.html</loc></url>
 <url><loc>https://cathalbyrnegit.github.io/datapond/reference/db_preview_hive_write.html</loc></url>
 <url><loc>https://cathalbyrnegit.github.io/datapond/reference/db_preview_lake_write.html</loc></url>
@@ -48,6 +47,7 @@
 <url><loc>https://cathalbyrnegit.github.io/datapond/reference/db_sync_catalog.html</loc></url>
 <url><loc>https://cathalbyrnegit.github.io/datapond/reference/db_table_cols.html</loc></url>
 <url><loc>https://cathalbyrnegit.github.io/datapond/reference/db_table_exists.html</loc></url>
+<url><loc>https://cathalbyrnegit.github.io/datapond/reference/db_tables.html</loc></url>
 <url><loc>https://cathalbyrnegit.github.io/datapond/reference/db_upsert.html</loc></url>
 <url><loc>https://cathalbyrnegit.github.io/datapond/reference/db_vacuum.html</loc></url>
 <url><loc>https://cathalbyrnegit.github.io/datapond/reference/db_view_cols.html</loc></url>

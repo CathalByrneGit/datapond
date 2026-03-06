@@ -88,7 +88,7 @@ db_lake_connect(
 db_list_schemas()
 #> [1] "main" "trade" "labour"
 
-db_list_tables("trade")
+db_tables("trade")
 #> [1] "imports" "exports" "products"
 
 # Read current data
@@ -347,7 +347,7 @@ systems needed.
 | [`db_list_datasets()`](https://cathalbyrnegit.github.io/datapond/reference/db_list_datasets.md)   | Hive     | List datasets in a section |
 | [`db_dataset_exists()`](https://cathalbyrnegit.github.io/datapond/reference/db_dataset_exists.md) | Hive     | Check if dataset exists    |
 | [`db_list_schemas()`](https://cathalbyrnegit.github.io/datapond/reference/db_list_schemas.md)     | DuckLake | List schemas               |
-| [`db_list_tables()`](https://cathalbyrnegit.github.io/datapond/reference/db_list_tables.md)       | DuckLake | List tables in schema      |
+| [`db_tables()`](https://cathalbyrnegit.github.io/datapond/reference/db_tables.md)                 | DuckLake | List tables in schema      |
 | [`db_list_views()`](https://cathalbyrnegit.github.io/datapond/reference/db_list_views.md)         | DuckLake | List views in schema       |
 | [`db_table_exists()`](https://cathalbyrnegit.github.io/datapond/reference/db_table_exists.md)     | DuckLake | Check if table exists      |
 | [`db_create_schema()`](https://cathalbyrnegit.github.io/datapond/reference/db_create_schema.md)   | DuckLake | Create a new schema        |

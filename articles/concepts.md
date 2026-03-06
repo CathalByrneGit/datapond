@@ -1,8 +1,8 @@
 # Data Lake Concepts
 
 This vignette explains the core concepts behind `datapond` - what data
-lakes are, how hive partitioning works, and what DuckLake brings to the
-table. No prior knowledge assumed.
+lakes are, how DuckLake works, and how to use it effectively. No prior
+knowledge assumed.
 
 ## The Problem We’re Solving
 
@@ -59,98 +59,26 @@ Parquet is a columnar file format that’s:
 
 ------------------------------------------------------------------------
 
-## Hive Partitioning Explained
-
-**Hive partitioning** is a way of organising files into folders based on
-column values. The folder names encode the data they contain.
-
-### Example: Trade Imports Data
-
-Instead of one massive file:
-
-    Trade/Imports/all_data.parquet  (10 GB - slow to read!)
-
-We partition by year and month:
-
-    Trade/Imports/
-      year=2023/
-        month=01/
-          data.parquet
-          data_part2.parquet
-        month=02/
-          data.parquet
-        ...
-      year=2024/
-        month=01/
-          data.parquet
-        ...
-
-### Why This Matters
-
-When you query for January 2024 data:
-
-``` r
-imports |> 
-  filter(year == 2024, month == 1)
-```
-
-DuckDB is smart enough to **only read the `year=2024/month=01/`
-folder**. It skips all other folders entirely. This is called
-**partition pruning** and it makes queries on large datasets
-dramatically faster.
-
-### Choosing Partition Columns
-
-Good partition columns are:
-
-- **Low cardinality** - not too many unique values (year, month, region)
-- **Frequently filtered** - columns you often use in WHERE clauses
-- **Stable** - values that don’t change for existing records
-
-Bad partition columns:
-
-- **High cardinality** - unique IDs, timestamps with seconds
-- **Rarely filtered** - columns you never filter on
-
-**Rule of thumb**: Aim for partition folders containing 100MB - 1GB of
-data each.
-
-### How datapond Uses Hive Partitioning
-
-``` r
-# Write with partitioning
-db_hive_write(
-  my_data,
-  section = "Trade",
-  dataset = "Imports",
-  partition_by = c("year", "month")  # Creates year=X/month=Y folders
-)
-
-# Read - partitions are automatic columns
-imports <- db_hive_read("Trade", "Imports")
-imports |> filter(year == 2024)  # Only reads 2024 folders
-```
-
-------------------------------------------------------------------------
-
 ## What is DuckLake?
 
-**DuckLake** is a newer approach that adds database-like features on top
-of Parquet files. Think of it as “Parquet files with superpowers”.
+**DuckLake** is an extension for DuckDB that adds database-like features
+on top of Parquet files. Think of it as “Parquet files with
+superpowers”.
 
-    Hive Partitioning              DuckLake
+    Plain Parquet Files            DuckLake
     ┌─────────────────┐          ┌─────────────────┐
     │ Just files      │          │ Files +         │
     │                 │          │ Metadata catalog│
-    │ 📁 year=2024/   │          │                 │
-    │   📄 data.parquet          │ 📄 catalog.sqlite
-    │                 │          │ 📁 data/        │
-    │ No versioning   │          │   📄 file1.parquet
-    │ No transactions │          │   📄 file2.parquet
-    │                 │          │                 │
-    └─────────────────┘          │ ✅ Versioning   │
+    │ 📄 data.parquet │          │                 │
+    │                 │          │ 📄 catalog.sqlite
+    │ No versioning   │          │ 📁 data/        │
+    │ No transactions │          │   📄 file1.parquet
+    │                 │          │   📄 file2.parquet
+    └─────────────────┘          │                 │
+                                 │ ✅ Versioning   │
                                  │ ✅ Transactions │
                                  │ ✅ Time travel  │
+                                 │ ✅ Partitioning │
                                  └─────────────────┘
 
 ### The Metadata Catalog
@@ -162,6 +90,7 @@ DuckLake needs a place to store metadata about your tables. This
 - The schema (columns and types) of each table
 - A history of all changes (snapshots)
 - Who made changes and when
+- Partition keys for each table
 
 The actual data is still in Parquet files - DuckLake just adds a
 management layer.
@@ -176,7 +105,7 @@ metadata:
 ### 1. DuckDB (Single User)
 
 ``` r
-db_lake_connect(
+db_connect(
   catalog_type = "duckdb",
   metadata_path = "metadata.ducklake",
   data_path = "//CSO-NAS/DataLake/data"
@@ -190,7 +119,7 @@ db_lake_connect(
 ### 2. SQLite (Multiple Local Users) - RECOMMENDED
 
 ``` r
-db_lake_connect(
+db_connect(
   catalog_type = "sqlite",
   metadata_path = "//CSO-NAS/DataLake/catalog.sqlite",
   data_path = "//CSO-NAS/DataLake/data"
@@ -211,7 +140,7 @@ typical usage where writes are less frequent than reads.
 ### 3. PostgreSQL (Multi-User Lakehouse)
 
 ``` r
-db_lake_connect(
+db_connect(
   catalog_type = "postgres",
   metadata_path = "dbname=ducklake_catalog host=db.cso.ie",
   data_path = "//CSO-NAS/DataLake/data"
@@ -247,14 +176,14 @@ Query data as it existed at any point in the past:
 
 ``` r
 # Current data
-products <- db_lake_read(table = "products")
+products <- db_read(table = "products")
 
 # Data as of version 5
-products_v5 <- db_lake_read(table = "products", version = 5)
+products_v5 <- db_read(table = "products", version = 5)
 
 # Data as of last Tuesday
-products_tue <- db_lake_read(table = "products", 
-                              timestamp = "2025-01-14 00:00:00")
+products_tue <- db_read(table = "products",
+                        timestamp = "2025-01-14 00:00:00")
 ```
 
 This is invaluable when:
@@ -285,7 +214,7 @@ partial updates that leave data in a broken state.
 
 ``` r
 # If this fails halfway through, no data is changed
-db_lake_write(big_dataset, table = "imports", mode = "overwrite")
+db_write(big_dataset, table = "imports", mode = "overwrite")
 ```
 
 ### 4. Schema Evolution
@@ -294,6 +223,28 @@ DuckLake handles schema changes gracefully:
 
 - Add a new column? Old data gets NULLs for that column
 - Query old versions? They still work with the old schema
+
+### 5. Hive Partitioning
+
+DuckLake supports partitioning tables by column values for improved
+query performance:
+
+``` r
+# Create a partitioned table
+db_write(
+  my_data,
+  table = "imports",
+  partition_by = c("year", "month")
+)
+
+# Check partition keys
+db_get_partitioning(table = "imports")
+#> [1] "year"  "month"
+
+# Queries filtering by partition columns are much faster
+imports <- db_read(table = "imports")
+imports |> filter(year == 2024, month == 1) |> collect()
+```
 
 ------------------------------------------------------------------------
 
@@ -323,26 +274,14 @@ related tables together.
 db_create_schema("trade")
 
 # Write to it
-db_lake_write(imports_data, schema = "trade", table = "imports")
+db_write(imports_data, schema = "trade", table = "imports")
 
 # Read from it
-imports <- db_lake_read(schema = "trade", table = "imports")
+imports <- db_read(schema = "trade", table = "imports")
 
 # List tables in a schema
-db_list_tables("trade")
+db_tables("trade")
 ```
-
-### Schemas vs Sections
-
-| Hive Mode                                                                                       | DuckLake Mode                                                                                 |
-|-------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------|
-| Section (folder)                                                                                | Schema                                                                                        |
-| Dataset (subfolder)                                                                             | Table                                                                                         |
-| [`db_list_sections()`](https://cathalbyrnegit.github.io/datapond/reference/db_list_sections.md) | [`db_list_schemas()`](https://cathalbyrnegit.github.io/datapond/reference/db_list_schemas.md) |
-| `db_list_datasets("Trade")`                                                                     | `db_list_tables("trade")`                                                                     |
-
-They serve the same organisational purpose - grouping related data
-together.
 
 ------------------------------------------------------------------------
 
@@ -351,13 +290,12 @@ together.
 Good data governance requires documentation. `datapond` provides
 built-in tools to document your datasets and generate a data dictionary.
 
-### Documenting Datasets
+### Documenting Tables
 
 ``` r
-# Add metadata to a dataset
+# Add metadata to a table
 db_describe(
-  section = "Trade",
-  dataset = "Imports",
+  table = "imports",
   description = "Monthly import values by country and HS commodity code",
   owner = "Trade Section",
   tags = c("trade", "monthly", "official")
@@ -365,42 +303,33 @@ db_describe(
 
 # Document individual columns
 db_describe_column(
-  section = "Trade",
-  dataset = "Imports",
+  table = "imports",
   column = "value",
   description = "Import value",
   units = "EUR (thousands)"
 )
 
 db_describe_column(
-  section = "Trade",
-  dataset = "Imports",
+  table = "imports",
   column = "country_code",
   description = "ISO 3166-1 alpha-2 country code"
 )
 ```
 
-### Where is Documentation Stored?
-
-- **Hive mode**: Creates a `_metadata.json` file in each dataset folder
-- **DuckLake mode**: Stores in a `_metadata` schema in the catalog
-
-Either way, documentation travels with the data.
-
 ### Searching and Discovery
 
 ``` r
-# Search datasets by any field
+# Search tables by any field
 db_search("trade")                        # Matches name, description, owner, or tags
 db_search("monthly", field = "tags")      # Search only tags
-db_search("Trade Section", field = "owner")  # Find datasets by owner
+db_search("Trade Section", field = "owner")  # Find tables by owner
 
-# Find columns across all datasets
+# Find columns across all tables
 db_search_columns("country")
-#>   section  dataset  column_name  column_type  column_description
-#> 1 Trade    Imports  country_code VARCHAR      ISO 3166-1 alpha-2...
-#> 2 Trade    Exports  country_code VARCHAR      ISO 3166-1 alpha-2...
-#> 3 Labour   Survey   country      VARCHAR      Country of residence
+#>   schema  table    column_name  column_type  column_description
+#> 1 trade   imports  country_code VARCHAR      ISO 3166-1 alpha-2...
+#> 2 trade   exports  country_code VARCHAR      ISO 3166-1 alpha-2...
+#> 3 labour  survey   country      VARCHAR      Country of residence
 ```
 
 ### Generating a Data Dictionary
@@ -409,19 +338,19 @@ db_search_columns("country")
 # Full data dictionary with column details
 dict <- db_dictionary()
 
-# Just dataset-level summary
+# Just table-level summary
 dict_summary <- db_dictionary(include_columns = FALSE)
 
-# Filter to specific section
-dict_trade <- db_dictionary(section = "Trade")
+# Filter to specific schema
+dict_trade <- db_dictionary(schema = "trade")
 
 # Export to Excel
 writexl::write_xlsx(dict, "data_dictionary.xlsx")
 ```
 
-The data dictionary includes: - Dataset/table name and location -
-Description, owner, tags - Column names, types, and documentation - Last
-updated timestamps
+The data dictionary includes: - Table name and location - Description,
+owner, tags - Column names, types, and documentation - Last updated
+timestamps
 
 ------------------------------------------------------------------------
 
@@ -430,26 +359,10 @@ updated timestamps
 Before making changes to production data, you can preview what will
 happen:
 
-### Hive Write Preview
+### Write Preview
 
 ``` r
-db_preview_hive_write(
-  my_data,
-  section = "Trade",
-  dataset = "Imports",
-  partition_by = c("year", "month"),
-  mode = "replace_partitions"
-)
-```
-
-Shows: - Target path and whether it exists - Incoming vs existing row
-counts - **Schema changes** - new columns, removed columns, type
-changes - **Partition impact** - which partitions will be affected
-
-### DuckLake Write Preview
-
-``` r
-db_preview_lake_write(my_data, table = "imports", mode = "overwrite")
+db_preview_write(my_data, table = "imports", mode = "overwrite")
 ```
 
 Shows: - Current vs new row counts - Schema comparison - Warnings (e.g.,
@@ -467,146 +380,10 @@ incoming data
 
 ------------------------------------------------------------------------
 
-## Comparing the Two Approaches
-
-### When to Use Hive Mode
-
-✅ **Good for:**
-
-- Migrating from existing SAS folder structure
-- Simple data sharing without versioning needs
-- When you need direct file access (for tools that can’t use DuckLake)
-- Getting started quickly with minimal setup
-
-❌ **Limitations:**
-
-- No versioning - overwrites are permanent
-- No transaction safety - partial failures can corrupt data
-- Manual schema management
-
-### When to Use DuckLake Mode
-
-✅ **Good for:**
-
-- Production data pipelines where reliability matters
-- When you need audit trails (who changed what, when)
-- Analyses that need to be reproducible at specific points in time
-- Complex updates (upserts, merges)
-
-❌ **Considerations:**
-
-- Slightly more complex setup (choose catalog backend)
-- Newer technology (less battle-tested than simple files)
-
-------------------------------------------------------------------------
-
 ## Access Control
 
-Both modes use **file system permissions** - the same model commonly
+DuckLake uses **file system permissions** - the same model commonly
 used.
-
-### Hive Mode Access
-
-    //CSO-NAS/DataLake/
-    ├── Trade/          ← Trade section has read/write
-    │   ├── Imports/
-    │   └── Exports/
-    ├── Labour/         ← Labour section has read/write
-    │   └── Employment/
-    └── Shared/         ← Everyone has read access
-        └── Reference/
-
-Users get access by being granted folder permissions through IT.
-
-### DuckLake Mode Access
-
-    //CSO-NAS/DataLake/
-    ├── catalog.sqlite      ← Need read (or read/write) access
-    └── data/               ← Need read (or read/write) access
-        ├── trade/
-        └── labour/
-
-**Read access** = can query data **Write access** = can modify data
-
-The permissions work at the file/folder level, just like before.
-
-For PostgreSQL catalogs, you’d also need database credentials - but the
-Parquet data files still use file system permissions.
-
-------------------------------------------------------------------------
-
-## Public Catalog: Organisation-wide Discovery
-
-A common challenge: **How do people discover what data exists without
-having access to all of it?**
-
-In Hive mode, if you can’t access the Trade folder, you can’t see what
-datasets Trade has. `datapond` solves this with a **public catalog** - a
-shared location for metadata only.
-
-### How It Works
-
-    //CSO-NAS/DataLake/
-    ├── _catalog/             ← Everyone can read this folder
-    │   ├── Trade/
-    │   │   ├── Imports.json  ← Metadata only (description, owner, columns)
-    │   │   └── Exports.json
-    │   └── Labour/
-    │       └── Employment.json
-    ├── Trade/                ← Only Trade section can access
-    │   └── Imports/
-    │       ├── _metadata.json ← Source metadata
-    │       └── year=2024/
-    │           └── data.parquet
-    └── Labour/               ← Only Labour section can access
-        └── Employment/
-
-### Publishing to the Public Catalog
-
-``` r
-# Make a dataset discoverable
-db_describe(
-  section = "Trade",
-  dataset = "Imports",
-  description = "Monthly import values by country",
-  owner = "Trade Section",
-  public = TRUE  # Copies metadata to _catalog/Trade/Imports.json
-)
-
-# Or use the convenience function
-db_set_public(section = "Trade", dataset = "Imports")
-```
-
-### Discovering Data
-
-``` r
-# Anyone can see what datasets exist (even without data access)
-db_list_public()
-#>   section dataset            description        owner
-#> 1   Trade Imports Monthly import values  Trade Section
-#> 2  Labour Employment    Employment stats Labour Section
-
-# Find datasets by keyword
-db_search("monthly", field = "description")
-```
-
-### Security Model
-
-| Location    | Contains              | Who Can Access     |
-|-------------|-----------------------|--------------------|
-| `_catalog/` | Metadata only (JSON)  | Everyone (read)    |
-| `Trade/`    | Actual data (Parquet) | Trade section only |
-
-**The data stays secure** - the public catalog only contains
-descriptions, not the actual data values.
-
-------------------------------------------------------------------------
-
-## DuckLake Access Control
-
-DuckLake **automatically organises data** into `{schema}/{table}/`
-folder structure, enabling folder-level permissions without any extra
-configuration.
 
 ### Architecture
 
@@ -629,7 +406,7 @@ configuration.
 
 ``` r
 # Connect to DuckLake
-db_lake_connect(
+db_connect(
   catalog_type = "sqlite",
   metadata_path = "//CSO-NAS/DataLake/catalog.sqlite",
   data_path = "//CSO-NAS/DataLake/data"
@@ -641,28 +418,13 @@ db_create_schema("labour")
 db_create_schema("reference")
 
 # Write data - files go to data/{schema}/{table}/ automatically
-db_lake_write(imports_data, schema = "trade", table = "imports")
-db_lake_write(countries, schema = "reference", table = "countries")
+db_write(imports_data, schema = "trade", table = "imports")
+db_write(countries, schema = "reference", table = "countries")
 
 # Set folder ACLs on the schema folders:
 # - //CSO-NAS/DataLake/data/trade/     → Trade team read/write
 # - //CSO-NAS/DataLake/data/labour/    → Labour team read/write
 # - //CSO-NAS/DataLake/data/reference/ → Everyone read
-```
-
-### Using Schemas
-
-``` r
-# Read from a schema (requires folder access)
-imports <- db_lake_read(schema = "trade", table = "imports")
-
-# Discover available tables
-db_list_schemas()
-db_list_tables("trade")
-
-# Optionally partition for finer access control
-db_set_partitioning(schema = "trade", table = "imports", partition_by = c("year"))
-db_get_partitioning(schema = "trade", table = "imports")
 ```
 
 ### How It Works
@@ -691,7 +453,7 @@ Here’s how a typical workflow might look:
 library(datapond)
 
 # Connect to DuckLake
-db_lake_connect(
+db_connect(
   catalog_type = "sqlite",
   metadata_path = "//CSO-NAS/DataLake/catalog.sqlite",
   data_path = "//CSO-NAS/DataLake/data"
@@ -701,10 +463,10 @@ db_lake_connect(
 imports_q1 <- prepare_imports_data(raw_files)
 
 # Preview what will happen
-db_preview_lake_write(imports_q1, schema = "trade", table = "imports", mode = "append")
+db_preview_write(imports_q1, schema = "trade", table = "imports", mode = "append")
 
 # Publish with a meaningful commit message
-db_lake_write(
+db_write(
   imports_q1,
   schema = "trade",
   table = "imports",
@@ -730,7 +492,7 @@ db_disconnect()
 library(datapond)
 
 # Connect to DuckLake (read access to catalog and data folder)
-db_lake_connect(
+db_connect(
   catalog_type = "sqlite",
   metadata_path = "//CSO-NAS/DataLake/catalog.sqlite",
   data_path = "//CSO-NAS/DataLake/data"
@@ -738,7 +500,7 @@ db_lake_connect(
 
 # Discover what's available
 db_list_schemas()
-db_list_tables("trade")
+db_tables("trade")
 
 # Search for relevant data
 db_search("imports")
@@ -747,7 +509,7 @@ db_search("imports")
 db_get_docs(schema = "trade", table = "imports")
 
 # Read and analyse
-imports <- db_lake_read(schema = "trade", table = "imports")
+imports <- db_read(schema = "trade", table = "imports")
 
 imports |>
   filter(year == 2025, quarter == 1) |>
@@ -761,22 +523,18 @@ db_disconnect()
 
 ## Glossary
 
-| Term                  | Meaning                                                                                  |
-|-----------------------|------------------------------------------------------------------------------------------|
-| **Parquet**           | Columnar file format for storing tabular data efficiently                                |
-| **Hive partitioning** | Organising files into folders named by column values (e.g., `year=2024/`)                |
-| **Partition pruning** | Query optimisation that skips irrelevant partition folders                               |
-| **DuckLake**          | Metadata layer that adds versioning and transactions to Parquet files                    |
-| **Catalog**           | Database storing DuckLake metadata (can be DuckDB, SQLite, or PostgreSQL)                |
-| **Snapshot**          | A point-in-time version of the data in DuckLake                                          |
-| **Time travel**       | Querying data as it existed at a past version or timestamp                               |
-| **Schema**            | A namespace for organising related tables; can have custom data paths for access control |
-| **Schema path**       | Custom data folder for a DuckLake schema, enabling folder-based access control           |
-| **ACID**              | Atomicity, Consistency, Isolation, Durability - database reliability guarantees          |
-| **Upsert**            | Update existing rows + insert new rows in one operation                                  |
-| **Data dictionary**   | Documentation of all datasets, their columns, types, and descriptions                    |
-| **Public catalog**    | Shared location for metadata in hive mode, enabling discovery without data access        |
-| **Section**           | An organisational unit (e.g., Trade, Labour) - folder in hive mode                       |
+| Term                | Meaning                                                                         |
+|---------------------|---------------------------------------------------------------------------------|
+| **Parquet**         | Columnar file format for storing tabular data efficiently                       |
+| **DuckLake**        | Metadata layer that adds versioning and transactions to Parquet files           |
+| **Catalog**         | Database storing DuckLake metadata (can be DuckDB, SQLite, or PostgreSQL)       |
+| **Snapshot**        | A point-in-time version of the data in DuckLake                                 |
+| **Time travel**     | Querying data as it existed at a past version or timestamp                      |
+| **Schema**          | A namespace for organising related tables                                       |
+| **Partition**       | Organising data by column values (e.g., year, month) for faster queries         |
+| **ACID**            | Atomicity, Consistency, Isolation, Durability - database reliability guarantees |
+| **Upsert**          | Update existing rows + insert new rows in one operation                         |
+| **Data dictionary** | Documentation of all datasets, their columns, types, and descriptions           |
 
 ------------------------------------------------------------------------
 
@@ -786,6 +544,4 @@ db_disconnect()
   [`vignette("code-walkthrough")`](https://cathalbyrnegit.github.io/datapond/articles/code-walkthrough.md)
   for detailed explanation of how the package code works
 - Try the examples in the README to get hands-on experience
-- Start with Hive mode if migrating from SAS, move to DuckLake when
-  ready
-- For DuckLake, use SQLite catalog on shared drives
+- Use SQLite catalog on shared drives for team collaboration

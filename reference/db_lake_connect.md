@@ -8,7 +8,7 @@ Connect to DuckDB + attach a DuckLake catalog
 db_lake_connect(
   duckdb_db = ":memory:",
   catalog = "cso",
-  catalog_type = c("duckdb", "sqlite", "postgres"),
+  catalog_type = NULL,
   metadata_path = "metadata.ducklake",
   data_path = "//CSO-NAS/DataLake",
   snapshot_version = NULL,
@@ -31,18 +31,16 @@ db_lake_connect(
 
 - catalog_type:
 
-  Type of catalog database backend. One of:
+  Type of catalog database backend. If NULL (default), auto-detected
+  from metadata_path extension:
 
-  - "duckdb" (default): Single-client local use. Metadata stored in
-    .ducklake file.
+  - ".sqlite" or ".db" -\> "sqlite"
 
-  - "sqlite": Multi-client local use. Metadata stored in .sqlite file.
-    Supports multiple readers + single writer with automatic retry.
-    Recommended for most CSO use cases with shared network drives.
+  - ".ducklake" or ".duckdb" -\> "duckdb"
 
-  - "postgres": Multi-user lakehouse. Metadata stored in PostgreSQL
-    database. Requires PostgreSQL 12+ and connection string in
-    metadata_path.
+  - "postgres://" connection string -\> "postgres"
+
+  Can also be set explicitly to one of: "duckdb", "sqlite", "postgres".
 
 - metadata_path:
 
@@ -93,9 +91,8 @@ db_lake_connect(
   data_path = "//CSO-NAS/DataLake"
 )
 
-# SQLite catalog (multiple local users - RECOMMENDED for shared drives)
+# SQLite catalog (auto-detected from .sqlite extension)
 db_lake_connect(
-  catalog_type = "sqlite",
   metadata_path = "//CSO-NAS/DataLake/catalog.sqlite",
   data_path = "//CSO-NAS/DataLake/data"
 )
@@ -109,7 +106,6 @@ db_lake_connect(
 
 # Time travel - connect to a specific snapshot
 db_lake_connect(
-  catalog_type = "sqlite",
   metadata_path = "catalog.sqlite",
   data_path = "//CSO-NAS/DataLake/data",
   snapshot_version = 5
