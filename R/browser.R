@@ -12,8 +12,7 @@
 #' run_example()
 #'
 #' # Run specific example
-#' run_example("browser_demo_hive")
-#' run_example("browser_demo_ducklake")
+#' run_example("browser_demo")
 #' }
 run_example <- function(name = NULL) {
   examples_dir <- system.file("examples", package = "datapond")
@@ -51,21 +50,20 @@ run_example <- function(name = NULL) {
 #' @title Browse the data lake interactively
 #' @export
 #' @family shiny
-#' @description Launches a Shiny app to browse datasets, view metadata,
-#'   search for data, and preview tables.
+#' @description Launches a Shiny app to browse tables, view metadata,
+#'   search for data, and preview data.
 #' @param height Height of the data preview table (default "500px")
 #' @param viewer Where to display: "dialog" (RStudio viewer), "browser", or "pane"
 #' @return Opens the browser app. Returns NULL invisibly.
 #' @examples
 #' \dontrun{
 #' # Connect first
-#' db_connect(path = "//CSO-NAS/DataLake")
+#' db_connect(
+#'   metadata_path = "catalog.ducklake",
+#'   data_path = "//CSO-NAS/DataLake"
+#' )
 #'
 #' # Launch browser
-#' db_browser()
-#'
-#' # Or with DuckLake
-#' db_lake_connect(...)
 #' db_browser()
 #' }
 db_browser <- function(height = "500px",
@@ -77,7 +75,7 @@ db_browser <- function(height = "500px",
 
   con <- .db_get_con()
   if (is.null(con)) {
-    stop("Not connected. Use db_connect() or db_lake_connect() first.", call. = FALSE)
+    stop("Not connected. Use db_connect() first.", call. = FALSE)
   }
 
   ui <- db_browser_app_ui(height = height)

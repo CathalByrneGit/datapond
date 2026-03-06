@@ -95,7 +95,7 @@ db_lake_connect(
 db_list_schemas()
 #> [1] "main" "trade" "labour"
 
-db_list_tables("trade")
+db_tables("trade")
 #> [1] "imports" "exports" "products"
 
 # Read current data
@@ -354,7 +354,7 @@ systems needed.
 | `db_list_datasets()`  | Hive     | List datasets in a section |
 | `db_dataset_exists()` | Hive     | Check if dataset exists    |
 | `db_list_schemas()`   | DuckLake | List schemas               |
-| `db_list_tables()`    | DuckLake | List tables in schema      |
+| `db_tables()`    | DuckLake | List tables in schema      |
 | `db_list_views()`     | DuckLake | List views in schema       |
 | `db_table_exists()`   | DuckLake | Check if table exists      |
 | `db_create_schema()`  | DuckLake | Create a new schema        |

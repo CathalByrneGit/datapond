@@ -1,4 +1,4 @@
-# R/connection.R
+# R/db_connect.R
 
 .db_env <- new.env(parent = emptyenv())
 
@@ -66,6 +66,28 @@
   }
 }
 
+# internal: auto-detect catalog type from metadata_path
+.db_detect_catalog_type <- function(metadata_path) {
+  path_lower <- tolower(metadata_path)
+
+  # Check for postgres connection string
+  if (grepl("^postgres(ql)?://", path_lower)) {
+    return("postgres")
+  }
+
+  # Check file extension
+
+  ext <- tools::file_ext(path_lower)
+  switch(ext,
+    sqlite = "sqlite",
+    db = "sqlite",
+    ducklake = "duckdb",
+    duckdb = "duckdb",
+    # Default to duckdb if no recognizable extension
+    "duckdb"
+  )
+}
+
 # internal: build the DuckLake connection string based on catalog type
 .db_build_ducklake_dsn <- function(catalog_type, metadata_path) {
   switch(catalog_type,
@@ -81,7 +103,7 @@
   # Always need ducklake
   try(DBI::dbExecute(con, "INSTALL ducklake"), silent = TRUE)
   DBI::dbExecute(con, "LOAD ducklake")
-  
+
   # Load backend-specific extension
   if (catalog_type == "sqlite") {
     try(DBI::dbExecute(con, "INSTALL sqlite"), silent = TRUE)
@@ -91,94 +113,27 @@
     DBI::dbExecute(con, "LOAD postgres")
   }
   # duckdb needs no extra extension
-  
+
   invisible(TRUE)
 }
 
 
-#' Connect to the CSO hive parquet lake
-#' @description Establishes a singleton connection to DuckDB and stores base path.
-#' @param path Root path for the lake (e.g. "//CSO-NAS/DataLake")
-#' @param db DuckDB database file path. Use ":memory:" for in-memory.
-#' @param threads Number of DuckDB threads (NULL leaves default)
-#' @param memory_limit e.g. "4GB" (NULL leaves default)
-#' @param load_extensions character vector of extensions to install/load, e.g. c("httpfs")
-#' @return DuckDB connection object
-#' @examples
-#' \dontrun{
-#' # Connect to hive-partitioned data lake
-#' db_connect(path = "//CSO-NAS/DataLake")
-#' 
-#' # With performance tuning
-#' db_connect(path = "//CSO-NAS/DataLake", threads = 4, memory_limit = "8GB")
-#' }
-#' @export
-db_connect <- function(path = "//CSO-NAS/DataLake",
-                        db = ":memory:",
-                        threads = NULL,
-                        memory_limit = NULL,
-                        load_extensions = NULL) {
-  con <- .db_get_con()
-  if (!is.null(con)) {
-    # Check if already connected in same mode
-    curr_mode <- .db_get("mode")
-    if (identical(curr_mode, "hive")) {
-      return(con)
-    } else {
-      # Connected in different mode - disconnect first
-      message("Disconnecting from DuckLake mode to connect in hive mode...")
-      db_disconnect()
-    }
-  }
-
-  con <- DBI::dbConnect(duckdb::duckdb(), dbdir = db)
-
-  # Optional tuning
-  if (!is.null(threads)) {
-    DBI::dbExecute(con, sprintf("SET threads=%d", as.integer(threads)))
-  }
-  if (!is.null(memory_limit)) {
-    DBI::dbExecute(con, sprintf("SET memory_limit='%s'", gsub("'", "''", memory_limit)))
-  }
-
-  # Optional extensions (for cloud/remote FS etc.)
-  if (!is.null(load_extensions)) {
-    for (ext in load_extensions) {
-      ext_clean <- .db_validate_name(ext, "extension")
-      try(DBI::dbExecute(con, sprintf("INSTALL %s", ext_clean)), silent = TRUE)
-      DBI::dbExecute(con, sprintf("LOAD %s", ext_clean))
-    }
-  }
-
-  assign("data_path", path, envir = .db_env)
-  assign("db_path", db, envir = .db_env)
-  assign("con", con, envir = .db_env)
-  assign("mode", "hive", envir = .db_env)
-
-  # Clean up automatically when session ends (best effort)
-  reg.finalizer(.db_env, function(e) {
-    if (exists("con", envir = e, inherits = FALSE)) {
-      try(DBI::dbDisconnect(e$con, shutdown = TRUE), silent = TRUE)
-    }
-  }, onexit = TRUE)
-
-  con
-}
-
-
-#' Connect to DuckDB + attach a DuckLake catalog
+#' Connect to a DuckLake data lake
+#'
+#' @description Establishes a connection to DuckDB and attaches a DuckLake catalog.
+#' DuckLake provides ACID transactions, time travel, and schema evolution on top
+#' of Parquet files.
 #'
 #' @param duckdb_db DuckDB database file path. Use ":memory:" for in-memory.
 #' @param catalog DuckLake catalog name inside DuckDB (e.g. "cso")
-#' @param catalog_type Type of catalog database backend. One of:
+#' @param catalog_type Type of catalog database backend. If NULL (default),
+#'   auto-detected from metadata_path extension:
 #'   \itemize{
-#'     \item "duckdb" (default): Single-client local use. Metadata stored in .ducklake file.
-#'     \item "sqlite": Multi-client local use. Metadata stored in .sqlite file. 
-#'       Supports multiple readers + single writer with automatic retry.
-#'       Recommended for most CSO use cases with shared network drives.
-#'     \item "postgres": Multi-user lakehouse. Metadata stored in PostgreSQL database.
-#'       Requires PostgreSQL 12+ and connection string in metadata_path.
+#'     \item ".sqlite" or ".db" -> "sqlite"
+#'     \item ".ducklake" or ".duckdb" -> "duckdb"
+#'     \item "postgres://" connection string -> "postgres"
 #'   }
+#'   Can also be set explicitly to one of: "duckdb", "sqlite", "postgres".
 #' @param metadata_path Path or connection string for DuckLake metadata:
 #'   \itemize{
 #'     \item For "duckdb": file path (e.g. "metadata.ducklake")
@@ -195,37 +150,35 @@ db_connect <- function(path = "//CSO-NAS/DataLake",
 #' @examples
 #' \dontrun{
 #' # DuckDB catalog (single user, simplest setup)
-#' db_lake_connect(
+#' db_connect(
 #'   metadata_path = "metadata.ducklake",
 #'   data_path = "//CSO-NAS/DataLake"
 #' )
-#' 
-#' # SQLite catalog (multiple local users - RECOMMENDED for shared drives)
-#' db_lake_connect(
-#'   catalog_type = "sqlite",
+#'
+#' # SQLite catalog (auto-detected from .sqlite extension)
+#' db_connect(
 #'   metadata_path = "//CSO-NAS/DataLake/catalog.sqlite",
 #'   data_path = "//CSO-NAS/DataLake/data"
 #' )
-#' 
+#'
 #' # PostgreSQL catalog (multi-user lakehouse, remote clients)
-#' db_lake_connect(
+#' db_connect(
 #'   catalog_type = "postgres",
 #'   metadata_path = "dbname=ducklake_catalog host=db.cso.ie user=analyst",
 #'   data_path = "//CSO-NAS/DataLake/data"
 #' )
-#' 
+#'
 #' # Time travel - connect to a specific snapshot
-#' db_lake_connect(
-#'   catalog_type = "sqlite",
+#' db_connect(
 #'   metadata_path = "catalog.sqlite",
 #'   data_path = "//CSO-NAS/DataLake/data",
 #'   snapshot_version = 5
 #' )
 #' }
 #' @export
-db_lake_connect <- function(duckdb_db = ":memory:",
+db_connect <- function(duckdb_db = ":memory:",
                        catalog = "cso",
-                       catalog_type = c("duckdb", "sqlite", "postgres"),
+                       catalog_type = NULL,
                        metadata_path = "metadata.ducklake",
                        data_path = "//CSO-NAS/DataLake",
                        snapshot_version = NULL,
@@ -233,24 +186,30 @@ db_lake_connect <- function(duckdb_db = ":memory:",
                        threads = NULL,
                        memory_limit = NULL,
                        load_extensions = NULL) {
-  
+
   con <- .db_get_con()
   if (!is.null(con)) {
-    # Check if already connected in same mode
-    curr_mode <- .db_get("mode")
-    if (identical(curr_mode, "ducklake")) {
-      return(con)
+    # Check if connecting to the same lake
+    curr_metadata <- .db_get("metadata_path")
+    curr_data <- .db_get("data_path")
+    if (identical(curr_metadata, metadata_path) && identical(curr_data, data_path)) {
+      return(con)  # Same lake, reuse connection
     } else {
-      # Connected in different mode - disconnect first
-      message("Disconnecting from hive mode to connect in DuckLake mode...")
+      # Different lake - disconnect first
+      message("Disconnecting from current catalog to connect to new one...")
       db_disconnect()
     }
   }
-  
-  catalog_type <- match.arg(catalog_type)
-  
+
+  # Auto-detect catalog type from metadata_path if not specified
+ if (is.null(catalog_type)) {
+    catalog_type <- .db_detect_catalog_type(metadata_path)
+  } else {
+    catalog_type <- match.arg(catalog_type, c("duckdb", "sqlite", "postgres"))
+  }
+
   con <- DBI::dbConnect(duckdb::duckdb(), dbdir = duckdb_db)
-  
+
   # Optional tuning
   if (!is.null(threads)) {
     DBI::dbExecute(con, sprintf("SET threads=%d", as.integer(threads)))
@@ -258,7 +217,7 @@ db_lake_connect <- function(duckdb_db = ":memory:",
   if (!is.null(memory_limit)) {
     DBI::dbExecute(con, sprintf("SET memory_limit='%s'", gsub("'", "''", memory_limit)))
   }
-  
+
   # Optional extensions (for cloud/remote FS etc.)
   if (!is.null(load_extensions)) {
     for (ext in load_extensions) {
@@ -299,7 +258,7 @@ db_lake_connect <- function(duckdb_db = ":memory:",
     DBI::dbExecute(con, attach_sql)
   }, error = function(e) {
     DBI::dbDisconnect(con, shutdown = TRUE)
-    
+
     # Provide helpful error messages based on catalog type
     hint <- switch(catalog_type,
       sqlite = "Ensure the sqlite extension is available and the metadata file path is accessible.",
@@ -308,7 +267,7 @@ db_lake_connect <- function(duckdb_db = ":memory:",
     )
     stop("Failed to attach DuckLake catalog.\n", hint, "\n\nOriginal error: ", e$message, call. = FALSE)
   })
-  
+
   DBI::dbExecute(con, glue::glue("USE {catalog}"))
 
   assign("con", con, envir = .db_env)
@@ -317,7 +276,6 @@ db_lake_connect <- function(duckdb_db = ":memory:",
   assign("metadata_path", metadata_path, envir = .db_env)
   assign("data_path", data_path, envir = .db_env)
   assign("db_path", duckdb_db, envir = .db_env)
-  assign("mode", "ducklake", envir = .db_env)
   assign("snapshot_version", snapshot_version, envir = .db_env)
   assign("snapshot_time", snapshot_time, envir = .db_env)
 
@@ -333,14 +291,14 @@ db_lake_connect <- function(duckdb_db = ":memory:",
 
 
 #' Get connection status and configuration
-#' 
+#'
 #' @description Returns information about the current connection state,
-#' including mode (hive/ducklake), paths, and connection validity.
+#' including paths, catalog configuration, and connection validity.
 #' @param verbose If TRUE, prints a formatted summary. If FALSE, returns a list silently.
 #' @return A list (invisibly if verbose=TRUE) containing connection details.
 #' @examples
 #' \dontrun{
-#' db_lake_connect()
+#' db_connect()
 #' db_status()
 #' }
 #' @export
@@ -350,7 +308,6 @@ db_status <- function(verbose = TRUE) {
 
   status <- list(
     connected = connected,
-    mode = .db_get("mode", NA_character_),
     data_path = .db_get("data_path", NA_character_),
     db_path = .db_get("db_path", NA_character_),
     catalog = .db_get("catalog", NA_character_),
@@ -359,56 +316,52 @@ db_status <- function(verbose = TRUE) {
     snapshot_version = .db_get("snapshot_version", NA_integer_),
     snapshot_time = .db_get("snapshot_time", NA_character_)
   )
-  
+
   if (verbose) {
     cat("\n")
     cat("-- CSO Data Lake Connection Status ", strrep("-", 30), "\n", sep = "")
     cat("\n")
-    
+
     if (connected) {
       cat("[x] Connected\n\n")
-      cat("  Mode:         ", status$mode, "\n")
       cat("  Data Path:    ", status$data_path, "\n")
       cat("  DuckDB Path:  ", status$db_path, "\n")
-      
-      if (status$mode == "ducklake") {
+      cat("\n")
+      cat("-- DuckLake Configuration ", strrep("-", 20), "\n", sep = "")
+      cat("  Catalog:       ", status$catalog, "\n")
+      cat("  Catalog Type:  ", status$catalog_type, "\n")
+      cat("  Metadata Path: ", status$metadata_path, "\n")
+
+      # Show concurrency info based on catalog type
+      concurrency_info <- switch(status$catalog_type,
+        duckdb = "(single client only)",
+        sqlite = "(multi-read, single-write with retry)",
+        postgres = "(full concurrent access)",
+        ""
+      )
+      if (nzchar(concurrency_info)) {
+        cat("  Concurrency:   ", concurrency_info, "\n")
+      }
+
+      has_version <- !is.null(status$snapshot_version) && !is.na(status$snapshot_version)
+      has_time <- !is.null(status$snapshot_time) && !is.na(status$snapshot_time)
+
+      if (has_version || has_time) {
         cat("\n")
-        cat("-- DuckLake Configuration ", strrep("-", 20), "\n", sep = "")
-        cat("  Catalog:       ", status$catalog, "\n")
-        cat("  Catalog Type:  ", status$catalog_type, "\n")
-        cat("  Metadata Path: ", status$metadata_path, "\n")
-        
-        # Show concurrency info based on catalog type
-        concurrency_info <- switch(status$catalog_type,
-          duckdb = "(single client only)",
-          sqlite = "(multi-read, single-write with retry)",
-          postgres = "(full concurrent access)",
-          ""
-        )
-        if (nzchar(concurrency_info)) {
-          cat("  Concurrency:   ", concurrency_info, "\n")
+        cat("-- Time Travel ", strrep("-", 30), "\n", sep = "")
+        if (has_version) {
+          cat("  Snapshot Version: ", status$snapshot_version, "\n")
         }
-        
-        has_version <- !is.null(status$snapshot_version) && !is.na(status$snapshot_version)
-        has_time <- !is.null(status$snapshot_time) && !is.na(status$snapshot_time)
-        
-        if (has_version || has_time) {
-          cat("\n")
-          cat("-- Time Travel ", strrep("-", 30), "\n", sep = "")
-          if (has_version) {
-            cat("  Snapshot Version: ", status$snapshot_version, "\n")
-          }
-          if (has_time) {
-            cat("  Snapshot Time:    ", status$snapshot_time, "\n")
-          }
+        if (has_time) {
+          cat("  Snapshot Time:    ", status$snapshot_time, "\n")
         }
       }
     } else {
       cat("[ ] Not connected\n\n")
-      cat("Use db_connect() for hive mode or db_lake_connect() for DuckLake mode.\n")
+      cat("Use db_connect() to connect to a DuckLake catalog.\n")
     }
     cat("\n")
-    
+
     invisible(status)
   } else {
     status
@@ -435,5 +388,3 @@ db_disconnect <- function() {
 
   invisible(TRUE)
 }
-
-
