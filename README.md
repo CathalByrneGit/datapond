@@ -107,6 +107,15 @@ db_rollback(schema = "trade", table = "imports", version = 5)
 # Clean up old snapshots
 db_vacuum(older_than = "30 days", dry_run = FALSE)
 
+# Check file statistics (useful before compaction)
+db_file_stats()
+
+# Compact small files into larger ones for better performance
+db_compact(table = "imports")
+
+# Remove orphaned files after vacuum or compact
+db_cleanup_files(dry_run = FALSE)
+
 db_disconnect()
 ```
 
@@ -147,6 +156,25 @@ db_search_columns("country")
 dict <- db_dictionary()
 # Export to Excel
 writexl::write_xlsx(dict, "data_dictionary.xlsx")
+```
+
+### Data Lineage
+
+``` r
+# Record where data came from
+db_lineage(
+  table = "monthly_summary",
+  sources = c("raw.transactions", "raw.products"),
+  transformation = "Aggregated by month and product category"
+)
+
+# Retrieve lineage information
+db_get_lineage(table = "monthly_summary")
+#> $sources
+#> [1] "raw.transactions" "raw.products"
+#>
+#> $transformation
+#> [1] "Aggregated by month and product category"
 ```
 
 ### Interactive Browser
@@ -278,6 +306,8 @@ db_write(imports_data, schema = "trade", table = "imports")
 | `db_dictionary()` | Generate full data dictionary |
 | `db_search()` | Search by name, description, owner, or tags |
 | `db_search_columns()` | Find columns by name across all tables |
+| `db_lineage()` | Record data lineage (sources and transformations) |
+| `db_get_lineage()` | Retrieve lineage information for a table |
 
 ### Partitioning
 
@@ -297,6 +327,9 @@ db_write(imports_data, schema = "trade", table = "imports")
 | `db_diff()` | Compare two snapshots |
 | `db_rollback()` | Restore table to a previous version |
 | `db_vacuum()` | Clean up old snapshots and unreferenced files |
+| `db_compact()` | Merge small Parquet files for better performance |
+| `db_file_stats()` | Get file counts and sizes to identify compaction candidates |
+| `db_cleanup_files()` | Remove orphaned files after vacuum or compact |
 | `db_query()` | Run arbitrary SQL |
 
 ### Interactive Tools
@@ -304,6 +337,7 @@ db_write(imports_data, schema = "trade", table = "imports")
 | Function | Description |
 |----|----|
 | `db_browser()` | Launch interactive Shiny browser for exploring data |
+| `run_example()` | Run bundled example scripts (call without args to list) |
 
 ## Learn More
 
