@@ -323,65 +323,45 @@ db_file_stats <- function(schema = "main", table = NULL) {
     stop("No DuckLake catalog configured. Use db_connect() first.", call. = FALSE)
   }
 
-  # Query DuckLake table info which includes file statistics
-  sql <- glue::glue("FROM ducklake_table_info({.db_sql_quote(catalog)})")
-  info <- DBI::dbGetQuery(con, sql)
+  # Query DuckLake internal metadata tables directly for reliable column names
+  metadata_schema <- paste0("__ducklake_metadata_", catalog)
+
+  # Build query with optional filters
+  where_clauses <- "t.end_snapshot IS NULL"  # Only current tables
+  if (!is.null(schema)) {
+    schema <- .db_validate_name(schema, "schema")
+    where_clauses <- paste0(where_clauses, " AND s.schema_name = ", .db_sql_quote(schema))
+  }
+  if (!is.null(table)) {
+    table <- .db_validate_name(table, "table")
+    where_clauses <- paste0(where_clauses, " AND t.table_name = ", .db_sql_quote(table))
+  }
+
+  sql <- glue::glue("
+    SELECT
+      s.schema_name,
+      t.table_name,
+      COUNT(f.file_id) AS file_count,
+      COALESCE(SUM(f.row_count), 0) AS total_rows,
+      COALESCE(SUM(f.file_size_bytes), 0) AS total_bytes
+    FROM {metadata_schema}.ducklake_table t
+    JOIN {metadata_schema}.ducklake_schema s ON t.schema_id = s.schema_id
+    LEFT JOIN {metadata_schema}.ducklake_data_file f ON t.table_id = f.table_id
+    WHERE {where_clauses}
+    GROUP BY s.schema_name, t.table_name
+    ORDER BY s.schema_name, t.table_name
+  ")
+
+  info <- tryCatch({
+    DBI::dbGetQuery(con, sql)
+  }, error = function(e) {
+    # Fallback: try ducklake_table_info if direct query fails
+    fallback_sql <- glue::glue("FROM ducklake_table_info({.db_sql_quote(catalog)})")
+    DBI::dbGetQuery(con, fallback_sql)
+  })
 
   if (nrow(info) == 0) {
     message("No tables found in catalog.")
-    return(invisible(data.frame(
-      schema_name = character(0),
-      table_name = character(0),
-      file_count = integer(0),
-      total_rows = numeric(0),
-      total_bytes = numeric(0),
-      avg_file_bytes = numeric(0),
-      avg_rows_per_file = numeric(0)
-    )))
-  }
-
-  # Normalize column names (ducklake_table_info may use different naming conventions)
-  names(info) <- tolower(names(info))
-
-  # Handle variations in column naming - DuckLake might use various conventions
-  # schema / schema_name / table_schema
-  schema_col <- NULL
-  for (col in c("schema_name", "schema", "table_schema")) {
-    if (col %in% names(info)) {
-      schema_col <- col
-      break
-    }
-  }
-  if (!is.null(schema_col) && schema_col != "schema_name") {
-    names(info)[names(info) == schema_col] <- "schema_name"
-  }
-
-  # table / table_name
-  table_col <- NULL
-  for (col in c("table_name", "table", "name")) {
-    if (col %in% names(info)) {
-      table_col <- col
-      break
-    }
-  }
-  if (!is.null(table_col) && table_col != "table_name") {
-    names(info)[names(info) == table_col] <- "table_name"
-  }
-
-  # Filter by schema if specified
-  if (!is.null(schema) && "schema_name" %in% names(info)) {
-    schema <- .db_validate_name(schema, "schema")
-    info <- info[info$schema_name == schema, , drop = FALSE]
-  }
-
-  # Filter by table if specified
-  if (!is.null(table) && "table_name" %in% names(info)) {
-    table <- .db_validate_name(table, "table")
-    info <- info[info$table_name == table, , drop = FALSE]
-  }
-
-  if (nrow(info) == 0) {
-    message("No matching tables found.")
     return(invisible(data.frame(
       schema_name = character(0),
       table_name = character(0),
