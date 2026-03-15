@@ -342,12 +342,30 @@ db_file_stats <- function(schema = "main", table = NULL) {
 
   # Normalize column names (ducklake_table_info may use different naming conventions)
   names(info) <- tolower(names(info))
-  # Handle variations in column naming
-  if ("schema" %in% names(info) && !"schema_name" %in% names(info)) {
-    names(info)[names(info) == "schema"] <- "schema_name"
+
+  # Handle variations in column naming - DuckLake might use various conventions
+  # schema / schema_name / table_schema
+  schema_col <- NULL
+  for (col in c("schema_name", "schema", "table_schema")) {
+    if (col %in% names(info)) {
+      schema_col <- col
+      break
+    }
   }
-  if ("table" %in% names(info) && !"table_name" %in% names(info)) {
-    names(info)[names(info) == "table"] <- "table_name"
+  if (!is.null(schema_col) && schema_col != "schema_name") {
+    names(info)[names(info) == schema_col] <- "schema_name"
+  }
+
+  # table / table_name
+  table_col <- NULL
+  for (col in c("table_name", "table", "name")) {
+    if (col %in% names(info)) {
+      table_col <- col
+      break
+    }
+  }
+  if (!is.null(table_col) && table_col != "table_name") {
+    names(info)[names(info) == table_col] <- "table_name"
   }
 
   # Filter by schema if specified
@@ -376,14 +394,25 @@ db_file_stats <- function(schema = "main", table = NULL) {
   }
 
   # Build result with useful statistics
-  # ducklake_table_info returns: schema_name, table_name, estimated_size, file_count, etc.
+  # ducklake_table_info returns various column names depending on version
   n_rows <- nrow(info)
+
+  # Helper to get column value with fallbacks
+  get_col <- function(df, candidates, default_val) {
+    for (col in candidates) {
+      if (col %in% names(df)) {
+        return(df[[col]])
+      }
+    }
+    rep(default_val, nrow(df))
+  }
+
   result <- data.frame(
-    schema_name = if ("schema_name" %in% names(info)) info$schema_name else rep(NA_character_, n_rows),
-    table_name = if ("table_name" %in% names(info)) info$table_name else rep(NA_character_, n_rows),
-    file_count = if ("file_count" %in% names(info)) info$file_count else rep(NA_integer_, n_rows),
-    total_rows = if ("row_count" %in% names(info)) info$row_count else rep(NA_real_, n_rows),
-    total_bytes = if ("estimated_size" %in% names(info)) info$estimated_size else rep(NA_real_, n_rows),
+    schema_name = get_col(info, c("schema_name", "schema", "table_schema"), NA_character_),
+    table_name = get_col(info, c("table_name", "table", "name"), NA_character_),
+    file_count = get_col(info, c("file_count", "files", "num_files"), NA_integer_),
+    total_rows = get_col(info, c("row_count", "rows", "total_rows", "cardinality"), NA_real_),
+    total_bytes = get_col(info, c("estimated_size", "size", "total_bytes", "bytes"), NA_real_),
     stringsAsFactors = FALSE
   )
 
