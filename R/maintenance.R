@@ -328,7 +328,8 @@ db_file_stats <- function(schema = "main", table = NULL) {
   table_filter <- if (!is.null(table)) .db_validate_name(table, "table") else NULL
 
   # Query DuckLake internal metadata tables directly for reliable column names
-  metadata_schema <- paste0("__ducklake_metadata_", catalog)
+  # DuckLake stores metadata in memory database, not in the attached catalog
+  metadata_schema <- paste0("memory.__ducklake_metadata_", catalog)
 
   # Build query with optional filters
   where_clauses <- "1=1"
