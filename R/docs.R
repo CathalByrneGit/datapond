@@ -1,82 +1,98 @@
 # R/docs.R
 # Documentation and metadata functions for DuckLake tables
+# Uses DuckLake's native ducklake_metadata table for storage
 
 # ==============================================================================
-# Metadata Table Management
+# Internal Helpers for DuckLake Metadata
 # ==============================================================================
 
-#' Ensure metadata schema and tables exist
-#' @description Creates metadata tables in the base DuckDB connection (not in DuckLake catalog)
-#' since DuckLake doesn't support regular table creation.
+#' Get the DuckLake metadata schema name
 #' @noRd
-.db_ensure_metadata_table <- function(con, catalog) {
-  # Create metadata schema in the memory database (not DuckLake catalog)
-  # After db_connect() runs USE {catalog}, unqualified names go to DuckLake
-  # We must explicitly use "memory" to create tables in the base DuckDB
-  metadata_schema <- "memory.memory._datapond_metadata"
+.db_metadata_schema <- function(catalog) {
+ paste0("__ducklake_metadata_", catalog)
+}
 
-  tryCatch({
-    DBI::dbExecute(con, "CREATE SCHEMA IF NOT EXISTS memory.memory._datapond_metadata")
-  }, error = function(e) {
-    # Schema might already exist
-  })
+#' Get table_id from DuckLake metadata
+#' @noRd
+.db_get_table_id <- function(con, catalog, schema, table) {
+  metadata_schema <- .db_metadata_schema(catalog)
 
-  # Create table_docs table
-  table_docs_exists <- tryCatch({
-    DBI::dbExecute(con, glue::glue("
-      CREATE TABLE IF NOT EXISTS {metadata_schema}.table_docs (
-        catalog_name VARCHAR NOT NULL,
-        schema_name VARCHAR NOT NULL,
-        table_name VARCHAR NOT NULL,
-        description VARCHAR,
-        owner VARCHAR,
-        tags VARCHAR,
-        created_at TIMESTAMP,
-        updated_at TIMESTAMP,
-        PRIMARY KEY (catalog_name, schema_name, table_name)
-      )
+  result <- tryCatch({
+    DBI::dbGetQuery(con, glue::glue("
+      SELECT t.table_id
+      FROM {metadata_schema}.ducklake_table t
+      JOIN {metadata_schema}.ducklake_schema s ON t.schema_id = s.schema_id
+      WHERE s.schema_name = {.db_sql_quote(schema)}
+        AND t.table_name = {.db_sql_quote(table)}
+        AND t.end_snapshot IS NULL
     "))
-    TRUE
-  }, error = function(e) {
-    # Check if table already exists
-    tryCatch({
-      DBI::dbGetQuery(con, glue::glue("SELECT 1 FROM {metadata_schema}.table_docs LIMIT 0"))
-      TRUE
-    }, error = function(e2) FALSE)
-  })
+  }, error = function(e) data.frame())
 
-  # Create column_docs table
-  column_docs_exists <- tryCatch({
-    DBI::dbExecute(con, glue::glue("
-      CREATE TABLE IF NOT EXISTS {metadata_schema}.column_docs (
-        catalog_name VARCHAR NOT NULL,
-        schema_name VARCHAR NOT NULL,
-        table_name VARCHAR NOT NULL,
-        column_name VARCHAR NOT NULL,
-        description VARCHAR,
-        units VARCHAR,
-        notes VARCHAR,
-        updated_at TIMESTAMP,
-        PRIMARY KEY (catalog_name, schema_name, table_name, column_name)
-      )
+  if (nrow(result) == 0) return(NULL)
+  result$table_id[1]
+}
+
+#' Get column_id from DuckLake metadata
+#' @noRd
+.db_get_column_id <- function(con, catalog, schema, table, column) {
+  metadata_schema <- .db_metadata_schema(catalog)
+
+  result <- tryCatch({
+    DBI::dbGetQuery(con, glue::glue("
+      SELECT c.column_id
+      FROM {metadata_schema}.ducklake_column c
+      JOIN {metadata_schema}.ducklake_table t ON c.table_id = t.table_id
+      JOIN {metadata_schema}.ducklake_schema s ON t.schema_id = s.schema_id
+      WHERE s.schema_name = {.db_sql_quote(schema)}
+        AND t.table_name = {.db_sql_quote(table)}
+        AND c.column_name = {.db_sql_quote(column)}
+        AND t.end_snapshot IS NULL
     "))
-    TRUE
-  }, error = function(e) {
-    tryCatch({
-      DBI::dbGetQuery(con, glue::glue("SELECT 1 FROM {metadata_schema}.column_docs LIMIT 0"))
-      TRUE
-    }, error = function(e2) FALSE)
-  })
+  }, error = function(e) data.frame())
 
-  if (!table_docs_exists || !column_docs_exists) {
-    stop(
-      "Failed to create metadata tables.\n",
-      "This may indicate a DuckDB configuration issue.",
-      call. = FALSE
-    )
+  if (nrow(result) == 0) return(NULL)
+  result$column_id[1]
+}
+
+#' Set metadata in ducklake_metadata table
+#' @noRd
+.db_set_metadata <- function(con, catalog, key, value, scope, scope_id) {
+  metadata_schema <- .db_metadata_schema(catalog)
+
+  # Delete existing entry
+  DBI::dbExecute(con, glue::glue("
+    DELETE FROM {metadata_schema}.ducklake_metadata
+    WHERE key = {.db_sql_quote(key)}
+      AND scope = {.db_sql_quote(scope)}
+      AND scope_id = {scope_id}
+  "))
+
+  # Insert new value (only if not NULL/empty)
+  if (!is.null(value) && nzchar(value)) {
+    DBI::dbExecute(con, glue::glue("
+      INSERT INTO {metadata_schema}.ducklake_metadata (key, value, scope, scope_id)
+      VALUES ({.db_sql_quote(key)}, {.db_sql_quote(value)}, {.db_sql_quote(scope)}, {scope_id})
+    "))
   }
+}
 
-  invisible(TRUE)
+#' Get metadata from ducklake_metadata table
+#' @noRd
+.db_get_metadata <- function(con, catalog, key, scope, scope_id) {
+  metadata_schema <- .db_metadata_schema(catalog)
+
+  result <- tryCatch({
+    DBI::dbGetQuery(con, glue::glue("
+      SELECT value
+      FROM {metadata_schema}.ducklake_metadata
+      WHERE key = {.db_sql_quote(key)}
+        AND scope = {.db_sql_quote(scope)}
+        AND scope_id = {scope_id}
+    "))
+  }, error = function(e) data.frame())
+
+  if (nrow(result) == 0) return(NULL)
+  result$value[1]
 }
 
 
@@ -123,53 +139,25 @@ db_describe <- function(schema = "main", table,
   table <- .db_validate_name(table, "table")
   catalog <- .db_get("catalog")
 
-  # Create metadata schema and table if needed
-  .db_ensure_metadata_table(con, catalog)
-
   qname <- paste(catalog, schema, table, sep = ".")
 
-  # Check if record exists and preserve created_at if so
-  existing <- DBI::dbGetQuery(con, glue::glue("
-    SELECT created_at, description, owner, tags
-    FROM memory._datapond_metadata.table_docs
-    WHERE catalog_name = {.db_sql_quote(catalog)}
-      AND schema_name = {.db_sql_quote(schema)}
-      AND table_name = {.db_sql_quote(table)}
-  "))
+  # Get table_id from DuckLake metadata
+  table_id <- .db_get_table_id(con, catalog, schema, table)
+  if (is.null(table_id)) {
+    stop("Table '", qname, "' not found in DuckLake catalog.", call. = FALSE)
+  }
 
-  if (nrow(existing) > 0) {
-    # Update existing record, preserving created_at and merging fields
-    new_desc <- if (!is.null(description)) .db_sql_quote(description) else if (!is.na(existing$description[1])) .db_sql_quote(existing$description[1]) else "NULL"
-    new_owner <- if (!is.null(owner)) .db_sql_quote(owner) else if (!is.na(existing$owner[1])) .db_sql_quote(existing$owner[1]) else "NULL"
-    new_tags <- if (!is.null(tags)) .db_sql_quote(paste(tags, collapse = ",")) else if (!is.na(existing$tags[1])) .db_sql_quote(existing$tags[1]) else "NULL"
-
-    DBI::dbExecute(con, glue::glue("
-      UPDATE memory._datapond_metadata.table_docs
-      SET description = {new_desc},
-          owner = {new_owner},
-          tags = {new_tags},
-          updated_at = NOW()
-      WHERE catalog_name = {.db_sql_quote(catalog)}
-        AND schema_name = {.db_sql_quote(schema)}
-        AND table_name = {.db_sql_quote(table)}
-    "))
-  } else {
-    # Insert new record
-    meta_sql <- glue::glue("
-      INSERT INTO memory._datapond_metadata.table_docs
-      (catalog_name, schema_name, table_name, description, owner, tags, created_at, updated_at)
-      VALUES (
-        {.db_sql_quote(catalog)},
-        {.db_sql_quote(schema)},
-        {.db_sql_quote(table)},
-        {if (is.null(description)) 'NULL' else .db_sql_quote(description)},
-        {if (is.null(owner)) 'NULL' else .db_sql_quote(owner)},
-        {if (is.null(tags)) 'NULL' else .db_sql_quote(paste(tags, collapse = ','))},
-        NOW(),
-        NOW()
-      )
-    ")
-    DBI::dbExecute(con, meta_sql)
+  # Store metadata in DuckLake's ducklake_metadata table
+  # Using scope='table' and scope_id=table_id
+  if (!is.null(description)) {
+    .db_set_metadata(con, catalog, "description", description, "table", table_id)
+  }
+  if (!is.null(owner)) {
+    .db_set_metadata(con, catalog, "owner", owner, "table", table_id)
+  }
+  if (!is.null(tags)) {
+    tags_str <- paste(tags, collapse = ",")
+    .db_set_metadata(con, catalog, "tags", tags_str, "table", table_id)
   }
 
   message("Updated metadata for ", qname)
@@ -217,52 +205,24 @@ db_describe_column <- function(schema = "main", table, column,
   column <- .db_validate_name(column, "column", strict = FALSE)
   catalog <- .db_get("catalog")
 
-  .db_ensure_metadata_table(con, catalog)
+  qname <- paste(catalog, schema, table, column, sep = ".")
 
-  # Use upsert-style logic
-  existing <- DBI::dbGetQuery(con, glue::glue("
-    SELECT description, units, notes
-    FROM memory._datapond_metadata.column_docs
-    WHERE catalog_name = {.db_sql_quote(catalog)}
-      AND schema_name = {.db_sql_quote(schema)}
-      AND table_name = {.db_sql_quote(table)}
-      AND column_name = {.db_sql_quote(column)}
-  "))
+  # Get column_id from DuckLake metadata
+  column_id <- .db_get_column_id(con, catalog, schema, table, column)
+  if (is.null(column_id)) {
+    stop("Column '", qname, "' not found in DuckLake catalog.", call. = FALSE)
+  }
 
-  if (nrow(existing) > 0) {
-    # Update - merge with existing
-    new_desc <- if (!is.null(description)) .db_sql_quote(description) else if (!is.na(existing$description[1])) .db_sql_quote(existing$description[1]) else "NULL"
-    new_units <- if (!is.null(units)) .db_sql_quote(units) else if (!is.na(existing$units[1])) .db_sql_quote(existing$units[1]) else "NULL"
-    new_notes <- if (!is.null(notes)) .db_sql_quote(notes) else if (!is.na(existing$notes[1])) .db_sql_quote(existing$notes[1]) else "NULL"
-
-    DBI::dbExecute(con, glue::glue("
-      UPDATE memory._datapond_metadata.column_docs
-      SET description = {new_desc},
-          units = {new_units},
-          notes = {new_notes},
-          updated_at = NOW()
-      WHERE catalog_name = {.db_sql_quote(catalog)}
-        AND schema_name = {.db_sql_quote(schema)}
-        AND table_name = {.db_sql_quote(table)}
-        AND column_name = {.db_sql_quote(column)}
-    "))
-  } else {
-    # Insert
-    meta_sql <- glue::glue("
-      INSERT INTO memory._datapond_metadata.column_docs
-      (catalog_name, schema_name, table_name, column_name, description, units, notes, updated_at)
-      VALUES (
-        {.db_sql_quote(catalog)},
-        {.db_sql_quote(schema)},
-        {.db_sql_quote(table)},
-        {.db_sql_quote(column)},
-        {if (is.null(description)) 'NULL' else .db_sql_quote(description)},
-        {if (is.null(units)) 'NULL' else .db_sql_quote(units)},
-        {if (is.null(notes)) 'NULL' else .db_sql_quote(notes)},
-        NOW()
-      )
-    ")
-    DBI::dbExecute(con, meta_sql)
+  # Store metadata in DuckLake's ducklake_metadata table
+  # Using scope='column' and scope_id=column_id
+  if (!is.null(description)) {
+    .db_set_metadata(con, catalog, "description", description, "column", column_id)
+  }
+  if (!is.null(units)) {
+    .db_set_metadata(con, catalog, "units", units, "column", column_id)
+  }
+  if (!is.null(notes)) {
+    .db_set_metadata(con, catalog, "notes", notes, "column", column_id)
   }
 
   message("Updated column metadata for ", catalog, ".", schema, ".", table, ".", column)
@@ -294,62 +254,58 @@ db_get_docs <- function(schema = "main", table) {
   schema <- .db_validate_name(schema, "schema")
   table <- .db_validate_name(table, "table")
   catalog <- .db_get("catalog")
+  metadata_schema <- .db_metadata_schema(catalog)
 
-  # Check if metadata tables exist
-  meta_exists <- tryCatch({
-    DBI::dbGetQuery(con, "SELECT 1 FROM memory._datapond_metadata.table_docs LIMIT 0")
-    TRUE
-  }, error = function(e) FALSE)
+  # Get table_id
+  table_id <- .db_get_table_id(con, catalog, schema, table)
 
-  if (!meta_exists) {
-    return(list(
-      schema = schema, table = table,
-      description = NULL, owner = NULL, tags = character(0),
-      columns = list()
-    ))
-  }
-
-  # Get table docs
-  table_doc <- tryCatch({
-    DBI::dbGetQuery(con, glue::glue("
-      SELECT description, owner, tags
-      FROM memory._datapond_metadata.table_docs
-      WHERE catalog_name = {.db_sql_quote(catalog)}
-        AND schema_name = {.db_sql_quote(schema)}
-        AND table_name = {.db_sql_quote(table)}
-    "))
-  }, error = function(e) data.frame())
-
-  # Get column docs
-  col_docs <- tryCatch({
-    DBI::dbGetQuery(con, glue::glue("
-      SELECT column_name, description, units, notes
-      FROM memory._datapond_metadata.column_docs
-      WHERE catalog_name = {.db_sql_quote(catalog)}
-        AND schema_name = {.db_sql_quote(schema)}
-        AND table_name = {.db_sql_quote(table)}
-    "))
-  }, error = function(e) data.frame())
-
-  # Build result
+  # Build result with defaults
   result <- list(
     schema = schema,
     table = table,
-    description = if (nrow(table_doc) > 0) table_doc$description[1] else NULL,
-    owner = if (nrow(table_doc) > 0) table_doc$owner[1] else NULL,
-    tags = if (nrow(table_doc) > 0 && !is.na(table_doc$tags[1])) {
-      strsplit(table_doc$tags[1], ",")[[1]]
-    } else character(0),
+    description = NULL,
+    owner = NULL,
+    tags = character(0),
     columns = list()
   )
 
-  if (nrow(col_docs) > 0) {
-    for (i in seq_len(nrow(col_docs))) {
-      result$columns[[col_docs$column_name[i]]] <- list(
-        description = col_docs$description[i],
-        units = col_docs$units[i],
-        notes = col_docs$notes[i]
-      )
+  # Get table-level metadata from ducklake_metadata
+  if (!is.null(table_id)) {
+    result$description <- .db_get_metadata(con, catalog, "description", "table", table_id)
+    result$owner <- .db_get_metadata(con, catalog, "owner", "table", table_id)
+
+    tags_str <- .db_get_metadata(con, catalog, "tags", "table", table_id)
+    if (!is.null(tags_str) && nzchar(tags_str)) {
+      result$tags <- strsplit(tags_str, ",")[[1]]
+    }
+
+    # Get column-level metadata
+    # First get all columns for this table
+    cols <- tryCatch({
+      DBI::dbGetQuery(con, glue::glue("
+        SELECT c.column_id, c.column_name
+        FROM {metadata_schema}.ducklake_column c
+        WHERE c.table_id = {table_id}
+      "))
+    }, error = function(e) data.frame())
+
+    if (nrow(cols) > 0) {
+      for (i in seq_len(nrow(cols))) {
+        col_id <- cols$column_id[i]
+        col_name <- cols$column_name[i]
+
+        col_desc <- .db_get_metadata(con, catalog, "description", "column", col_id)
+        col_units <- .db_get_metadata(con, catalog, "units", "column", col_id)
+        col_notes <- .db_get_metadata(con, catalog, "notes", "column", col_id)
+
+        if (!is.null(col_desc) || !is.null(col_units) || !is.null(col_notes)) {
+          result$columns[[col_name]] <- list(
+            description = col_desc,
+            units = col_units,
+            notes = col_notes
+          )
+        }
+      }
     }
   }
 
@@ -548,44 +504,21 @@ db_lineage <- function(schema = "main", table, sources, transformation = NULL) {
   table <- .db_validate_name(table, "table")
   catalog <- .db_get("catalog")
 
-  # Ensure lineage table exists in base DuckDB (not DuckLake catalog)
-  tryCatch({
-    DBI::dbExecute(con, "CREATE SCHEMA IF NOT EXISTS memory._datapond_metadata")
-    DBI::dbExecute(con, "
-      CREATE TABLE IF NOT EXISTS memory._datapond_metadata.lineage (
-        catalog_name VARCHAR NOT NULL,
-        schema_name VARCHAR NOT NULL,
-        table_name VARCHAR NOT NULL,
-        sources VARCHAR,
-        transformation VARCHAR,
-        recorded_at TIMESTAMP,
-        PRIMARY KEY (catalog_name, schema_name, table_name)
-      )
-    ")
-  }, error = function(e) NULL)
+  qname <- paste(catalog, schema, table, sep = ".")
 
+  # Get table_id from DuckLake metadata
+  table_id <- .db_get_table_id(con, catalog, schema, table)
+  if (is.null(table_id)) {
+    stop("Table '", qname, "' not found in DuckLake catalog.", call. = FALSE)
+  }
+
+  # Store lineage in DuckLake's ducklake_metadata table
   sources_str <- paste(sources, collapse = "; ")
+  .db_set_metadata(con, catalog, "lineage_sources", sources_str, "table", table_id)
 
-  # Upsert
-  DBI::dbExecute(con, glue::glue("
-    DELETE FROM memory._datapond_metadata.lineage
-    WHERE catalog_name = {.db_sql_quote(catalog)}
-      AND schema_name = {.db_sql_quote(schema)}
-      AND table_name = {.db_sql_quote(table)}
-  "))
-
-  DBI::dbExecute(con, glue::glue("
-    INSERT INTO memory._datapond_metadata.lineage
-    (catalog_name, schema_name, table_name, sources, transformation, recorded_at)
-    VALUES (
-      {.db_sql_quote(catalog)},
-      {.db_sql_quote(schema)},
-      {.db_sql_quote(table)},
-      {.db_sql_quote(sources_str)},
-      {if (is.null(transformation)) 'NULL' else .db_sql_quote(transformation)},
-      NOW()
-    )
-  "))
+  if (!is.null(transformation)) {
+    .db_set_metadata(con, catalog, "lineage_transformation", transformation, "table", table_id)
+  }
 
   message("Recorded lineage for ", catalog, ".", schema, ".", table)
   invisible(TRUE)
@@ -611,22 +544,19 @@ db_get_lineage <- function(schema = "main", table) {
   table <- .db_validate_name(table, "table")
   catalog <- .db_get("catalog")
 
-  result <- tryCatch({
-    DBI::dbGetQuery(con, glue::glue("
-      SELECT sources, transformation, recorded_at
-      FROM memory._datapond_metadata.lineage
-      WHERE catalog_name = {.db_sql_quote(catalog)}
-        AND schema_name = {.db_sql_quote(schema)}
-        AND table_name = {.db_sql_quote(table)}
-    "))
-  }, error = function(e) data.frame())
+  # Get table_id
+  table_id <- .db_get_table_id(con, catalog, schema, table)
+  if (is.null(table_id)) return(NULL)
 
-  if (nrow(result) == 0) return(NULL)
+  # Get lineage from ducklake_metadata
+  sources_str <- .db_get_metadata(con, catalog, "lineage_sources", "table", table_id)
+  if (is.null(sources_str)) return(NULL)
+
+  transformation <- .db_get_metadata(con, catalog, "lineage_transformation", "table", table_id)
 
   list(
-    sources = strsplit(result$sources[1], "; ")[[1]],
-    transformation = result$transformation[1],
-    recorded_at = result$recorded_at[1]
+    sources = strsplit(sources_str, "; ")[[1]],
+    transformation = transformation
   )
 }
 
