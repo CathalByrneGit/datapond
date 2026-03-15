@@ -377,12 +377,13 @@ db_file_stats <- function(schema = "main", table = NULL) {
 
   # Build result with useful statistics
   # ducklake_table_info returns: schema_name, table_name, estimated_size, file_count, etc.
+  n_rows <- nrow(info)
   result <- data.frame(
-    schema_name = info$schema_name,
-    table_name = info$table_name,
-    file_count = if ("file_count" %in% names(info)) info$file_count else NA_integer_,
-    total_rows = if ("row_count" %in% names(info)) info$row_count else NA_real_,
-    total_bytes = if ("estimated_size" %in% names(info)) info$estimated_size else NA_real_,
+    schema_name = if ("schema_name" %in% names(info)) info$schema_name else rep(NA_character_, n_rows),
+    table_name = if ("table_name" %in% names(info)) info$table_name else rep(NA_character_, n_rows),
+    file_count = if ("file_count" %in% names(info)) info$file_count else rep(NA_integer_, n_rows),
+    total_rows = if ("row_count" %in% names(info)) info$row_count else rep(NA_real_, n_rows),
+    total_bytes = if ("estimated_size" %in% names(info)) info$estimated_size else rep(NA_real_, n_rows),
     stringsAsFactors = FALSE
   )
 

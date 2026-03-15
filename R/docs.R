@@ -6,20 +6,25 @@
 # ==============================================================================
 
 #' Ensure metadata schema and tables exist
+#' @description Creates metadata tables in the base DuckDB connection (not in DuckLake catalog)
+#' since DuckLake doesn't support regular table creation.
 #' @noRd
 .db_ensure_metadata_table <- function(con, catalog) {
-  # Create _metadata schema if not exists
-  tryCatch({
-    DBI::dbExecute(con, glue::glue("CREATE SCHEMA IF NOT EXISTS {catalog}._metadata"))
+  # Create metadata schema in the main DuckDB connection (not DuckLake catalog)
+  # We use a fixed schema name that won't conflict with user schemas
+  metadata_schema <- "_datapond_metadata"
+
+ tryCatch({
+    DBI::dbExecute(con, glue::glue("CREATE SCHEMA IF NOT EXISTS {metadata_schema}"))
   }, error = function(e) {
-    # Schema creation failed - this is expected in some DuckLake configurations
-    # Try to continue anyway as the schema might already exist
+    # Schema might already exist
   })
 
   # Create table_docs table
   table_docs_exists <- tryCatch({
     DBI::dbExecute(con, glue::glue("
-      CREATE TABLE IF NOT EXISTS {catalog}._metadata.table_docs (
+      CREATE TABLE IF NOT EXISTS {metadata_schema}.table_docs (
+        catalog_name VARCHAR NOT NULL,
         schema_name VARCHAR NOT NULL,
         table_name VARCHAR NOT NULL,
         description VARCHAR,
@@ -27,23 +32,23 @@
         tags VARCHAR,
         created_at TIMESTAMP,
         updated_at TIMESTAMP,
-        PRIMARY KEY (schema_name, table_name)
+        PRIMARY KEY (catalog_name, schema_name, table_name)
       )
     "))
     TRUE
   }, error = function(e) {
     # Check if table already exists
-    exists_check <- tryCatch({
-      DBI::dbGetQuery(con, glue::glue("SELECT 1 FROM {catalog}._metadata.table_docs LIMIT 0"))
+    tryCatch({
+      DBI::dbGetQuery(con, glue::glue("SELECT 1 FROM {metadata_schema}.table_docs LIMIT 0"))
       TRUE
     }, error = function(e2) FALSE)
-    exists_check
   })
 
   # Create column_docs table
   column_docs_exists <- tryCatch({
     DBI::dbExecute(con, glue::glue("
-      CREATE TABLE IF NOT EXISTS {catalog}._metadata.column_docs (
+      CREATE TABLE IF NOT EXISTS {metadata_schema}.column_docs (
+        catalog_name VARCHAR NOT NULL,
         schema_name VARCHAR NOT NULL,
         table_name VARCHAR NOT NULL,
         column_name VARCHAR NOT NULL,
@@ -51,24 +56,21 @@
         units VARCHAR,
         notes VARCHAR,
         updated_at TIMESTAMP,
-        PRIMARY KEY (schema_name, table_name, column_name)
+        PRIMARY KEY (catalog_name, schema_name, table_name, column_name)
       )
     "))
     TRUE
   }, error = function(e) {
-    # Check if table already exists
-    exists_check <- tryCatch({
-      DBI::dbGetQuery(con, glue::glue("SELECT 1 FROM {catalog}._metadata.column_docs LIMIT 0"))
+    tryCatch({
+      DBI::dbGetQuery(con, glue::glue("SELECT 1 FROM {metadata_schema}.column_docs LIMIT 0"))
       TRUE
     }, error = function(e2) FALSE)
-    exists_check
   })
 
   if (!table_docs_exists || !column_docs_exists) {
     stop(
-      "Failed to create metadata tables in ", catalog, "._metadata schema.\n",
-      "This may happen if the DuckLake catalog doesn't support metadata tables.\n",
-      "Documentation features require metadata table support.",
+      "Failed to create metadata tables.\n",
+      "This may indicate a DuckDB configuration issue.",
       call. = FALSE
     )
   }
@@ -128,8 +130,10 @@ db_describe <- function(schema = "main", table,
   # Check if record exists and preserve created_at if so
   existing <- DBI::dbGetQuery(con, glue::glue("
     SELECT created_at, description, owner, tags
-    FROM {catalog}._metadata.table_docs
-    WHERE schema_name = {.db_sql_quote(schema)} AND table_name = {.db_sql_quote(table)}
+    FROM _datapond_metadata.table_docs
+    WHERE catalog_name = {.db_sql_quote(catalog)}
+      AND schema_name = {.db_sql_quote(schema)}
+      AND table_name = {.db_sql_quote(table)}
   "))
 
   if (nrow(existing) > 0) {
@@ -139,19 +143,22 @@ db_describe <- function(schema = "main", table,
     new_tags <- if (!is.null(tags)) .db_sql_quote(paste(tags, collapse = ",")) else if (!is.na(existing$tags[1])) .db_sql_quote(existing$tags[1]) else "NULL"
 
     DBI::dbExecute(con, glue::glue("
-      UPDATE {catalog}._metadata.table_docs
+      UPDATE _datapond_metadata.table_docs
       SET description = {new_desc},
           owner = {new_owner},
           tags = {new_tags},
           updated_at = NOW()
-      WHERE schema_name = {.db_sql_quote(schema)} AND table_name = {.db_sql_quote(table)}
+      WHERE catalog_name = {.db_sql_quote(catalog)}
+        AND schema_name = {.db_sql_quote(schema)}
+        AND table_name = {.db_sql_quote(table)}
     "))
   } else {
     # Insert new record
     meta_sql <- glue::glue("
-      INSERT INTO {catalog}._metadata.table_docs
-      (schema_name, table_name, description, owner, tags, created_at, updated_at)
+      INSERT INTO _datapond_metadata.table_docs
+      (catalog_name, schema_name, table_name, description, owner, tags, created_at, updated_at)
       VALUES (
+        {.db_sql_quote(catalog)},
         {.db_sql_quote(schema)},
         {.db_sql_quote(table)},
         {if (is.null(description)) 'NULL' else .db_sql_quote(description)},
@@ -214,8 +221,9 @@ db_describe_column <- function(schema = "main", table, column,
   # Use upsert-style logic
   existing <- DBI::dbGetQuery(con, glue::glue("
     SELECT description, units, notes
-    FROM {catalog}._metadata.column_docs
-    WHERE schema_name = {.db_sql_quote(schema)}
+    FROM _datapond_metadata.column_docs
+    WHERE catalog_name = {.db_sql_quote(catalog)}
+      AND schema_name = {.db_sql_quote(schema)}
       AND table_name = {.db_sql_quote(table)}
       AND column_name = {.db_sql_quote(column)}
   "))
@@ -227,21 +235,23 @@ db_describe_column <- function(schema = "main", table, column,
     new_notes <- if (!is.null(notes)) .db_sql_quote(notes) else if (!is.na(existing$notes[1])) .db_sql_quote(existing$notes[1]) else "NULL"
 
     DBI::dbExecute(con, glue::glue("
-      UPDATE {catalog}._metadata.column_docs
+      UPDATE _datapond_metadata.column_docs
       SET description = {new_desc},
           units = {new_units},
           notes = {new_notes},
           updated_at = NOW()
-      WHERE schema_name = {.db_sql_quote(schema)}
+      WHERE catalog_name = {.db_sql_quote(catalog)}
+        AND schema_name = {.db_sql_quote(schema)}
         AND table_name = {.db_sql_quote(table)}
         AND column_name = {.db_sql_quote(column)}
     "))
   } else {
     # Insert
     meta_sql <- glue::glue("
-      INSERT INTO {catalog}._metadata.column_docs
-      (schema_name, table_name, column_name, description, units, notes, updated_at)
+      INSERT INTO _datapond_metadata.column_docs
+      (catalog_name, schema_name, table_name, column_name, description, units, notes, updated_at)
       VALUES (
+        {.db_sql_quote(catalog)},
         {.db_sql_quote(schema)},
         {.db_sql_quote(table)},
         {.db_sql_quote(column)},
@@ -286,11 +296,7 @@ db_get_docs <- function(schema = "main", table) {
 
   # Check if metadata tables exist
   meta_exists <- tryCatch({
-    DBI::dbGetQuery(con, glue::glue(
-      "SELECT 1 FROM information_schema.tables
-       WHERE table_catalog = {.db_sql_quote(catalog)}
-       AND table_schema = '_metadata' LIMIT 1"
-    ))
+    DBI::dbGetQuery(con, "SELECT 1 FROM _datapond_metadata.table_docs LIMIT 0")
     TRUE
   }, error = function(e) FALSE)
 
@@ -306,8 +312,9 @@ db_get_docs <- function(schema = "main", table) {
   table_doc <- tryCatch({
     DBI::dbGetQuery(con, glue::glue("
       SELECT description, owner, tags
-      FROM {catalog}._metadata.table_docs
-      WHERE schema_name = {.db_sql_quote(schema)}
+      FROM _datapond_metadata.table_docs
+      WHERE catalog_name = {.db_sql_quote(catalog)}
+        AND schema_name = {.db_sql_quote(schema)}
         AND table_name = {.db_sql_quote(table)}
     "))
   }, error = function(e) data.frame())
@@ -316,8 +323,9 @@ db_get_docs <- function(schema = "main", table) {
   col_docs <- tryCatch({
     DBI::dbGetQuery(con, glue::glue("
       SELECT column_name, description, units, notes
-      FROM {catalog}._metadata.column_docs
-      WHERE schema_name = {.db_sql_quote(schema)}
+      FROM _datapond_metadata.column_docs
+      WHERE catalog_name = {.db_sql_quote(catalog)}
+        AND schema_name = {.db_sql_quote(schema)}
         AND table_name = {.db_sql_quote(table)}
     "))
   }, error = function(e) data.frame())
@@ -539,33 +547,37 @@ db_lineage <- function(schema = "main", table, sources, transformation = NULL) {
   table <- .db_validate_name(table, "table")
   catalog <- .db_get("catalog")
 
-  # Ensure lineage table exists
+  # Ensure lineage table exists in base DuckDB (not DuckLake catalog)
   tryCatch({
-    DBI::dbExecute(con, glue::glue("CREATE SCHEMA IF NOT EXISTS {catalog}._metadata"))
-    DBI::dbExecute(con, glue::glue("
-      CREATE TABLE IF NOT EXISTS {catalog}._metadata.lineage (
+    DBI::dbExecute(con, "CREATE SCHEMA IF NOT EXISTS _datapond_metadata")
+    DBI::dbExecute(con, "
+      CREATE TABLE IF NOT EXISTS _datapond_metadata.lineage (
+        catalog_name VARCHAR NOT NULL,
         schema_name VARCHAR NOT NULL,
         table_name VARCHAR NOT NULL,
         sources VARCHAR,
         transformation VARCHAR,
         recorded_at TIMESTAMP,
-        PRIMARY KEY (schema_name, table_name)
+        PRIMARY KEY (catalog_name, schema_name, table_name)
       )
-    "))
+    ")
   }, error = function(e) NULL)
 
   sources_str <- paste(sources, collapse = "; ")
 
   # Upsert
   DBI::dbExecute(con, glue::glue("
-    DELETE FROM {catalog}._metadata.lineage
-    WHERE schema_name = {.db_sql_quote(schema)} AND table_name = {.db_sql_quote(table)}
+    DELETE FROM _datapond_metadata.lineage
+    WHERE catalog_name = {.db_sql_quote(catalog)}
+      AND schema_name = {.db_sql_quote(schema)}
+      AND table_name = {.db_sql_quote(table)}
   "))
 
   DBI::dbExecute(con, glue::glue("
-    INSERT INTO {catalog}._metadata.lineage
-    (schema_name, table_name, sources, transformation, recorded_at)
+    INSERT INTO _datapond_metadata.lineage
+    (catalog_name, schema_name, table_name, sources, transformation, recorded_at)
     VALUES (
+      {.db_sql_quote(catalog)},
       {.db_sql_quote(schema)},
       {.db_sql_quote(table)},
       {.db_sql_quote(sources_str)},
@@ -601,8 +613,10 @@ db_get_lineage <- function(schema = "main", table) {
   result <- tryCatch({
     DBI::dbGetQuery(con, glue::glue("
       SELECT sources, transformation, recorded_at
-      FROM {catalog}._metadata.lineage
-      WHERE schema_name = {.db_sql_quote(schema)} AND table_name = {.db_sql_quote(table)}
+      FROM _datapond_metadata.lineage
+      WHERE catalog_name = {.db_sql_quote(catalog)}
+        AND schema_name = {.db_sql_quote(schema)}
+        AND table_name = {.db_sql_quote(table)}
     "))
   }, error = function(e) data.frame())
 
