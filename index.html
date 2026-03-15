@@ -57,14 +57,7 @@
 </h1></div>
 <!-- badges: start -->
 
-<p><strong>datapond</strong> is a simple and lightweight data lake infrastructure for small to medium data requirements. Provides a unified R interface for duckdb and ducklake internal data infrastructure. It supports two storage backends:</p>
-<ol style="list-style-type: decimal">
-<li>
-<strong>Hive-partitioned Parquet</strong> - familiar folder-based structure (similar to existing SAS storage)</li>
-<li>
-<strong>DuckLake</strong> - modern data lakehouse with time travel, schema evolution, and ACID transactions</li>
-</ol>
-<p>Both backends use <a href="https://duckdb.org/" class="external-link">DuckDB</a> as the query engine, giving you fast analytical queries without needing a server.</p>
+<p><strong>datapond</strong> is a simple and lightweight data lake infrastructure for small to medium data requirements. It provides a unified R interface for <a href="https://ducklake.select/" class="external-link">DuckLake</a> — a modern data lakehouse built on <a href="https://duckdb.org/" class="external-link">DuckDB</a> that adds ACID transactions, time travel, and schema evolution on top of Parquet files.</p>
 <div class="section level2">
 <h2 id="installation">Installation<a class="anchor" aria-label="anchor" href="#installation"></a>
 </h2>
@@ -78,61 +71,11 @@
 <div class="section level2">
 <h2 id="quick-start">Quick Start<a class="anchor" aria-label="anchor" href="#quick-start"></a>
 </h2>
-<div class="section level3">
-<h3 id="hive-mode-folder-based">Hive Mode (Folder-based)<a class="anchor" aria-label="anchor" href="#hive-mode-folder-based"></a>
-</h3>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/CathalByrneGit/datapond" class="external-link">datapond</a></span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Connect to the data lake</span></span>
-<span><span class="fu"><a href="reference/db_connect.html">db_connect</a></span><span class="op">(</span>path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake"</span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># See what's available</span></span>
-<span><span class="fu"><a href="reference/db_list_sections.html">db_list_sections</a></span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "Trade" "Labour" "Health" "Agriculture"</span></span>
-<span></span>
-<span><span class="fu"><a href="reference/db_list_datasets.html">db_list_datasets</a></span><span class="op">(</span><span class="st">"Trade"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "Imports" "Exports" "Balance"</span></span>
-<span></span>
-<span><span class="co"># Read a dataset (returns a lazy dplyr table)</span></span>
-<span><span class="va">imports</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/db_hive_read.html">db_hive_read</a></span><span class="op">(</span><span class="st">"Trade"</span>, <span class="st">"Imports"</span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># Work with it using dplyr</span></span>
-<span><span class="va">imports</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/stats/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">year</span> <span class="op">==</span> <span class="fl">2024</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu">group_by</span><span class="op">(</span><span class="va">country</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu">summarise</span><span class="op">(</span>total <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/sum.html" class="external-link">sum</a></span><span class="op">(</span><span class="va">value</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu">collect</span><span class="op">(</span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># Preview before writing (see what will happen)</span></span>
-<span><span class="fu"><a href="reference/db_preview_hive_write.html">db_preview_hive_write</a></span><span class="op">(</span></span>
-<span>  <span class="va">my_data</span>,</span>
-<span>  section <span class="op">=</span> <span class="st">"Trade"</span>,</span>
-<span>  dataset <span class="op">=</span> <span class="st">"Imports"</span>,</span>
-<span>  partition_by <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"year"</span>, <span class="st">"month"</span><span class="op">)</span>,</span>
-<span>  mode <span class="op">=</span> <span class="st">"replace_partitions"</span></span>
-<span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># Write data (partitioned by year and month)</span></span>
-<span><span class="fu"><a href="reference/db_hive_write.html">db_hive_write</a></span><span class="op">(</span></span>
-<span>  <span class="va">my_data</span>, </span>
-<span>  section <span class="op">=</span> <span class="st">"Trade"</span>, </span>
-<span>  dataset <span class="op">=</span> <span class="st">"Imports"</span>,</span>
-<span>  partition_by <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"year"</span>, <span class="st">"month"</span><span class="op">)</span>,</span>
-<span>  mode <span class="op">=</span> <span class="st">"replace_partitions"</span></span>
-<span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># Disconnect when done</span></span>
-<span><span class="fu"><a href="reference/db_disconnect.html">db_disconnect</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
-</div>
-<div class="section level3">
-<h3 id="ducklake-mode-time-travel">DuckLake Mode (Time Travel)<a class="anchor" aria-label="anchor" href="#ducklake-mode-time-travel"></a>
-</h3>
-<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/CathalByrneGit/datapond" class="external-link">datapond</a></span><span class="op">)</span></span>
-<span></span>
 <span><span class="co"># Connect to DuckLake with SQLite catalog (recommended for shared drives)</span></span>
-<span><span class="fu"><a href="reference/db_lake_connect.html">db_lake_connect</a></span><span class="op">(</span></span>
+<span><span class="fu"><a href="reference/db_connect.html">db_connect</a></span><span class="op">(</span></span>
 <span>  catalog_type <span class="op">=</span> <span class="st">"sqlite"</span>,</span>
 <span>  metadata_path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/catalog.sqlite"</span>,</span>
 <span>  data_path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/data"</span></span>
@@ -145,30 +88,44 @@
 <span><span class="fu"><a href="reference/db_tables.html">db_tables</a></span><span class="op">(</span><span class="st">"trade"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] "imports" "exports" "products"</span></span>
 <span></span>
-<span><span class="co"># Read current data</span></span>
-<span><span class="va">imports</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/db_lake_read.html">db_lake_read</a></span><span class="op">(</span>schema <span class="op">=</span> <span class="st">"trade"</span>, table <span class="op">=</span> <span class="st">"imports"</span><span class="op">)</span></span>
+<span><span class="co"># Read current data (returns a lazy dplyr table)</span></span>
+<span><span class="va">imports</span> <span class="op">&lt;-</span> <span class="fu">db_read</span><span class="op">(</span>schema <span class="op">=</span> <span class="st">"trade"</span>, table <span class="op">=</span> <span class="st">"imports"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">imports</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/stats/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">year</span> <span class="op">==</span> <span class="fl">2024</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu">group_by</span><span class="op">(</span><span class="va">country</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu">summarise</span><span class="op">(</span>total <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/sum.html" class="external-link">sum</a></span><span class="op">(</span><span class="va">value</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu">collect</span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Read data as it was at a specific version</span></span>
-<span><span class="va">imports_v5</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/db_lake_read.html">db_lake_read</a></span><span class="op">(</span>schema <span class="op">=</span> <span class="st">"trade"</span>, table <span class="op">=</span> <span class="st">"imports"</span>, version <span class="op">=</span> <span class="fl">5</span><span class="op">)</span></span>
+<span><span class="va">imports_v5</span> <span class="op">&lt;-</span> <span class="fu">db_read</span><span class="op">(</span>schema <span class="op">=</span> <span class="st">"trade"</span>, table <span class="op">=</span> <span class="st">"imports"</span>, version <span class="op">=</span> <span class="fl">5</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Read data as it was at a specific time</span></span>
-<span><span class="va">imports_jan</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/db_lake_read.html">db_lake_read</a></span><span class="op">(</span></span>
-<span>  schema <span class="op">=</span> <span class="st">"trade"</span>, </span>
-<span>  table <span class="op">=</span> <span class="st">"imports"</span>, </span>
+<span><span class="va">imports_jan</span> <span class="op">&lt;-</span> <span class="fu">db_read</span><span class="op">(</span></span>
+<span>  schema <span class="op">=</span> <span class="st">"trade"</span>,</span>
+<span>  table <span class="op">=</span> <span class="st">"imports"</span>,</span>
 <span>  timestamp <span class="op">=</span> <span class="st">"2025-01-15 00:00:00"</span></span>
 <span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Preview write to see impact</span></span>
-<span><span class="fu"><a href="reference/db_preview_lake_write.html">db_preview_lake_write</a></span><span class="op">(</span><span class="va">my_data</span>, schema <span class="op">=</span> <span class="st">"trade"</span>, table <span class="op">=</span> <span class="st">"imports"</span>, mode <span class="op">=</span> <span class="st">"append"</span><span class="op">)</span></span>
+<span><span class="co"># Preview write to see impact before executing</span></span>
+<span><span class="fu">db_preview_write</span><span class="op">(</span><span class="va">my_data</span>, schema <span class="op">=</span> <span class="st">"trade"</span>, table <span class="op">=</span> <span class="st">"imports"</span>, mode <span class="op">=</span> <span class="st">"append"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Write with commit metadata</span></span>
-<span><span class="fu"><a href="reference/db_lake_write.html">db_lake_write</a></span><span class="op">(</span></span>
+<span><span class="fu">db_write</span><span class="op">(</span></span>
 <span>  <span class="va">my_data</span>,</span>
 <span>  schema <span class="op">=</span> <span class="st">"trade"</span>,</span>
 <span>  table <span class="op">=</span> <span class="st">"imports"</span>,</span>
 <span>  mode <span class="op">=</span> <span class="st">"append"</span>,</span>
 <span>  commit_author <span class="op">=</span> <span class="st">"jsmith"</span>,</span>
 <span>  commit_message <span class="op">=</span> <span class="st">"Added Q1 2025 data"</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Write with partitioning for faster queries</span></span>
+<span><span class="fu">db_write</span><span class="op">(</span></span>
+<span>  <span class="va">my_data</span>,</span>
+<span>  schema <span class="op">=</span> <span class="st">"trade"</span>,</span>
+<span>  table <span class="op">=</span> <span class="st">"imports"</span>,</span>
+<span>  partition_by <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"year"</span>, <span class="st">"month"</span><span class="op">)</span></span>
 <span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Preview upsert to see how many inserts vs updates</span></span>
@@ -187,7 +144,7 @@
 <span><span class="fu"><a href="reference/db_snapshots.html">db_snapshots</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Compare versions</span></span>
-<span><span class="va">diff</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/db_diff.html">db_diff</a></span><span class="op">(</span>schema <span class="op">=</span> <span class="st">"trade"</span>, table <span class="op">=</span> <span class="st">"imports"</span>, </span>
+<span><span class="va">diff</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/db_diff.html">db_diff</a></span><span class="op">(</span>schema <span class="op">=</span> <span class="st">"trade"</span>, table <span class="op">=</span> <span class="st">"imports"</span>,</span>
 <span>                from_version <span class="op">=</span> <span class="fl">5</span>, to_version <span class="op">=</span> <span class="fl">10</span><span class="op">)</span></span>
 <span><span class="va">diff</span><span class="op">$</span><span class="va">added</span></span>
 <span><span class="va">diff</span><span class="op">$</span><span class="va">removed</span></span>
@@ -198,19 +155,30 @@
 <span><span class="co"># Clean up old snapshots</span></span>
 <span><span class="fu"><a href="reference/db_vacuum.html">db_vacuum</a></span><span class="op">(</span>older_than <span class="op">=</span> <span class="st">"30 days"</span>, dry_run <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
 <span></span>
+<span><span class="co"># Check file statistics (useful before compaction)</span></span>
+<span><span class="fu">db_file_stats</span><span class="op">(</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Compact small files into larger ones for better performance</span></span>
+<span><span class="fu">db_compact</span><span class="op">(</span>table <span class="op">=</span> <span class="st">"imports"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Remove orphaned files after vacuum or compact</span></span>
+<span><span class="fu">db_cleanup_files</span><span class="op">(</span>dry_run <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
+<span></span>
 <span><span class="fu"><a href="reference/db_disconnect.html">db_disconnect</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
-</div>
 <div class="section level3">
 <h3 id="data-documentation--discovery">Data Documentation &amp; Discovery<a class="anchor" aria-label="anchor" href="#data-documentation--discovery"></a>
 </h3>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/CathalByrneGit/datapond" class="external-link">datapond</a></span><span class="op">)</span></span>
-<span><span class="fu"><a href="reference/db_connect.html">db_connect</a></span><span class="op">(</span>path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/db_connect.html">db_connect</a></span><span class="op">(</span></span>
+<span>  catalog_type <span class="op">=</span> <span class="st">"sqlite"</span>,</span>
+<span>  metadata_path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/catalog.sqlite"</span>,</span>
+<span>  data_path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/data"</span></span>
+<span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Document your datasets</span></span>
+<span><span class="co"># Document your tables</span></span>
 <span><span class="fu"><a href="reference/db_describe.html">db_describe</a></span><span class="op">(</span></span>
-<span>  section <span class="op">=</span> <span class="st">"Trade"</span>,</span>
-<span>  dataset <span class="op">=</span> <span class="st">"Imports"</span>,</span>
+<span>  table <span class="op">=</span> <span class="st">"imports"</span>,</span>
 <span>  description <span class="op">=</span> <span class="st">"Monthly import values by country and commodity code"</span>,</span>
 <span>  owner <span class="op">=</span> <span class="st">"Trade Section"</span>,</span>
 <span>  tags <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"trade"</span>, <span class="st">"monthly"</span>, <span class="st">"official"</span><span class="op">)</span></span>
@@ -218,18 +186,17 @@
 <span></span>
 <span><span class="co"># Document individual columns</span></span>
 <span><span class="fu"><a href="reference/db_describe_column.html">db_describe_column</a></span><span class="op">(</span></span>
-<span>  section <span class="op">=</span> <span class="st">"Trade"</span>,</span>
-<span>  dataset <span class="op">=</span> <span class="st">"Imports"</span>,</span>
+<span>  table <span class="op">=</span> <span class="st">"imports"</span>,</span>
 <span>  column <span class="op">=</span> <span class="st">"value"</span>,</span>
 <span>  description <span class="op">=</span> <span class="st">"Import value in thousands"</span>,</span>
 <span>  units <span class="op">=</span> <span class="st">"EUR (thousands)"</span></span>
 <span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Search for datasets</span></span>
+<span><span class="co"># Search for tables</span></span>
 <span><span class="fu"><a href="reference/db_search.html">db_search</a></span><span class="op">(</span><span class="st">"trade"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="reference/db_search.html">db_search</a></span><span class="op">(</span><span class="st">"official"</span>, field <span class="op">=</span> <span class="st">"tags"</span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Find columns across all datasets</span></span>
+<span><span class="co"># Find columns across all tables</span></span>
 <span><span class="fu"><a href="reference/db_search_columns.html">db_search_columns</a></span><span class="op">(</span><span class="st">"country"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Generate a data dictionary</span></span>
@@ -238,111 +205,54 @@
 <span><span class="fu">writexl</span><span class="fu">::</span><span class="fu">write_xlsx</span><span class="op">(</span><span class="va">dict</span>, <span class="st">"data_dictionary.xlsx"</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level3">
-<h3 id="public-catalog-organisation-wide-discovery">Public Catalog (Organisation-wide Discovery)<a class="anchor" aria-label="anchor" href="#public-catalog-organisation-wide-discovery"></a>
+<h3 id="data-lineage">Data Lineage<a class="anchor" aria-label="anchor" href="#data-lineage"></a>
 </h3>
-<p>Make metadata discoverable across the organisation while keeping data secure via folder permissions.</p>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/CathalByrneGit/datapond" class="external-link">datapond</a></span><span class="op">)</span></span>
-<span><span class="fu"><a href="reference/db_connect.html">db_connect</a></span><span class="op">(</span>path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake"</span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># Document and make discoverable in one step</span></span>
-<span><span class="fu"><a href="reference/db_describe.html">db_describe</a></span><span class="op">(</span></span>
-<span>  section <span class="op">=</span> <span class="st">"Trade"</span>,</span>
-<span>  dataset <span class="op">=</span> <span class="st">"Imports"</span>,</span>
-<span>  description <span class="op">=</span> <span class="st">"Monthly import values"</span>,</span>
-<span>  owner <span class="op">=</span> <span class="st">"Trade Section"</span>,</span>
-<span>  public <span class="op">=</span> <span class="cn">TRUE</span>  <span class="co"># Copies metadata to shared _catalog/ folder</span></span>
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Record where data came from</span></span>
+<span><span class="fu">db_lineage</span><span class="op">(</span></span>
+<span>  table <span class="op">=</span> <span class="st">"monthly_summary"</span>,</span>
+<span>  sources <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"raw.transactions"</span>, <span class="st">"raw.products"</span><span class="op">)</span>,</span>
+<span>  transformation <span class="op">=</span> <span class="st">"Aggregated by month and product category"</span></span>
 <span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Or use convenience functions</span></span>
-<span><span class="fu"><a href="reference/db_set_public.html">db_set_public</a></span><span class="op">(</span>section <span class="op">=</span> <span class="st">"Trade"</span>, dataset <span class="op">=</span> <span class="st">"Imports"</span><span class="op">)</span></span>
-<span><span class="fu"><a href="reference/db_set_private.html">db_set_private</a></span><span class="op">(</span>section <span class="op">=</span> <span class="st">"Trade"</span>, dataset <span class="op">=</span> <span class="st">"Imports"</span><span class="op">)</span></span>
-<span><span class="fu"><a href="reference/db_is_public.html">db_is_public</a></span><span class="op">(</span>section <span class="op">=</span> <span class="st">"Trade"</span>, dataset <span class="op">=</span> <span class="st">"Imports"</span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># Anyone can discover what data exists (even without data access)</span></span>
-<span><span class="fu"><a href="reference/db_list_public.html">db_list_public</a></span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="co">#&gt;   section dataset     description          owner</span></span>
-<span><span class="co">#&gt; 1   Trade Imports Monthly import values Trade Section</span></span>
-<span><span class="co">#&gt; 2  Labour Employment Employment statistics Labour Section</span></span>
-<span></span>
-<span><span class="co"># Sync catalog after manual metadata changes</span></span>
-<span><span class="fu"><a href="reference/db_sync_catalog.html">db_sync_catalog</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
+<span><span class="co"># Retrieve lineage information</span></span>
+<span><span class="fu">db_get_lineage</span><span class="op">(</span>table <span class="op">=</span> <span class="st">"monthly_summary"</span><span class="op">)</span></span>
+<span><span class="co">#&gt; $sources</span></span>
+<span><span class="co">#&gt; [1] "raw.transactions" "raw.products"</span></span>
+<span><span class="co">#&gt;</span></span>
+<span><span class="co">#&gt; $transformation</span></span>
+<span><span class="co">#&gt; [1] "Aggregated by month and product category"</span></span></code></pre></div>
 </div>
 <div class="section level3">
 <h3 id="interactive-browser">Interactive Browser<a class="anchor" aria-label="anchor" href="#interactive-browser"></a>
 </h3>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/CathalByrneGit/datapond" class="external-link">datapond</a></span><span class="op">)</span></span>
-<span><span class="fu"><a href="reference/db_connect.html">db_connect</a></span><span class="op">(</span>path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/db_connect.html">db_connect</a></span><span class="op">(</span></span>
+<span>  catalog_type <span class="op">=</span> <span class="st">"sqlite"</span>,</span>
+<span>  metadata_path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/catalog.sqlite"</span>,</span>
+<span>  data_path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/data"</span></span>
+<span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Launch interactive browser</span></span>
 <span><span class="fu"><a href="reference/db_browser.html">db_browser</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
 <p>The browser provides a point-and-click interface for:</p>
 <ul>
 <li>
-<strong>Browse</strong> - Navigate sections/datasets or schemas/tables in a tree view</li>
+<strong>Browse</strong> - Navigate schemas and tables in a tree view</li>
 <li>
-<strong>Preview</strong> - View sample rows from any dataset</li>
+<strong>Preview</strong> - View sample rows from any table</li>
 <li>
 <strong>Metadata</strong> - See documentation, owner, and tags</li>
 <li>
-<strong>Search</strong> - Find datasets by name, description, or tags</li>
+<strong>Search</strong> - Find tables by name, description, or tags</li>
 <li>
 <strong>Dictionary</strong> - Generate and export a data dictionary</li>
 </ul>
 </div>
 </div>
 <div class="section level2">
-<h2 id="why-two-modes">Why Two Modes?<a class="anchor" aria-label="anchor" href="#why-two-modes"></a>
-</h2>
-<table class="table">
-<colgroup>
-<col width="33%">
-<col width="33%">
-<col width="33%">
-</colgroup>
-<thead><tr class="header">
-<th>Feature</th>
-<th>Hive Mode</th>
-<th>DuckLake Mode</th>
-</tr></thead>
-<tbody>
-<tr class="odd">
-<td>Storage</td>
-<td>Folders + Parquet files</td>
-<td>Managed Parquet + metadata catalog</td>
-</tr>
-<tr class="even">
-<td>Time travel</td>
-<td>❌</td>
-<td>✅ Version and timestamp queries</td>
-</tr>
-<tr class="odd">
-<td>Schema evolution</td>
-<td>Manual</td>
-<td>✅ Automatic</td>
-</tr>
-<tr class="even">
-<td>ACID transactions</td>
-<td>❌</td>
-<td>✅</td>
-</tr>
-<tr class="odd">
-<td>Familiarity</td>
-<td>Similar to SAS libraries</td>
-<td>New paradigm</td>
-</tr>
-<tr class="even">
-<td>Best for</td>
-<td>Simple sharing, migration from SAS</td>
-<td>Production data pipelines</td>
-</tr>
-</tbody>
-</table>
-<p><strong>Start with Hive mode</strong> if you’re migrating from SAS or need something familiar. <strong>Use DuckLake mode</strong> when you need versioning, rollback, or proper transaction support.</p>
-</div>
-<div class="section level2">
-<h2 id="choosing-a-catalog-backend-ducklake">Choosing a Catalog Backend (DuckLake)<a class="anchor" aria-label="anchor" href="#choosing-a-catalog-backend-ducklake"></a>
+<h2 id="choosing-a-catalog-backend">Choosing a Catalog Backend<a class="anchor" aria-label="anchor" href="#choosing-a-catalog-backend"></a>
 </h2>
 <p>DuckLake stores metadata (table definitions, snapshots, file tracking) in a <strong>catalog database</strong>. You can choose from three backends:</p>
 <table class="table">
@@ -380,11 +290,10 @@
 </tbody>
 </table>
 <div class="section level3">
-<h3 id="recommended-sqlite-for-cso">Recommended: SQLite for CSO<a class="anchor" aria-label="anchor" href="#recommended-sqlite-for-cso"></a>
+<h3 id="recommended-sqlite-for-shared-drives">Recommended: SQLite for Shared Drives<a class="anchor" aria-label="anchor" href="#recommended-sqlite-for-shared-drives"></a>
 </h3>
-<p>For most CSO use cases with shared network drives, use SQLite:</p>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="reference/db_lake_connect.html">db_lake_connect</a></span><span class="op">(</span></span>
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="reference/db_connect.html">db_connect</a></span><span class="op">(</span></span>
 <span>  catalog_type <span class="op">=</span> <span class="st">"sqlite"</span>,</span>
 <span>  metadata_path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/catalog.sqlite"</span>,</span>
 <span>  data_path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/data"</span></span>
@@ -401,8 +310,8 @@
 <h3 id="postgresql-for-production-scale">PostgreSQL for Production Scale<a class="anchor" aria-label="anchor" href="#postgresql-for-production-scale"></a>
 </h3>
 <p>If you need true multi-user concurrent writes or remote access:</p>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="reference/db_lake_connect.html">db_lake_connect</a></span><span class="op">(</span></span>
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="reference/db_connect.html">db_connect</a></span><span class="op">(</span></span>
 <span>  catalog_type <span class="op">=</span> <span class="st">"postgres"</span>,</span>
 <span>  metadata_path <span class="op">=</span> <span class="st">"dbname=ducklake_catalog host=db.cso.ie"</span>,</span>
 <span>  data_path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/data"</span></span>
@@ -412,14 +321,18 @@
 <div class="section level2">
 <h2 id="access-control">Access Control<a class="anchor" aria-label="anchor" href="#access-control"></a>
 </h2>
-<p>Both modes rely on <strong>file system permissions</strong> for access control:</p>
-<ul>
-<li>
-<strong>Hive mode</strong>: Users need read/write access to the relevant section folders</li>
-<li>
-<strong>DuckLake mode</strong>: Users need access to both the metadata file/database and data folder</li>
-</ul>
-<p>This integrates with existing IT infrastructure - no new authentication systems needed.</p>
+<p>datapond relies on <strong>file system permissions</strong> for access control. DuckLake automatically organises data into <code>{schema}/{table}/</code> folders within the data path, so you can grant permissions at the schema level.</p>
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Create schemas - DuckLake creates data folders automatically</span></span>
+<span><span class="fu"><a href="reference/db_create_schema.html">db_create_schema</a></span><span class="op">(</span><span class="st">"trade"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/db_create_schema.html">db_create_schema</a></span><span class="op">(</span><span class="st">"labour"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Write data - files go to data/trade/imports/ automatically</span></span>
+<span><span class="fu">db_write</span><span class="op">(</span><span class="va">imports_data</span>, schema <span class="op">=</span> <span class="st">"trade"</span>, table <span class="op">=</span> <span class="st">"imports"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Then grant folder ACLs:</span></span>
+<span><span class="co"># - data/trade/   → Trade team read/write</span></span>
+<span><span class="co"># - data/labour/  → Labour team read/write</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="function-reference">Function Reference<a class="anchor" aria-label="anchor" href="#function-reference"></a>
@@ -439,17 +352,13 @@
 <tbody>
 <tr class="odd">
 <td><code><a href="reference/db_connect.html">db_connect()</a></code></td>
-<td>Connect in hive mode</td>
+<td>Connect to a DuckLake catalog (supports duckdb/sqlite/postgres backends)</td>
 </tr>
 <tr class="even">
-<td><code><a href="reference/db_lake_connect.html">db_lake_connect()</a></code></td>
-<td>Connect in DuckLake mode (supports duckdb/sqlite/postgres catalogs)</td>
-</tr>
-<tr class="odd">
 <td><code><a href="reference/db_disconnect.html">db_disconnect()</a></code></td>
 <td>Close connection</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><code><a href="reference/db_status.html">db_status()</a></code></td>
 <td>Show connection info (including catalog type)</td>
 </tr>
@@ -460,23 +369,18 @@
 <h3 id="reading-data">Reading Data<a class="anchor" aria-label="anchor" href="#reading-data"></a>
 </h3>
 <table class="table">
+<colgroup>
+<col width="50%">
+<col width="50%">
+</colgroup>
 <thead><tr class="header">
 <th>Function</th>
-<th>Mode</th>
 <th>Description</th>
 </tr></thead>
-<tbody>
-<tr class="odd">
-<td><code><a href="reference/db_hive_read.html">db_hive_read()</a></code></td>
-<td>Hive</td>
-<td>Read partitioned parquet dataset</td>
-</tr>
-<tr class="even">
-<td><code><a href="reference/db_lake_read.html">db_lake_read()</a></code></td>
-<td>DuckLake</td>
-<td>Read table (with optional time travel)</td>
-</tr>
-</tbody>
+<tbody><tr class="odd">
+<td><code>db_read()</code></td>
+<td>Read table (with optional time travel by version or timestamp)</td>
+</tr></tbody>
 </table>
 </div>
 <div class="section level3">
@@ -484,30 +388,21 @@
 </h3>
 <table class="table">
 <colgroup>
-<col width="33%">
-<col width="33%">
-<col width="33%">
+<col width="50%">
+<col width="50%">
 </colgroup>
 <thead><tr class="header">
 <th>Function</th>
-<th>Mode</th>
 <th>Description</th>
 </tr></thead>
 <tbody>
 <tr class="odd">
-<td><code><a href="reference/db_hive_write.html">db_hive_write()</a></code></td>
-<td>Hive</td>
-<td>Write partitioned parquet (overwrite/append/replace_partitions)</td>
+<td><code>db_write()</code></td>
+<td>Write table (overwrite/append, with optional partitioning)</td>
 </tr>
 <tr class="even">
-<td><code><a href="reference/db_lake_write.html">db_lake_write()</a></code></td>
-<td>DuckLake</td>
-<td>Write table (overwrite/append)</td>
-</tr>
-<tr class="odd">
 <td><code><a href="reference/db_upsert.html">db_upsert()</a></code></td>
-<td>DuckLake</td>
-<td>MERGE operation (update + insert)</td>
+<td>MERGE operation (update existing rows + insert new rows)</td>
 </tr>
 </tbody>
 </table>
@@ -516,30 +411,17 @@
 <h3 id="preview-operations">Preview Operations<a class="anchor" aria-label="anchor" href="#preview-operations"></a>
 </h3>
 <table class="table">
-<colgroup>
-<col width="33%">
-<col width="33%">
-<col width="33%">
-</colgroup>
 <thead><tr class="header">
 <th>Function</th>
-<th>Mode</th>
 <th>Description</th>
 </tr></thead>
 <tbody>
 <tr class="odd">
-<td><code><a href="reference/db_preview_hive_write.html">db_preview_hive_write()</a></code></td>
-<td>Hive</td>
+<td><code>db_preview_write()</code></td>
 <td>Preview write impact before executing</td>
 </tr>
 <tr class="even">
-<td><code><a href="reference/db_preview_lake_write.html">db_preview_lake_write()</a></code></td>
-<td>DuckLake</td>
-<td>Preview write impact before executing</td>
-</tr>
-<tr class="odd">
 <td><code><a href="reference/db_preview_upsert.html">db_preview_upsert()</a></code></td>
-<td>DuckLake</td>
 <td>Preview inserts vs updates before executing</td>
 </tr>
 </tbody>
@@ -551,48 +433,27 @@
 <table class="table">
 <thead><tr class="header">
 <th>Function</th>
-<th>Mode</th>
 <th>Description</th>
 </tr></thead>
 <tbody>
 <tr class="odd">
-<td><code><a href="reference/db_list_sections.html">db_list_sections()</a></code></td>
-<td>Hive</td>
-<td>List top-level sections</td>
-</tr>
-<tr class="even">
-<td><code><a href="reference/db_list_datasets.html">db_list_datasets()</a></code></td>
-<td>Hive</td>
-<td>List datasets in a section</td>
-</tr>
-<tr class="odd">
-<td><code><a href="reference/db_dataset_exists.html">db_dataset_exists()</a></code></td>
-<td>Hive</td>
-<td>Check if dataset exists</td>
-</tr>
-<tr class="even">
 <td><code><a href="reference/db_list_schemas.html">db_list_schemas()</a></code></td>
-<td>DuckLake</td>
 <td>List schemas</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><code><a href="reference/db_tables.html">db_tables()</a></code></td>
-<td>DuckLake</td>
-<td>List tables in schema</td>
-</tr>
-<tr class="even">
-<td><code><a href="reference/db_list_views.html">db_list_views()</a></code></td>
-<td>DuckLake</td>
-<td>List views in schema</td>
+<td>List tables in a schema</td>
 </tr>
 <tr class="odd">
-<td><code><a href="reference/db_table_exists.html">db_table_exists()</a></code></td>
-<td>DuckLake</td>
-<td>Check if table exists</td>
+<td><code><a href="reference/db_list_views.html">db_list_views()</a></code></td>
+<td>List views in a schema</td>
 </tr>
 <tr class="even">
+<td><code><a href="reference/db_table_exists.html">db_table_exists()</a></code></td>
+<td>Check if a table exists</td>
+</tr>
+<tr class="odd">
 <td><code><a href="reference/db_create_schema.html">db_create_schema()</a></code></td>
-<td>DuckLake</td>
 <td>Create a new schema</td>
 </tr>
 </tbody>
@@ -603,94 +464,51 @@
 </h3>
 <table class="table">
 <colgroup>
-<col width="31%">
-<col width="7%">
-<col width="61%">
+<col width="50%">
+<col width="50%">
 </colgroup>
 <thead><tr class="header">
 <th>Function</th>
-<th>Mode</th>
 <th>Description</th>
 </tr></thead>
 <tbody>
 <tr class="odd">
 <td><code><a href="reference/db_describe.html">db_describe()</a></code></td>
-<td>Both</td>
-<td>Add description, owner, tags to dataset/table</td>
+<td>Add description, owner, tags to a table</td>
 </tr>
 <tr class="even">
 <td><code><a href="reference/db_describe_column.html">db_describe_column()</a></code></td>
-<td>Both</td>
 <td>Document a column (description, units, notes)</td>
 </tr>
 <tr class="odd">
 <td><code><a href="reference/db_get_docs.html">db_get_docs()</a></code></td>
-<td>Both</td>
-<td>Retrieve documentation for a dataset/table</td>
+<td>Retrieve documentation for a table</td>
 </tr>
 <tr class="even">
 <td><code><a href="reference/db_dictionary.html">db_dictionary()</a></code></td>
-<td>Both</td>
 <td>Generate full data dictionary</td>
 </tr>
 <tr class="odd">
 <td><code><a href="reference/db_search.html">db_search()</a></code></td>
-<td>Both</td>
 <td>Search by name, description, owner, or tags</td>
 </tr>
 <tr class="even">
 <td><code><a href="reference/db_search_columns.html">db_search_columns()</a></code></td>
-<td>Both</td>
-<td>Find columns by name across all datasets</td>
+<td>Find columns by name across all tables</td>
+</tr>
+<tr class="odd">
+<td><code>db_lineage()</code></td>
+<td>Record data lineage (sources and transformations)</td>
+</tr>
+<tr class="even">
+<td><code>db_get_lineage()</code></td>
+<td>Retrieve lineage information for a table</td>
 </tr>
 </tbody>
 </table>
 </div>
 <div class="section level3">
-<h3 id="public-catalog">Public Catalog<a class="anchor" aria-label="anchor" href="#public-catalog"></a>
-</h3>
-<table class="table">
-<colgroup>
-<col width="33%">
-<col width="33%">
-<col width="33%">
-</colgroup>
-<thead><tr class="header">
-<th>Function</th>
-<th>Mode</th>
-<th>Description</th>
-</tr></thead>
-<tbody>
-<tr class="odd">
-<td><code><a href="reference/db_set_public.html">db_set_public()</a></code></td>
-<td>Both</td>
-<td>Make metadata discoverable organisation-wide</td>
-</tr>
-<tr class="even">
-<td><code><a href="reference/db_set_private.html">db_set_private()</a></code></td>
-<td>Both</td>
-<td>Remove from public catalog</td>
-</tr>
-<tr class="odd">
-<td><code><a href="reference/db_is_public.html">db_is_public()</a></code></td>
-<td>Both</td>
-<td>Check if in public catalog</td>
-</tr>
-<tr class="even">
-<td><code><a href="reference/db_list_public.html">db_list_public()</a></code></td>
-<td>Both</td>
-<td>List all discoverable datasets/tables</td>
-</tr>
-<tr class="odd">
-<td><code><a href="reference/db_sync_catalog.html">db_sync_catalog()</a></code></td>
-<td>Both</td>
-<td>Sync public catalog with source metadata</td>
-</tr>
-</tbody>
-</table>
-</div>
-<div class="section level3">
-<h3 id="partitioning-ducklake">Partitioning (DuckLake)<a class="anchor" aria-label="anchor" href="#partitioning-ducklake"></a>
+<h3 id="partitioning">Partitioning<a class="anchor" aria-label="anchor" href="#partitioning"></a>
 </h3>
 <table class="table">
 <thead><tr class="header">
@@ -713,45 +531,57 @@
 <h3 id="metadata--maintenance">Metadata &amp; Maintenance<a class="anchor" aria-label="anchor" href="#metadata--maintenance"></a>
 </h3>
 <table class="table">
+<colgroup>
+<col width="50%">
+<col width="50%">
+</colgroup>
 <thead><tr class="header">
 <th>Function</th>
-<th>Mode</th>
 <th>Description</th>
 </tr></thead>
 <tbody>
 <tr class="odd">
 <td><code><a href="reference/db_snapshots.html">db_snapshots()</a></code></td>
-<td>DuckLake</td>
 <td>List all snapshots</td>
 </tr>
 <tr class="even">
 <td><code><a href="reference/db_catalog.html">db_catalog()</a></code></td>
-<td>DuckLake</td>
 <td>Table info and stats</td>
 </tr>
 <tr class="odd">
 <td><code><a href="reference/db_table_cols.html">db_table_cols()</a></code></td>
-<td>DuckLake</td>
-<td>Get column names</td>
+<td>Get column names for a table</td>
 </tr>
 <tr class="even">
-<td><code><a href="reference/db_diff.html">db_diff()</a></code></td>
-<td>DuckLake</td>
-<td>Compare snapshots</td>
+<td><code><a href="reference/db_view_cols.html">db_view_cols()</a></code></td>
+<td>Get column names for a view</td>
 </tr>
 <tr class="odd">
-<td><code><a href="reference/db_rollback.html">db_rollback()</a></code></td>
-<td>DuckLake</td>
-<td>Restore to previous version</td>
+<td><code><a href="reference/db_diff.html">db_diff()</a></code></td>
+<td>Compare two snapshots</td>
 </tr>
 <tr class="even">
+<td><code><a href="reference/db_rollback.html">db_rollback()</a></code></td>
+<td>Restore table to a previous version</td>
+</tr>
+<tr class="odd">
 <td><code><a href="reference/db_vacuum.html">db_vacuum()</a></code></td>
-<td>DuckLake</td>
-<td>Clean up old snapshots</td>
+<td>Clean up old snapshots and unreferenced files</td>
+</tr>
+<tr class="even">
+<td><code>db_compact()</code></td>
+<td>Merge small Parquet files for better performance</td>
+</tr>
+<tr class="odd">
+<td><code>db_file_stats()</code></td>
+<td>Get file counts and sizes to identify compaction candidates</td>
+</tr>
+<tr class="even">
+<td><code>db_cleanup_files()</code></td>
+<td>Remove orphaned files after vacuum or compact</td>
 </tr>
 <tr class="odd">
 <td><code><a href="reference/db_query.html">db_query()</a></code></td>
-<td>Both</td>
 <td>Run arbitrary SQL</td>
 </tr>
 </tbody>
@@ -761,14 +591,24 @@
 <h3 id="interactive-tools">Interactive Tools<a class="anchor" aria-label="anchor" href="#interactive-tools"></a>
 </h3>
 <table class="table">
+<colgroup>
+<col width="50%">
+<col width="50%">
+</colgroup>
 <thead><tr class="header">
 <th>Function</th>
 <th>Description</th>
 </tr></thead>
-<tbody><tr class="odd">
+<tbody>
+<tr class="odd">
 <td><code><a href="reference/db_browser.html">db_browser()</a></code></td>
 <td>Launch interactive Shiny browser for exploring data</td>
-</tr></tbody>
+</tr>
+<tr class="even">
+<td><code><a href="reference/run_example.html">run_example()</a></code></td>
+<td>Run bundled example scripts (call without args to list)</td>
+</tr>
+</tbody>
 </table>
 </div>
 </div>
@@ -777,7 +617,7 @@
 </h2>
 <ul>
 <li>
-<code><a href="articles/concepts.html">vignette("concepts")</a></code> - Background on data lakes, hive partitioning, and DuckLake</li>
+<code><a href="articles/concepts.html">vignette("concepts")</a></code> - Background on DuckLake, catalog backends, and access control</li>
 <li>
 <code><a href="articles/code-walkthrough.html">vignette("code-walkthrough")</a></code> - Detailed explanation of how the package works</li>
 </ul>

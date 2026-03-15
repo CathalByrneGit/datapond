@@ -423,6 +423,26 @@ db_search <- function(pattern, field = c("all", "name", "description", "owner", 
 }
 ```
 
+### `db_lineage()` - Record Data Lineage
+
+``` r
+db_lineage <- function(schema = "main", table, sources, transformation = NULL) {
+  # Ensure lineage table exists
+  DBI::dbExecute(con, "CREATE TABLE IF NOT EXISTS {catalog}._metadata.lineage (...)")
+
+  # Upsert lineage record
+  sources_str <- paste(sources, collapse = "; ")
+  DBI::dbExecute(con, "DELETE FROM ... WHERE schema = ... AND table = ...")
+  DBI::dbExecute(con, "INSERT INTO ... VALUES (...)")
+}
+```
+
+**Key points:**
+
+- Lineage is stored in `_metadata.lineage` table alongside documentation
+- Sources are joined with `;` separator for storage, split on retrieval
+- `db_get_lineage()` retrieves and parses the stored information
+
 ------------------------------------------------------------------------
 
 ## `R/preview.R` - Write Previews
@@ -604,34 +624,104 @@ db_diff <- function(schema, table, from_version, to_version, key_cols = NULL) {
 }
 ```
 
-**Key points:**
-
-- Uses SQL `EXCEPT` for set difference operations
-- With `key_cols`, can distinguish “modified” from “added/removed”
-
-------------------------------------------------------------------------
-
-## `R/zzz.R` - Package Hooks
+### `db_compact()` - Merge Small Files
 
 ``` r
-# Null coalesce operator used throughout
-`%||%` <- function(x, y) if (is.null(x) || length(x) == 0) y else x
+db_compact <- function(schema = "main", table = NULL, max_files = NULL) {
+  # Build the SQL call with optional parameters
+  sql <- glue::glue("CALL ducklake_merge_adjacent_files({catalog}, {table}, ...)")
 
-.onAttach <- function(libname, pkgname) {
-  packageStartupMessage(
-    "datapond ", utils::packageVersion("datapond"), "\n",
-    "Use db_connect() to connect to a DuckLake catalog."
-  )
-}
+  # Get file stats before and after for reporting
+  stats_before <- db_file_stats(schema, table)
+  DBI::dbExecute(con, sql)
+  stats_after <- db_file_stats(schema, table)
 
-.onUnload <- function(libpath) {
-  # Clean up connection when package unloads
-  con <- .db_get_con()
-  if (!is.null(con)) {
-    try(DBI::dbDisconnect(con, shutdown = TRUE), silent = TRUE)
-  }
+  # Report reduction
+  message("Files before: ", sum(stats_before$file_count))
+  message("Files after:  ", sum(stats_after$file_count))
 }
 ```
+
+**Key points:**
+
+- Uses DuckLake’s `ducklake_merge_adjacent_files()` procedure
+- `max_files` parameter limits memory usage for large tables
+- Files with incompatible schema versions cannot be merged
+- Run `db_cleanup_files()` after to remove old files
+
+### `db_file_stats()` - Check File Statistics
+
+``` r
+db_file_stats <- function(schema = "main", table = NULL) {
+  sql <- glue::glue("FROM ducklake_table_info({.db_sql_quote(catalog)})")
+  info <- DBI::dbGetQuery(con, sql)
+
+  # Calculate average file size and rows per file
+  info$avg_file_bytes <- info$total_bytes / info$file_count
+  info$avg_rows_per_file <- info$total_rows / info$file_count
+
+  info
+}
+```
+
+**Key points:**
+
+- Uses DuckLake’s `ducklake_table_info()` function
+- High file count with small average size indicates compaction needed
+- Useful for monitoring and maintenance scheduling
+
+### `db_cleanup_files()` - Remove Orphaned Files
+
+``` r
+db_cleanup_files <- function(dry_run = TRUE) {
+  if (dry_run) {
+    # Show preview of what would be cleaned
+    return(invisible(NA))
+  }
+
+  sql <- glue::glue("CALL ducklake_cleanup_old_files({.db_sql_quote(catalog)})")
+  DBI::dbExecute(con, sql)
+}
+```
+
+**Key points:**
+
+- Orphaned files are created by
+  [`db_vacuum()`](https://cathalbyrnegit.github.io/datapond/reference/db_vacuum.md)
+  and `db_compact()`
+- `dry_run = TRUE` by default for safety
+- Reclaims disk space by removing unreferenced Parquet files
+
+&nbsp;
+
+    **Key points:**
+
+    - Uses SQL `EXCEPT` for set difference operations
+    - With `key_cols`, can distinguish "modified" from "added/removed"
+
+    ---
+
+    ## `R/zzz.R` - Package Hooks
+
+
+    ``` r
+    # Null coalesce operator used throughout
+    `%||%` <- function(x, y) if (is.null(x) || length(x) == 0) y else x
+
+    .onAttach <- function(libname, pkgname) {
+      packageStartupMessage(
+        "datapond ", utils::packageVersion("datapond"), "\n",
+        "Use db_connect() to connect to a DuckLake catalog."
+      )
+    }
+
+    .onUnload <- function(libpath) {
+      # Clean up connection when package unloads
+      con <- .db_get_con()
+      if (!is.null(con)) {
+        try(DBI::dbDisconnect(con, shutdown = TRUE), silent = TRUE)
+      }
+    }
 
 **Key points:**
 

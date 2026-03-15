@@ -354,6 +354,35 @@ timestamps
 
 ------------------------------------------------------------------------
 
+## Data Lineage
+
+Track where your data comes from and how it was transformed:
+
+``` r
+# Record lineage when creating derived tables
+db_lineage(
+  table = "monthly_summary",
+  sources = c("raw.transactions", "raw.products"),
+  transformation = "Aggregated by month and product category"
+)
+
+# Later, retrieve lineage information
+db_get_lineage(table = "monthly_summary")
+#> $sources
+#> [1] "raw.transactions" "raw.products"
+#>
+#> $transformation
+#> [1] "Aggregated by month and product category"
+#>
+#> $recorded_at
+#> [1] "2025-03-10 14:30:00"
+```
+
+Lineage information is stored in the `_metadata.lineage` table within
+your DuckLake catalog.
+
+------------------------------------------------------------------------
+
 ## Preview Before Writing
 
 Before making changes to production data, you can preview what will
@@ -440,6 +469,69 @@ automatically - **Familiar model** - uses standard folder permissions -
 **Granular control** - different teams can own different schemas -
 **Single catalog** - one metadata file, simpler management -
 **IT-friendly** - works with existing permission infrastructure
+
+------------------------------------------------------------------------
+
+## File Maintenance
+
+Over time, frequent small writes create many small Parquet files. This
+can slow down queries. DuckLake provides tools to maintain optimal file
+sizes.
+
+### Checking File Statistics
+
+``` r
+# See file counts and sizes for all tables
+db_file_stats()
+#>   schema_name table_name file_count total_rows total_bytes avg_file_bytes
+#> 1 trade       imports         523    1500000   125000000         239007
+#> 2 trade       exports          12     500000    45000000        3750000
+
+# Tables with many small files (< 10 MB average) are candidates for compaction
+stats <- db_file_stats()
+stats[stats$file_count > 100 & stats$avg_file_bytes < 1e7, ]
+```
+
+### Compacting Files
+
+``` r
+# Merge small files into larger ones
+db_compact(table = "imports")
+#> Compacting files...
+#>   Table: imports
+#> Compaction complete:
+#>   Files before: 523
+#>   Files after:  15
+#>   Files merged: 508
+
+# Compact with memory limits (for very large tables)
+db_compact(table = "imports", max_files = 500)
+
+# Compact an entire schema
+db_compact(schema = "trade")
+```
+
+### Cleaning Up Old Files
+
+After compacting or vacuuming, old files become orphaned. Clean them up
+to reclaim disk space:
+
+``` r
+# Preview what would be deleted
+db_cleanup_files(dry_run = TRUE)
+
+# Actually remove orphaned files
+db_cleanup_files(dry_run = FALSE)
+```
+
+### Recommended Maintenance Schedule
+
+| Operation                                                                         | Frequency                   | Purpose                    |
+|-----------------------------------------------------------------------------------|-----------------------------|----------------------------|
+| `db_file_stats()`                                                                 | Weekly                      | Monitor file fragmentation |
+| `db_compact()`                                                                    | Monthly or after bulk loads | Merge small files          |
+| [`db_vacuum()`](https://cathalbyrnegit.github.io/datapond/reference/db_vacuum.md) | Monthly                     | Remove old snapshots       |
+| `db_cleanup_files()`                                                              | After vacuum or compact     | Reclaim disk space         |
 
 ------------------------------------------------------------------------
 
@@ -535,6 +627,8 @@ db_disconnect()
 | **ACID**            | Atomicity, Consistency, Isolation, Durability - database reliability guarantees |
 | **Upsert**          | Update existing rows + insert new rows in one operation                         |
 | **Data dictionary** | Documentation of all datasets, their columns, types, and descriptions           |
+| **Lineage**         | Tracking the sources and transformations that produced a dataset                |
+| **Compaction**      | Merging many small files into fewer larger files for better performance         |
 
 ------------------------------------------------------------------------
 
