@@ -323,18 +323,20 @@ db_file_stats <- function(schema = "main", table = NULL) {
     stop("No DuckLake catalog configured. Use db_connect() first.", call. = FALSE)
   }
 
+  # Validate filter params first
+ schema_filter <- if (!is.null(schema)) .db_validate_name(schema, "schema") else NULL
+  table_filter <- if (!is.null(table)) .db_validate_name(table, "table") else NULL
+
   # Query DuckLake internal metadata tables directly for reliable column names
   metadata_schema <- paste0("__ducklake_metadata_", catalog)
 
   # Build query with optional filters
-  where_clauses <- "t.end_snapshot IS NULL"  # Only current tables
-  if (!is.null(schema)) {
-    schema <- .db_validate_name(schema, "schema")
-    where_clauses <- paste0(where_clauses, " AND s.schema_name = ", .db_sql_quote(schema))
+  where_clauses <- "1=1"
+  if (!is.null(schema_filter)) {
+    where_clauses <- paste0(where_clauses, " AND s.schema_name = ", .db_sql_quote(schema_filter))
   }
-  if (!is.null(table)) {
-    table <- .db_validate_name(table, "table")
-    where_clauses <- paste0(where_clauses, " AND t.table_name = ", .db_sql_quote(table))
+  if (!is.null(table_filter)) {
+    where_clauses <- paste0(where_clauses, " AND t.table_name = ", .db_sql_quote(table_filter))
   }
 
   sql <- glue::glue("
@@ -357,7 +359,46 @@ db_file_stats <- function(schema = "main", table = NULL) {
   }, error = function(e) {
     # Fallback: try ducklake_table_info if direct query fails
     fallback_sql <- glue::glue("FROM ducklake_table_info({.db_sql_quote(catalog)})")
-    DBI::dbGetQuery(con, fallback_sql)
+    fallback_info <- DBI::dbGetQuery(con, fallback_sql)
+
+    # Normalize column names and apply filters manually
+    names(fallback_info) <- tolower(names(fallback_info))
+
+    # Find schema column
+    schema_col <- NULL
+    for (col in c("schema_name", "schema", "table_schema")) {
+      if (col %in% names(fallback_info)) {
+        schema_col <- col
+        break
+      }
+    }
+
+    # Find table column
+    table_col <- NULL
+    for (col in c("table_name", "table", "name")) {
+      if (col %in% names(fallback_info)) {
+        table_col <- col
+        break
+      }
+    }
+
+    # Apply filters
+    if (!is.null(schema_filter) && !is.null(schema_col)) {
+      fallback_info <- fallback_info[fallback_info[[schema_col]] == schema_filter, , drop = FALSE]
+    }
+    if (!is.null(table_filter) && !is.null(table_col)) {
+      fallback_info <- fallback_info[fallback_info[[table_col]] == table_filter, , drop = FALSE]
+    }
+
+    # Rename columns to expected names
+    if (!is.null(schema_col) && schema_col != "schema_name") {
+      names(fallback_info)[names(fallback_info) == schema_col] <- "schema_name"
+    }
+    if (!is.null(table_col) && table_col != "table_name") {
+      names(fallback_info)[names(fallback_info) == table_col] <- "table_name"
+    }
+
+    fallback_info
   })
 
   if (nrow(info) == 0) {
