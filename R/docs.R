@@ -11,10 +11,13 @@
   # Create _metadata schema if not exists
   tryCatch({
     DBI::dbExecute(con, glue::glue("CREATE SCHEMA IF NOT EXISTS {catalog}._metadata"))
-  }, error = function(e) NULL)
+  }, error = function(e) {
+    # Schema creation failed - this is expected in some DuckLake configurations
+    # Try to continue anyway as the schema might already exist
+  })
 
   # Create table_docs table
-  tryCatch({
+  table_docs_exists <- tryCatch({
     DBI::dbExecute(con, glue::glue("
       CREATE TABLE IF NOT EXISTS {catalog}._metadata.table_docs (
         schema_name VARCHAR NOT NULL,
@@ -27,10 +30,18 @@
         PRIMARY KEY (schema_name, table_name)
       )
     "))
-  }, error = function(e) NULL)
+    TRUE
+  }, error = function(e) {
+    # Check if table already exists
+    exists_check <- tryCatch({
+      DBI::dbGetQuery(con, glue::glue("SELECT 1 FROM {catalog}._metadata.table_docs LIMIT 0"))
+      TRUE
+    }, error = function(e2) FALSE)
+    exists_check
+  })
 
   # Create column_docs table
-  tryCatch({
+  column_docs_exists <- tryCatch({
     DBI::dbExecute(con, glue::glue("
       CREATE TABLE IF NOT EXISTS {catalog}._metadata.column_docs (
         schema_name VARCHAR NOT NULL,
@@ -43,7 +54,24 @@
         PRIMARY KEY (schema_name, table_name, column_name)
       )
     "))
-  }, error = function(e) NULL)
+    TRUE
+  }, error = function(e) {
+    # Check if table already exists
+    exists_check <- tryCatch({
+      DBI::dbGetQuery(con, glue::glue("SELECT 1 FROM {catalog}._metadata.column_docs LIMIT 0"))
+      TRUE
+    }, error = function(e2) FALSE)
+    exists_check
+  })
+
+  if (!table_docs_exists || !column_docs_exists) {
+    stop(
+      "Failed to create metadata tables in ", catalog, "._metadata schema.\n",
+      "This may happen if the DuckLake catalog doesn't support metadata tables.\n",
+      "Documentation features require metadata table support.",
+      call. = FALSE
+    )
+  }
 
   invisible(TRUE)
 }
@@ -82,6 +110,10 @@ db_describe <- function(schema = "main", table,
   con <- .db_get_con()
   if (is.null(con)) {
     stop("Not connected. Use db_connect() first.", call. = FALSE)
+  }
+
+  if (missing(table)) {
+    stop("table is required", call. = FALSE)
   }
 
   schema <- .db_validate_name(schema, "schema")

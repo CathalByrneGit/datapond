@@ -778,7 +778,7 @@ test_that("db_cleanup_files runs without error", {
   DBI::dbExecute(con, "CREATE TABLE test.main.items (id INTEGER)")
   DBI::dbExecute(con, "INSERT INTO test.main.items VALUES (1)")
 
-  # Should complete without error
+  # Should complete without error (may say "complete" or "No orphaned files")
   expect_message(db_cleanup_files(dry_run = FALSE), "Cleanup complete")
 
   clean_db_env()

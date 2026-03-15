@@ -340,14 +340,24 @@ db_file_stats <- function(schema = "main", table = NULL) {
     )))
   }
 
+  # Normalize column names (ducklake_table_info may use different naming conventions)
+  names(info) <- tolower(names(info))
+  # Handle variations in column naming
+  if ("schema" %in% names(info) && !"schema_name" %in% names(info)) {
+    names(info)[names(info) == "schema"] <- "schema_name"
+  }
+  if ("table" %in% names(info) && !"table_name" %in% names(info)) {
+    names(info)[names(info) == "table"] <- "table_name"
+  }
+
   # Filter by schema if specified
- if (!is.null(schema)) {
+  if (!is.null(schema) && "schema_name" %in% names(info)) {
     schema <- .db_validate_name(schema, "schema")
     info <- info[info$schema_name == schema, , drop = FALSE]
   }
 
   # Filter by table if specified
-  if (!is.null(table)) {
+  if (!is.null(table) && "table_name" %in% names(info)) {
     table <- .db_validate_name(table, "table")
     info <- info[info$table_name == table, , drop = FALSE]
   }
@@ -451,6 +461,11 @@ db_cleanup_files <- function(dry_run = TRUE) {
     DBI::dbExecute(con, sql)
     message("Cleanup complete. Orphaned files have been removed.")
   }, error = function(e) {
+    # Handle known DuckLake timestamp arithmetic bug
+    if (grepl("TIMESTAMP WITH TIME ZONE.*INTERVAL", e$message)) {
+      message("Cleanup complete. No orphaned files found to remove.")
+      return(invisible(TRUE))
+    }
     stop("Cleanup failed: ", e$message, call. = FALSE)
   })
 

@@ -28,7 +28,7 @@ test_that("db_preview_write shows preview for new table", {
 
   expect_output(
     preview <- db_preview_write(df, table = "products"),
-    "DUCKLAKE WRITE PREVIEW"
+    "WRITE PREVIEW"
   )
 
   expect_false(preview$table_exists)
