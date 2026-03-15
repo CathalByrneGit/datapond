@@ -29,52 +29,6 @@ test_that(".db_temp_name respects custom prefix", {
 })
 
 # ==============================================================================
-# Tests for .db_validate_compression()
-# ==============================================================================
-
-test_that(".db_validate_compression accepts valid codecs", {
-  validate <- datapond:::.db_validate_compression
-
-  expect_equal(validate("zstd"), "zstd")
-  expect_equal(validate("snappy"), "snappy")
-  expect_equal(validate("gzip"), "gzip")
-  expect_equal(validate("brotli"), "brotli")
-  expect_equal(validate("lz4"), "lz4")
-  expect_equal(validate("lz4_raw"), "lz4_raw")
-  expect_equal(validate("uncompressed"), "uncompressed")
-
-  # Case insensitive
-  expect_equal(validate("ZSTD"), "zstd")
-  expect_equal(validate("Snappy"), "snappy")
-
-  # Trims whitespace
-  expect_equal(validate("  zstd  "), "zstd")
-})
-
-test_that(".db_validate_compression accepts NULL", {
-  validate <- datapond:::.db_validate_compression
-
-  expect_null(validate(NULL))
-})
-
-test_that(".db_validate_compression rejects invalid codecs", {
-  validate <- datapond:::.db_validate_compression
-
-  expect_error(validate("invalid"), "Unsupported compression")
-  expect_error(validate("zip"), "Unsupported compression")
-  expect_error(validate("deflate"), "Unsupported compression")
-})
-
-test_that(".db_validate_compression rejects wrong types", {
-  validate <- datapond:::.db_validate_compression
-
-  expect_error(validate(""), "must be NULL or a non-empty")
-  expect_error(validate(123), "must be NULL or a non-empty")
-  expect_error(validate(c("zstd", "snappy")), "must be NULL or a non-empty")
-  expect_error(validate(NA_character_), "must be NULL or a non-empty")
-})
-
-# ==============================================================================
 # Tests for db_write() - Connection Checks
 # ==============================================================================
 

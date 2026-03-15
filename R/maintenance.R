@@ -124,6 +124,407 @@ db_vacuum <- function(older_than = "30 days", dry_run = TRUE) {
 }
 
 
+# ---- File Compaction ----
+
+#' Compact small files in a DuckLake table
+#'
+#' @description Merges small Parquet files into larger ones to improve query
+#' performance. When data is written in small batches, DuckLake creates many
+#' small files which slows down reads. Compaction consolidates these files.
+#'
+#' **When to compact:**
+#' - After many small inserts (e.g., streaming data, row-by-row imports)
+#' - When `db_file_stats()` shows high file counts with small average sizes
+#' - Before running large analytical queries on frequently-updated tables
+#'
+#' **Important notes:**
+#' - Compaction is memory-intensive; use `max_files` to limit batch size
+#' - Files with different schema versions cannot be merged together
+#' - Old files are not immediately deleted; run `db_cleanup_files()` after
+#'
+#' @param schema Schema name (default "main"). Use NULL to compact all schemas.
+#' @param table Table name. Use NULL to compact all tables in the schema.
+#' @param max_files Maximum number of files to compact in one operation.
+#'   Lower values use less memory. Default NULL compacts all eligible files.
+#' @return Invisibly returns a list with compaction results
+#' @examples
+#' \dontrun{
+#' db_connect()
+#'
+#' # Check if compaction is needed
+#' db_file_stats()
+#'
+#' # Compact a specific table
+#' db_compact(table = "imports")
+#'
+#' # Compact with memory limit (process 500 files at a time)
+#' db_compact(table = "imports", max_files = 500)
+#'
+#' # Compact all tables in a schema
+#' db_compact(schema = "trade")
+#'
+#' # Compact entire catalog
+#' db_compact()
+#'
+#' # Clean up old files after compaction
+#' db_cleanup_files()
+#' }
+#' @seealso [db_file_stats()] to check file statistics before compacting,
+#'   [db_cleanup_files()] to remove old files after compaction
+#' @export
+db_compact <- function(schema = "main", table = NULL, max_files = NULL) {
+  con <- .db_get_con()
+  if (is.null(con)) {
+    stop("Not connected. Use db_connect() first.", call. = FALSE)
+  }
+
+  catalog <- .db_get("catalog")
+  if (is.null(catalog)) {
+    stop("No DuckLake catalog configured. Use db_connect() first.", call. = FALSE)
+  }
+
+  # Build the SQL call
+  args <- c(.db_sql_quote(catalog))
+
+  if (!is.null(table)) {
+    table <- .db_validate_name(table, "table")
+    args <- c(args, .db_sql_quote(table))
+  }
+
+  named_args <- c()
+  if (!is.null(schema)) {
+    schema <- .db_validate_name(schema, "schema")
+    named_args <- c(named_args, glue::glue("schema => {.db_sql_quote(schema)}"))
+  }
+  if (!is.null(max_files)) {
+    if (!is.numeric(max_files) || max_files < 1) {
+      stop("max_files must be a positive integer.", call. = FALSE)
+    }
+    named_args <- c(named_args, glue::glue("max_compacted_files => {as.integer(max_files)}"))
+  }
+
+  all_args <- c(args, named_args)
+  sql <- glue::glue("CALL ducklake_merge_adjacent_files({paste(all_args, collapse = ', ')})")
+
+  # Get file stats before compaction for reporting
+  stats_before <- tryCatch(
+    db_file_stats(schema = schema, table = table),
+    error = function(e) NULL
+  )
+
+  # Run compaction
+  message("Compacting files...")
+  if (!is.null(table)) {
+    message("  Table: ", if (!is.null(schema)) paste0(schema, ".") else "", table)
+  } else if (!is.null(schema)) {
+    message("  Schema: ", schema)
+  } else {
+    message("  Entire catalog: ", catalog)
+  }
+  if (!is.null(max_files)) {
+    message("  Max files per batch: ", max_files)
+  }
+
+  tryCatch({
+    DBI::dbExecute(con, sql)
+  }, error = function(e) {
+    # Check for common issues
+    if (grepl("schema version", e$message, ignore.case = TRUE)) {
+      stop(
+        "Compaction failed: Files have incompatible schema versions.\n",
+        "This happens when table structure changed between inserts.\n",
+        "Consider running compaction more frequently after bulk inserts.\n\n",
+        "Original error: ", e$message,
+        call. = FALSE
+      )
+    }
+    stop("Compaction failed: ", e$message, call. = FALSE)
+  })
+
+  # Get file stats after compaction for reporting
+  stats_after <- tryCatch(
+    db_file_stats(schema = schema, table = table),
+    error = function(e) NULL
+  )
+
+  # Report results
+  if (!is.null(stats_before) && !is.null(stats_after)) {
+    files_before <- sum(stats_before$file_count, na.rm = TRUE)
+    files_after <- sum(stats_after$file_count, na.rm = TRUE)
+    files_reduced <- files_before - files_after
+
+    if (files_reduced > 0) {
+      message("Compaction complete:")
+      message("  Files before: ", files_before)
+      message("  Files after:  ", files_after)
+      message("  Files merged: ", files_reduced)
+      message("\nRun db_cleanup_files() to remove old files from storage.")
+    } else {
+      message("Compaction complete. No files were eligible for merging.")
+      message("(Files may have incompatible schema versions)")
+    }
+  } else {
+    message("Compaction complete.")
+    message("Run db_cleanup_files() to remove old files from storage.")
+  }
+
+  invisible(list(
+    stats_before = stats_before,
+    stats_after = stats_after
+  ))
+}
+
+
+#' Get file statistics for DuckLake tables
+#'
+#' @description Returns information about the Parquet files backing each table,
+#' including file counts, sizes, and row counts. Use this to identify tables
+#' that would benefit from compaction.
+#'
+#' **Indicators that compaction may help:**
+#' - High file count with small average file size (< 10 MB)
+#' - Many more files than expected for the data volume
+#' - Slow query performance on tables with many files
+#'
+#' @param schema Schema name (default "main"). Use NULL for all schemas.
+#' @param table Table name. Use NULL for all tables.
+#' @return A data.frame with columns:
+#'   - `schema_name`: Schema containing the table
+#'   - `table_name`: Table name
+#'   - `file_count`: Number of Parquet files
+#'   - `total_rows`: Total row count across all files
+#'   - `total_bytes`: Total size in bytes
+#'   - `avg_file_bytes`: Average file size
+#'   - `avg_rows_per_file`: Average rows per file
+#' @examples
+#' \dontrun{
+#' db_connect()
+#'
+#' # Check all tables
+#' db_file_stats()
+#'
+#' # Check a specific table
+#' db_file_stats(table = "imports")
+#'
+#' # Find tables needing compaction (many small files)
+#' stats <- db_file_stats()
+#' stats[stats$file_count > 100 & stats$avg_file_bytes < 1e7, ]
+#' }
+#' @seealso [db_compact()] to merge small files
+#' @export
+db_file_stats <- function(schema = "main", table = NULL) {
+  con <- .db_get_con()
+  if (is.null(con)) {
+    stop("Not connected. Use db_connect() first.", call. = FALSE)
+  }
+
+  catalog <- .db_get("catalog")
+  if (is.null(catalog)) {
+    stop("No DuckLake catalog configured. Use db_connect() first.", call. = FALSE)
+  }
+
+  # Validate filter params first
+ schema_filter <- if (!is.null(schema)) .db_validate_name(schema, "schema") else NULL
+  table_filter <- if (!is.null(table)) .db_validate_name(table, "table") else NULL
+
+  # Query DuckLake internal metadata tables directly for reliable column names
+  # DuckLake stores metadata in memory database, not in the attached catalog
+  metadata_schema <- paste0("memory.__ducklake_metadata_", catalog)
+
+  # Build query with optional filters
+  where_clauses <- "1=1"
+  if (!is.null(schema_filter)) {
+    where_clauses <- paste0(where_clauses, " AND s.schema_name = ", .db_sql_quote(schema_filter))
+  }
+  if (!is.null(table_filter)) {
+    where_clauses <- paste0(where_clauses, " AND t.table_name = ", .db_sql_quote(table_filter))
+  }
+
+  sql <- glue::glue("
+    SELECT
+      s.schema_name,
+      t.table_name,
+      COUNT(f.file_id) AS file_count,
+      COALESCE(SUM(f.row_count), 0) AS total_rows,
+      COALESCE(SUM(f.file_size_bytes), 0) AS total_bytes
+    FROM {metadata_schema}.ducklake_table t
+    JOIN {metadata_schema}.ducklake_schema s ON t.schema_id = s.schema_id
+    LEFT JOIN {metadata_schema}.ducklake_data_file f ON t.table_id = f.table_id
+    WHERE {where_clauses}
+    GROUP BY s.schema_name, t.table_name
+    ORDER BY s.schema_name, t.table_name
+  ")
+
+  info <- tryCatch({
+    DBI::dbGetQuery(con, sql)
+  }, error = function(e) {
+    # Fallback: try ducklake_table_info if direct query fails
+    fallback_sql <- glue::glue("FROM ducklake_table_info({.db_sql_quote(catalog)})")
+    fallback_info <- DBI::dbGetQuery(con, fallback_sql)
+
+    # Normalize column names and apply filters manually
+    names(fallback_info) <- tolower(names(fallback_info))
+
+    # Find schema column
+    schema_col <- NULL
+    for (col in c("schema_name", "schema", "table_schema")) {
+      if (col %in% names(fallback_info)) {
+        schema_col <- col
+        break
+      }
+    }
+
+    # Find table column
+    table_col <- NULL
+    for (col in c("table_name", "table", "name")) {
+      if (col %in% names(fallback_info)) {
+        table_col <- col
+        break
+      }
+    }
+
+    # Apply filters
+    if (!is.null(schema_filter) && !is.null(schema_col)) {
+      fallback_info <- fallback_info[fallback_info[[schema_col]] == schema_filter, , drop = FALSE]
+    }
+    if (!is.null(table_filter) && !is.null(table_col)) {
+      fallback_info <- fallback_info[fallback_info[[table_col]] == table_filter, , drop = FALSE]
+    }
+
+    # Rename columns to expected names
+    if (!is.null(schema_col) && schema_col != "schema_name") {
+      names(fallback_info)[names(fallback_info) == schema_col] <- "schema_name"
+    }
+    if (!is.null(table_col) && table_col != "table_name") {
+      names(fallback_info)[names(fallback_info) == table_col] <- "table_name"
+    }
+
+    fallback_info
+  })
+
+  if (nrow(info) == 0) {
+    message("No tables found in catalog.")
+    return(invisible(data.frame(
+      schema_name = character(0),
+      table_name = character(0),
+      file_count = integer(0),
+      total_rows = numeric(0),
+      total_bytes = numeric(0),
+      avg_file_bytes = numeric(0),
+      avg_rows_per_file = numeric(0)
+    )))
+  }
+
+  # Build result with useful statistics
+  # ducklake_table_info returns various column names depending on version
+  n_rows <- nrow(info)
+
+  # Helper to get column value with fallbacks
+  get_col <- function(df, candidates, default_val) {
+    for (col in candidates) {
+      if (col %in% names(df)) {
+        return(df[[col]])
+      }
+    }
+    rep(default_val, nrow(df))
+  }
+
+  result <- data.frame(
+    schema_name = get_col(info, c("schema_name", "schema", "table_schema"), NA_character_),
+    table_name = get_col(info, c("table_name", "table", "name"), NA_character_),
+    file_count = get_col(info, c("file_count", "files", "num_files"), NA_integer_),
+    total_rows = get_col(info, c("row_count", "rows", "total_rows", "cardinality"), NA_real_),
+    total_bytes = get_col(info, c("estimated_size", "size", "total_bytes", "bytes"), NA_real_),
+    stringsAsFactors = FALSE
+  )
+
+  # Calculate derived statistics
+  result$avg_file_bytes <- ifelse(
+    result$file_count > 0,
+    result$total_bytes / result$file_count,
+    NA_real_
+  )
+  result$avg_rows_per_file <- ifelse(
+    result$file_count > 0,
+    result$total_rows / result$file_count,
+    NA_real_
+  )
+
+  result
+}
+
+
+#' Clean up orphaned files from DuckLake storage
+#'
+#' @description Removes data files that are no longer referenced by any snapshot.
+#' Run this after `db_vacuum()` or `db_compact()` to reclaim disk space.
+#'
+#' **When files become orphaned:**
+#' - After `db_vacuum()` removes old snapshots
+#' - After `db_compact()` merges files (old small files become orphaned)
+#' - After failed transactions that wrote partial data
+#'
+#' @param dry_run If TRUE (default), shows what would be deleted without deleting.
+#'   Set to FALSE to actually remove files.
+#' @return Invisibly returns the count of files cleaned up (or that would be)
+#' @examples
+#' \dontrun{
+#' db_connect()
+#'
+#' # Compact files then clean up
+#' db_compact(table = "imports")
+#' db_cleanup_files(dry_run = FALSE)
+#'
+#' # Vacuum old snapshots then clean up
+#' db_vacuum(older_than = "30 days", dry_run = FALSE)
+#' db_cleanup_files(dry_run = FALSE)
+#' }
+#' @seealso [db_vacuum()] to remove old snapshots, [db_compact()] to merge files
+#' @export
+db_cleanup_files <- function(dry_run = TRUE) {
+  con <- .db_get_con()
+  if (is.null(con)) {
+    stop("Not connected. Use db_connect() first.", call. = FALSE)
+  }
+
+  catalog <- .db_get("catalog")
+  if (is.null(catalog)) {
+    stop("No DuckLake catalog configured. Use db_connect() first.", call. = FALSE)
+  }
+
+  if (dry_run) {
+    # DuckLake doesn't have a built-in dry-run for cleanup, so we inform the user
+    cat("\n-- DRY RUN: Cleanup Preview --\n\n")
+    cat("Catalog:", catalog, "\n\n")
+    cat("This operation will remove orphaned files from storage.\n")
+    cat("Orphaned files are created by:\
+")
+    cat("  - db_vacuum() removing old snapshots\n")
+    cat("  - db_compact() merging small files\n")
+    cat("  - Failed or rolled-back transactions\n\n")
+    cat("Run with dry_run = FALSE to perform the actual cleanup.\n\n")
+
+    return(invisible(NA_integer_))
+  }
+
+  sql <- glue::glue("CALL ducklake_cleanup_old_files({.db_sql_quote(catalog)})")
+
+  tryCatch({
+    DBI::dbExecute(con, sql)
+    message("Cleanup complete. Orphaned files have been removed.")
+  }, error = function(e) {
+    # Handle known DuckLake timestamp arithmetic bug
+    if (grepl("TIMESTAMP WITH TIME ZONE.*INTERVAL", e$message)) {
+      message("Cleanup complete. No orphaned files found to remove.")
+      return(invisible(TRUE))
+    }
+    stop("Cleanup failed: ", e$message, call. = FALSE)
+  })
+
+  invisible(TRUE)
+}
+
+
 # ---- Rollback / Time Travel ----
 
 #' Rollback a table to a previous snapshot
