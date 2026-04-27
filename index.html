@@ -128,6 +128,25 @@
 <span>  partition_by <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"year"</span>, <span class="st">"month"</span><span class="op">)</span></span>
 <span><span class="op">)</span></span>
 <span></span>
+<span><span class="co"># Bucket partitioning for high-cardinality columns (e.g., user IDs)</span></span>
+<span><span class="fu">db_write</span><span class="op">(</span></span>
+<span>  <span class="va">events_data</span>,</span>
+<span>  table <span class="op">=</span> <span class="st">"events"</span>,</span>
+<span>  bucket_by <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>column <span class="op">=</span> <span class="st">"user_id"</span>, buckets <span class="op">=</span> <span class="fl">16</span><span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Sorted/clustered tables for better range query performance</span></span>
+<span><span class="fu">db_write</span><span class="op">(</span></span>
+<span>  <span class="va">sales_data</span>,</span>
+<span>  table <span class="op">=</span> <span class="st">"sales"</span>,</span>
+<span>  sort_by <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"sale_date"</span>, <span class="st">"region"</span><span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Streaming: inline small writes to avoid many small files</span></span>
+<span><span class="fu">db_write</span><span class="op">(</span><span class="va">batch</span>, table <span class="op">=</span> <span class="st">"events"</span>, mode <span class="op">=</span> <span class="st">"append"</span>, inline <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span><span class="co"># Then flush when ready</span></span>
+<span><span class="fu">db_flush_inlined</span><span class="op">(</span>table <span class="op">=</span> <span class="st">"events"</span><span class="op">)</span></span>
+<span></span>
 <span><span class="co"># Preview upsert to see how many inserts vs updates</span></span>
 <span><span class="fu"><a href="reference/db_preview_upsert.html">db_preview_upsert</a></span><span class="op">(</span><span class="va">my_data</span>, schema <span class="op">=</span> <span class="st">"trade"</span>, table <span class="op">=</span> <span class="st">"products"</span>, by <span class="op">=</span> <span class="st">"product_id"</span><span class="op">)</span></span>
 <span></span>
@@ -163,6 +182,9 @@
 <span></span>
 <span><span class="co"># Remove orphaned files after vacuum or compact</span></span>
 <span><span class="fu">db_cleanup_files</span><span class="op">(</span>dry_run <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Export to Iceberg format for Spark/Trino compatibility</span></span>
+<span><span class="fu">db_export_iceberg</span><span class="op">(</span>table <span class="op">=</span> <span class="st">"imports"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="fu"><a href="reference/db_disconnect.html">db_disconnect</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
 <div class="section level3">
@@ -398,7 +420,7 @@
 <tbody>
 <tr class="odd">
 <td><code>db_write()</code></td>
-<td>Write table (overwrite/append, with optional partitioning)</td>
+<td>Write table (overwrite/append, with partitioning, bucketing, sorting, inlining)</td>
 </tr>
 <tr class="even">
 <td><code><a href="reference/db_upsert.html">db_upsert()</a></code></td>
@@ -508,9 +530,13 @@
 </table>
 </div>
 <div class="section level3">
-<h3 id="partitioning">Partitioning<a class="anchor" aria-label="anchor" href="#partitioning"></a>
+<h3 id="partitioning--clustering">Partitioning &amp; Clustering<a class="anchor" aria-label="anchor" href="#partitioning--clustering"></a>
 </h3>
 <table class="table">
+<colgroup>
+<col width="50%">
+<col width="50%">
+</colgroup>
 <thead><tr class="header">
 <th>Function</th>
 <th>Description</th>
@@ -523,6 +549,62 @@
 <tr class="even">
 <td><code><a href="reference/db_get_partitioning.html">db_get_partitioning()</a></code></td>
 <td>Get current partition columns for a table</td>
+</tr>
+<tr class="odd">
+<td><code>db_set_clustering()</code></td>
+<td>Set sort/clustering order for better query performance</td>
+</tr>
+<tr class="even">
+<td><code>db_recluster()</code></td>
+<td>Re-sort existing data to match clustering order</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section level3">
+<h3 id="data-inlining-streaming">Data Inlining (Streaming)<a class="anchor" aria-label="anchor" href="#data-inlining-streaming"></a>
+</h3>
+<table class="table">
+<colgroup>
+<col width="50%">
+<col width="50%">
+</colgroup>
+<thead><tr class="header">
+<th>Function</th>
+<th>Description</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td><code>db_flush_inlined()</code></td>
+<td>Write inlined data to parquet files</td>
+</tr>
+<tr class="even">
+<td><code>db_set_inline_threshold()</code></td>
+<td>Configure auto-flush threshold for inlined data</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section level3">
+<h3 id="iceberg-export">Iceberg Export<a class="anchor" aria-label="anchor" href="#iceberg-export"></a>
+</h3>
+<table class="table">
+<colgroup>
+<col width="50%">
+<col width="50%">
+</colgroup>
+<thead><tr class="header">
+<th>Function</th>
+<th>Description</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td><code>db_export_iceberg()</code></td>
+<td>Export table to Iceberg format for Spark/Trino/Presto</td>
+</tr>
+<tr class="even">
+<td><code>db_iceberg_metadata()</code></td>
+<td>Get Iceberg-compatible metadata for a table</td>
 </tr>
 </tbody>
 </table>
