@@ -248,6 +248,95 @@ imports <- db_read(table = "imports")
 imports |> filter(year == 2024, month == 1) |> collect()
 ```
 
+### 6. Bucket Partitioning (DuckLake 1.0+)
+
+For high-cardinality columns (like user_id, order_id), bucket partitioning distributes data into a fixed number of files using Iceberg-compatible Murmur3 hashing:
+
+```{r}
+# Bucket partition by user_id into 16 buckets
+db_write(
+  events_data,
+  table = "events",
+  bucket_by = list(column = "user_id", buckets = 16)
+)
+
+# Combine hive and bucket partitioning
+db_write(
+  events_data,
+  table = "events",
+  partition_by = "year",
+  bucket_by = list(column = "user_id", buckets = 8)
+)
+```
+
+**When to use bucket partitioning:**
+- High-cardinality columns (millions of distinct values)
+- Hive partitioning would create too many small files
+- You need efficient point lookups by the partitioned column
+
+### 7. Clustering / Sorted Tables (DuckLake 1.0+)
+
+Clustering keeps data sorted within files for faster range scans:
+
+```{r}
+# Create a clustered table
+db_write(
+  sales_data,
+  table = "sales",
+  sort_by = c("sale_date", "region")
+)
+
+# Set clustering on an existing table
+db_set_clustering(table = "events", columns = c("event_date", "user_id"))
+
+# Re-sort existing data to match clustering order
+db_recluster(table = "events")
+```
+
+Clustering improves performance for:
+- Time-series queries (`WHERE event_date BETWEEN ...`)
+- Range scans on clustered columns
+- Queries that filter on multiple clustered columns
+
+### 8. Data Inlining (DuckLake 1.0+)
+
+Data inlining solves the "small file problem" for streaming/frequent writes by staging data in the catalog database instead of creating new parquet files:
+
+```{r}
+# Stream small batches with inlining
+for (batch in batches) {
+  db_write(batch, table = "events", mode = "append", inline = TRUE)
+}
+
+# Flush inlined data to parquet when ready
+db_flush_inlined(table = "events")
+
+# Configure auto-flush threshold (rows before automatic flush)
+db_set_inline_threshold(table = "events", threshold = 50000)
+```
+
+**When to use inlining:**
+- Frequent small writes (streaming data, real-time updates)
+- IoT or event data arriving in small batches
+- Avoiding many small parquet files
+
+### 9. Iceberg Compatibility (DuckLake 1.0+)
+
+Export DuckLake tables to Iceberg format for use with other engines (Spark, Trino, Presto):
+
+```{r}
+# Export to Iceberg format
+db_export_iceberg(table = "sales")
+
+# Export with specific catalog type
+db_export_iceberg(table = "sales", catalog_type = "hive")
+
+# Get Iceberg-compatible metadata
+meta <- db_iceberg_metadata(table = "sales")
+meta$schema
+meta$partition_spec
+```
+
 ---
 
 ## Schemas: Organising Tables
@@ -627,12 +716,16 @@ db_disconnect()
 | **Snapshot** | A point-in-time version of the data in DuckLake |
 | **Time travel** | Querying data as it existed at a past version or timestamp |
 | **Schema** | A namespace for organising related tables |
-| **Partition** | Organising data by column values (e.g., year, month) for faster queries |
+| **Hive Partition** | Organising data by column values (e.g., year, month) into separate directories |
+| **Bucket Partition** | Distributing data into fixed buckets using hash function for high-cardinality columns |
+| **Clustering** | Keeping data sorted within files for faster range scans |
+| **Inlining** | Staging small writes in the catalog database to avoid creating many small files |
 | **ACID** | Atomicity, Consistency, Isolation, Durability - database reliability guarantees |
 | **Upsert** | Update existing rows + insert new rows in one operation |
 | **Data dictionary** | Documentation of all datasets, their columns, types, and descriptions |
 | **Lineage** | Tracking the sources and transformations that produced a dataset |
 | **Compaction** | Merging many small files into fewer larger files for better performance |
+| **Iceberg** | Open table format for large analytic tables, compatible with Spark/Trino/Presto |
 
 ---
 
