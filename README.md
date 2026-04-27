@@ -80,6 +80,25 @@ db_write(
   partition_by = c("year", "month")
 )
 
+# Bucket partitioning for high-cardinality columns (e.g., user IDs)
+db_write(
+  events_data,
+  table = "events",
+  bucket_by = list(column = "user_id", buckets = 16)
+)
+
+# Sorted/clustered tables for better range query performance
+db_write(
+  sales_data,
+  table = "sales",
+  sort_by = c("sale_date", "region")
+)
+
+# Streaming: inline small writes to avoid many small files
+db_write(batch, table = "events", mode = "append", inline = TRUE)
+# Then flush when ready
+db_flush_inlined(table = "events")
+
 # Preview upsert to see how many inserts vs updates
 db_preview_upsert(my_data, schema = "trade", table = "products", by = "product_id")
 
@@ -115,6 +134,9 @@ db_compact(table = "imports")
 
 # Remove orphaned files after vacuum or compact
 db_cleanup_files(dry_run = FALSE)
+
+# Export to Iceberg format for Spark/Trino compatibility
+db_export_iceberg(table = "imports")
 
 db_disconnect()
 ```
@@ -276,7 +298,7 @@ db_write(imports_data, schema = "trade", table = "imports")
 
 | Function | Description |
 |----|----|
-| `db_write()` | Write table (overwrite/append, with optional partitioning) |
+| `db_write()` | Write table (overwrite/append, with partitioning, bucketing, sorting, inlining) |
 | `db_upsert()` | MERGE operation (update existing rows + insert new rows) |
 
 ### Preview Operations
@@ -309,12 +331,28 @@ db_write(imports_data, schema = "trade", table = "imports")
 | `db_lineage()` | Record data lineage (sources and transformations) |
 | `db_get_lineage()` | Retrieve lineage information for a table |
 
-### Partitioning
+### Partitioning & Clustering
 
 | Function | Description |
 |----|----|
 | `db_set_partitioning()` | Set or remove partitioning on a table |
 | `db_get_partitioning()` | Get current partition columns for a table |
+| `db_set_clustering()` | Set sort/clustering order for better query performance |
+| `db_recluster()` | Re-sort existing data to match clustering order |
+
+### Data Inlining (Streaming)
+
+| Function | Description |
+|----|----|
+| `db_flush_inlined()` | Write inlined data to parquet files |
+| `db_set_inline_threshold()` | Configure auto-flush threshold for inlined data |
+
+### Iceberg Export
+
+| Function | Description |
+|----|----|
+| `db_export_iceberg()` | Export table to Iceberg format for Spark/Trino/Presto |
+| `db_iceberg_metadata()` | Get Iceberg-compatible metadata for a table |
 
 ### Metadata & Maintenance
 

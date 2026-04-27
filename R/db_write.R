@@ -65,6 +65,15 @@
 #' @param partition_by Optional character vector of column names to partition by.
 #'   Only valid for mode = "overwrite". On overwrite, if not specified, existing
 #'   partitioning is preserved.
+#' @param bucket_by Optional list specifying bucket partitioning for high-cardinality
+#'   columns. Format: `list(column = "col_name", buckets = 16)`. Uses Iceberg-compatible
+#'   Murmur3 hashing. Only valid for mode = "overwrite".
+#' @param sort_by Optional character vector of column names to sort/cluster by.
+#'   Improves query performance for range scans and filters on these columns.
+#'   Only valid for mode = "overwrite".
+#' @param inline If TRUE, stages small writes in the catalog database instead of
+#'   creating new parquet files. Useful for streaming/frequent small updates.
+#'   Use `db_flush_inlined()` to write inlined data to parquet files.
 #' @param commit_author Optional author for DuckLake commit metadata
 #' @param commit_message Optional message for DuckLake commit metadata
 #' @return Invisibly returns the qualified table name
@@ -80,17 +89,38 @@
 #' db_write(my_data, schema = "trade", table = "imports",
 #'          partition_by = c("year", "month"))
 #'
+#' # With bucket partitioning for high-cardinality columns
+#' db_write(my_data, table = "events",
+#'          bucket_by = list(column = "user_id", buckets = 16))
+#'
+#' # Combined partitioning: hive + bucket
+#' db_write(my_data, table = "events",
+#'          partition_by = "year",
+#'          bucket_by = list(column = "user_id", buckets = 8))
+#'
+#' # With sorting/clustering for better query performance
+#' db_write(my_data, table = "sales",
+#'          sort_by = c("sale_date", "region"))
+#'
+#' # Streaming mode: inline small writes
+#' db_write(my_data, table = "events", mode = "append", inline = TRUE)
+#'
 #' # Append mode with commit info
 #' db_write(my_data, table = "imports", mode = "append",
 #'          commit_author = "jsmith",
 #'          commit_message = "Added Q3 data")
 #' }
+#' @seealso [db_flush_inlined()] to flush inlined data, [db_set_clustering()] to
+#'   change clustering on existing tables, [db_recluster()] to re-sort data
 #' @export
 db_write <- function(data,
                      schema = "main",
                      table,
                      mode = c("overwrite", "append"),
                      partition_by = NULL,
+                     bucket_by = NULL,
+                     sort_by = NULL,
+                     inline = FALSE,
                      commit_author = NULL,
                      commit_message = NULL) {
 
@@ -116,6 +146,37 @@ db_write <- function(data,
     }
   }
 
+  # Validate bucket_by
+  if (!is.null(bucket_by)) {
+    if (!is.list(bucket_by) || is.null(bucket_by$column) || is.null(bucket_by$buckets)) {
+      stop("bucket_by must be a list with 'column' and 'buckets' elements.", call. = FALSE)
+    }
+    if (!bucket_by$column %in% names(data)) {
+      stop("bucket_by column '", bucket_by$column, "' not found in data.", call. = FALSE)
+    }
+    if (!is.numeric(bucket_by$buckets) || bucket_by$buckets < 1) {
+      stop("bucket_by$buckets must be a positive integer.", call. = FALSE)
+    }
+  }
+
+  # Validate sort_by
+  if (!is.null(sort_by)) {
+    if (!is.character(sort_by) || length(sort_by) == 0) {
+      stop("sort_by must be a non-empty character vector.", call. = FALSE)
+    }
+    missing_cols <- setdiff(sort_by, names(data))
+    if (length(missing_cols) > 0) {
+      stop("sort_by columns not found in data: ",
+           paste(missing_cols, collapse = ", "),
+           call. = FALSE)
+    }
+  }
+
+  # Validate inline
+  if (!is.logical(inline) || length(inline) != 1) {
+    stop("inline must be TRUE or FALSE.", call. = FALSE)
+  }
+
   con <- .db_get_con()
   if (is.null(con)) {
     stop("Not connected. Use db_connect() first.", call. = FALSE)
@@ -136,6 +197,12 @@ db_write <- function(data,
     }
     if (!is.null(partition_by)) {
       stop("partition_by cannot be used with mode = 'append'. Use db_set_partitioning() to change partitioning.", call. = FALSE)
+    }
+    if (!is.null(bucket_by)) {
+      stop("bucket_by cannot be used with mode = 'append'.", call. = FALSE)
+    }
+    if (!is.null(sort_by)) {
+      stop("sort_by cannot be used with mode = 'append'. Use db_set_clustering() to change clustering.", call. = FALSE)
     }
   }
 
@@ -181,17 +248,36 @@ db_write <- function(data,
       DBI::dbExecute(con, create_sql)
 
       # Set partitioning if specified (must be done before inserting data)
+      # Build combined partition clause for hive + bucket partitioning
+      partition_parts <- c()
       if (!is.null(partition_by)) {
-        partition_clause <- paste(partition_by, collapse = ", ")
+        partition_parts <- c(partition_parts, partition_by)
+      }
+      if (!is.null(bucket_by)) {
+        bucket_clause <- paste0("bucket(", as.integer(bucket_by$buckets), ", ", bucket_by$column, ")")
+        partition_parts <- c(partition_parts, bucket_clause)
+      }
+      if (length(partition_parts) > 0) {
+        partition_clause <- paste(partition_parts, collapse = ", ")
         DBI::dbExecute(con, glue::glue("ALTER TABLE {qname} SET PARTITIONED BY ({partition_clause})"))
+      }
+
+      # Set clustering/sorting if specified
+      if (!is.null(sort_by)) {
+        sort_clause <- paste(sort_by, collapse = ", ")
+        DBI::dbExecute(con, glue::glue("ALTER TABLE {qname} SET CLUSTERING ORDER BY ({sort_clause})"))
       }
 
       # Insert data
       DBI::dbExecute(con, glue::glue("INSERT INTO {qname} SELECT * FROM {tmp}"))
 
     } else {
-      # append mode - just insert
-      DBI::dbExecute(con, glue::glue("INSERT INTO {qname} SELECT * FROM {tmp}"))
+      # append mode - insert with optional inlining
+      if (inline) {
+        DBI::dbExecute(con, glue::glue("INSERT INTO {qname} SELECT * FROM {tmp} WITH (INLINE)"))
+      } else {
+        DBI::dbExecute(con, glue::glue("INSERT INTO {qname} SELECT * FROM {tmp}"))
+      }
     }
 
     DBI::dbExecute(con, "COMMIT")
