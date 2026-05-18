@@ -99,6 +99,21 @@ db_write(batch, table = "events", mode = "append", inline = TRUE)
 # Then flush when ready
 db_flush_inlined(table = "events")
 
+# Explicit column types for stricter schema control
+db_write(
+  financial_data,
+  table = "transactions",
+  col_types = list(
+    id = "BIGINT",
+    amount = "DECIMAL(12,2)",
+    rate = "DOUBLE"
+  )
+)
+
+# Arrow integration - read/write without DuckDB compute
+arrow_tbl <- db_read_arrow(table = "imports", as_data_frame = FALSE)
+db_write_arrow(arrow_tbl, table = "imports_copy")
+
 # Preview upsert to see how many inserts vs updates
 db_preview_upsert(my_data, schema = "trade", table = "products", by = "product_id")
 
@@ -299,8 +314,15 @@ db_write(imports_data, schema = "trade", table = "imports")
 
 | Function | Description |
 |----|----|
-| `db_write()` | Write table (overwrite/append, with partitioning, bucketing, sorting, inlining) |
+| `db_write()` | Write table (overwrite/append, with partitioning, bucketing, sorting, inlining, explicit schema) |
 | `db_upsert()` | MERGE operation (update existing rows + insert new rows) |
+
+### Arrow Integration
+
+| Function | Description |
+|----|----|
+| `db_read_arrow()` | Read table directly as Arrow Table (bypasses DuckDB compute) |
+| `db_write_arrow()` | Write Arrow Table/RecordBatch to DuckLake |
 
 ### Preview Operations
 

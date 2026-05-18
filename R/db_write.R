@@ -62,6 +62,13 @@
 #' @param schema Schema name (default "main")
 #' @param table Table name
 #' @param mode "overwrite" or "append"
+#' @param col_types Optional named list or character vector specifying column types.
+#'   Overrides automatic type inference for stricter schema control.
+#'   Format: `list(id = "BIGINT", value = "DECIMAL(10,2)")` or
+#'   `c(id = "BIGINT", value = "DECIMAL(10,2)")`.
+#'   Supported types: INTEGER, BIGINT, DOUBLE, DECIMAL(p,s), VARCHAR, BOOLEAN,
+#'   DATE, TIMESTAMP, INTERVAL, BLOB, GEOMETRY, etc.
+#'   Only columns specified are overridden; others use automatic inference.
 #' @param partition_by Optional character vector of column names to partition by.
 #'   Only valid for mode = "overwrite". On overwrite, if not specified, existing
 #'   partitioning is preserved.
@@ -102,6 +109,18 @@
 #' db_write(my_data, table = "sales",
 #'          sort_by = c("sale_date", "region"))
 #'
+#' # With explicit column types for stricter schema control
+#' db_write(my_data, table = "financials",
+#'          col_types = list(
+#'            id = "BIGINT",
+#'            amount = "DECIMAL(12,2)",
+#'            rate = "DOUBLE"
+#'          ))
+#'
+#' # Using character vector shorthand
+#' db_write(my_data, table = "metrics",
+#'          col_types = c(id = "INTEGER", value = "DOUBLE"))
+#'
 #' # Streaming mode: inline small writes
 #' db_write(my_data, table = "events", mode = "append", inline = TRUE)
 #'
@@ -117,6 +136,7 @@ db_write <- function(data,
                      schema = "main",
                      table,
                      mode = c("overwrite", "append"),
+                     col_types = NULL,
                      partition_by = NULL,
                      bucket_by = NULL,
                      sort_by = NULL,
@@ -175,6 +195,27 @@ db_write <- function(data,
   # Validate inline
   if (!is.logical(inline) || length(inline) != 1) {
     stop("inline must be TRUE or FALSE.", call. = FALSE)
+  }
+
+  # Validate and normalize col_types
+  if (!is.null(col_types)) {
+    if (!is.list(col_types) && !is.character(col_types)) {
+      stop("col_types must be a named list or named character vector.", call. = FALSE)
+    }
+    if (is.null(names(col_types)) || any(names(col_types) == "")) {
+      stop("col_types must have names for all elements.", call. = FALSE)
+    }
+    # Convert to list if character vector
+    if (is.character(col_types)) {
+      col_types <- as.list(col_types)
+    }
+    # Check that specified columns exist in data
+    unknown_cols <- setdiff(names(col_types), names(data))
+    if (length(unknown_cols) > 0) {
+      stop("col_types specifies columns not found in data: ",
+           paste(unknown_cols, collapse = ", "),
+           call. = FALSE)
+    }
   }
 
   con <- .db_get_con()
@@ -237,7 +278,13 @@ db_write <- function(data,
       }
 
       # Build column definitions from data types
+      # Use explicit col_types where specified, otherwise infer from data
       cols <- vapply(data, .db_r_to_duckdb_type, character(1))
+      if (!is.null(col_types)) {
+        for (col_name in names(col_types)) {
+          cols[col_name] <- col_types[[col_name]]
+        }
+      }
       col_defs <- paste(
         paste(names(cols), cols),
         collapse = ", "
