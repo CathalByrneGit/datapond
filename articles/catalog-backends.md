@@ -1,0 +1,526 @@
+# Catalog Backends: Choosing Your Metadata Store
+
+This vignette provides an in-depth look at DuckLake catalog backends -
+the database that stores metadata about your tables, schemas, snapshots,
+and file references. Choosing the right backend is crucial for
+performance, concurrency, and operational simplicity.
+
+------------------------------------------------------------------------
+
+## What is the Catalog?
+
+DuckLake separates **data** (Parquet files) from **metadata** (table
+definitions, snapshots, file tracking). The metadata lives in a
+**catalog database**.
+
+    ┌─────────────────────────────────────────────────────────┐
+    │                    DuckLake Architecture                 │
+    ├─────────────────────────────────────────────────────────┤
+    │                                                          │
+    │  ┌──────────────────┐      ┌──────────────────────────┐ │
+    │  │  Catalog (Meta)  │      │    Data (Parquet)        │ │
+    │  │                  │      │                          │ │
+    │  │  • Table schemas │      │  📁 schema/              │ │
+    │  │  • Snapshots     │◄────►│    📁 table/            │ │
+    │  │  • File refs     │      │      📄 data-001.parquet│ │
+    │  │  • Partitions    │      │      📄 data-002.parquet│ │
+    │  │  • Lineage       │      │                          │ │
+    │  └──────────────────┘      └──────────────────────────┘ │
+    │         ▲                                                │
+    │         │                                                │
+    │    Which database?                                       │
+    │    • DuckDB                                              │
+    │    • SQLite                                              │
+    │    • PostgreSQL                                          │
+    │    • (Future: SQL Server, Quack)                         │
+    │                                                          │
+    └─────────────────────────────────────────────────────────┘
+
+The catalog database choice affects:
+
+- **Concurrency** - How many users can read/write simultaneously
+- **Infrastructure** - Server required vs. just a file
+- **Performance** - Metadata query speed
+- **Operational complexity** - Backup, monitoring, maintenance
+
+------------------------------------------------------------------------
+
+## Current Backends
+
+### DuckDB (Native)
+
+``` r
+
+db_connect(
+ catalog_type = "duckdb",
+  metadata_path = "catalog.ducklake",
+  data_path = "/data/lake"
+)
+```
+
+| Aspect             | Details                            |
+|--------------------|------------------------------------|
+| **Storage**        | Single `.ducklake` file            |
+| **Concurrency**    | Single client only                 |
+| **Infrastructure** | None - just a file                 |
+| **Best for**       | Personal use, development, testing |
+
+**Advantages:**
+
+- Simplest setup - just a file path
+- Fastest metadata operations (native DuckDB)
+- No external dependencies
+- Perfect for local development and prototyping
+
+**Disadvantages:**
+
+- **Single client limitation** - only one connection at a time
+- File locking prevents concurrent access
+- Not suitable for shared environments
+
+**When to use:**
+
+- Local development and testing
+- Single-user analytical workflows
+- CI/CD pipelines (isolated runs)
+- Prototyping before moving to production
+
+------------------------------------------------------------------------
+
+### SQLite
+
+``` r
+
+db_connect(
+  catalog_type = "sqlite",
+  metadata_path = "//network/share/catalog.sqlite",
+  data_path = "//network/share/data"
+)
+```
+
+| Aspect             | Details                                      |
+|--------------------|----------------------------------------------|
+| **Storage**        | Single `.sqlite` file                        |
+| **Concurrency**    | Multiple readers, single writer (with retry) |
+| **Infrastructure** | None - just a file                           |
+| **Best for**       | Shared network drives, small teams           |
+
+**Advantages:**
+
+- Still just a file - no server needed
+- Multiple users can read simultaneously
+- Write conflicts handled with automatic retry
+- Works with existing network share permissions
+- Familiar to IT teams (standard SQLite)
+
+**Disadvantages:**
+
+- Single writer at a time (queued with retry)
+- Performance degrades over very slow network connections
+- No true concurrent writes
+
+**When to use:**
+
+- **Recommended default for shared environments**
+- Network drive deployments
+- Teams where writes are infrequent
+- Environments where PostgreSQL isn’t available
+
+**Concurrency model:**
+
+    User A reads  ───────────────────────────► OK (instant)
+    User B reads  ───────────────────────────► OK (instant)
+    User C writes ─────────────────┐
+                                   ├──────────► OK (gets lock)
+    User D writes ─────────────────┘
+                  waits... retries... ────────► OK (after C finishes)
+
+------------------------------------------------------------------------
+
+### PostgreSQL
+
+``` r
+
+db_connect(
+  catalog_type = "postgres",
+  metadata_path = "host=db.example.com dbname=ducklake user=app",
+  data_path = "/data/lake"
+)
+```
+
+| Aspect             | Details                                   |
+|--------------------|-------------------------------------------|
+| **Storage**        | PostgreSQL database                       |
+| **Concurrency**    | Full multi-reader, multi-writer           |
+| **Infrastructure** | PostgreSQL server required                |
+| **Best for**       | Large teams, high concurrency, enterprise |
+
+**Advantages:**
+
+- True concurrent read and write access
+- Row-level locking - writes don’t block each other
+- Robust transaction support
+- Enterprise features: replication, backup, monitoring
+- Works with managed services (AWS RDS, Azure, GCP Cloud SQL)
+
+**Disadvantages:**
+
+- Requires PostgreSQL server infrastructure
+- Additional operational overhead (backups, updates, monitoring)
+- Network latency for metadata operations
+- More complex setup
+
+**When to use:**
+
+- Multiple users writing frequently
+- Enterprise environments with existing PostgreSQL
+- When you need high availability
+- Remote/distributed teams
+
+**Connection string formats:**
+
+``` r
+
+# Key-value format
+db_connect(
+  catalog_type = "postgres",
+  metadata_path = "host=localhost port=5432 dbname=ducklake user=myuser password=secret"
+)
+
+# URI format
+db_connect(
+  catalog_type = "postgres",
+  metadata_path = "postgresql://myuser:secret@localhost:5432/ducklake"
+)
+```
+
+------------------------------------------------------------------------
+
+## Comparison Matrix
+
+| Feature                    | DuckDB    | SQLite     | PostgreSQL            |
+|----------------------------|-----------|------------|-----------------------|
+| **Setup complexity**       | Trivial   | Simple     | Moderate              |
+| **Infrastructure**         | None      | None       | Server required       |
+| **Concurrent readers**     | 1         | Unlimited  | Unlimited             |
+| **Concurrent writers**     | 1         | 1 (queued) | Unlimited             |
+| **Network drive friendly** | No        | Yes        | N/A                   |
+| **Cloud managed option**   | No        | No         | Yes                   |
+| **Metadata query speed**   | Fastest   | Fast       | Network dependent     |
+| **Backup strategy**        | Copy file | Copy file  | pg_dump / replication |
+| **Best team size**         | 1         | 2-20       | 20+                   |
+
+------------------------------------------------------------------------
+
+## Future: SQL Server Support
+
+### Current Status
+
+SQL Server is **not yet supported** as a DuckLake catalog backend. This
+is tracked in:
+
+- [DuckLake Discussion
+  \#892](https://github.com/duckdb/ducklake/discussions/892)
+
+### Why SQL Server?
+
+Many enterprise environments standardise on SQL Server:
+
+- Existing infrastructure and expertise
+- Azure SQL Database / Managed Instance availability
+- Corporate licensing agreements
+- Integration with Microsoft ecosystem (Power BI, Azure Data Factory)
+
+### Technical Path
+
+The
+[hugr-lab/mssql-extension](https://github.com/hugr-lab/mssql-extension)
+provides native SQL Server connectivity for DuckDB:
+
+- Native TDS protocol (no ODBC/JDBC required)
+- Full DML support (INSERT, UPDATE, DELETE)
+- Transaction support
+- High-performance bulk loading via BCP protocol
+- Azure AD authentication
+
+**What’s missing:** DuckLake needs to add `ducklake:mssql:` DSN support
+and generate SQL Server-compatible DDL.
+
+### What SQL Server Would Offer
+
+``` r
+
+# Future (once DuckLake supports it)
+db_connect(
+  catalog_type = "mssql",
+  metadata_path = "Server=sql.example.com;Database=ducklake;User Id=app;Password=secret",
+  data_path = "/data/lake"
+)
+```
+
+| Feature                    | Benefit                                |
+|----------------------------|----------------------------------------|
+| **Enterprise integration** | Use existing SQL Server infrastructure |
+| **Azure native**           | Azure SQL Database, Managed Instance   |
+| **Familiar tooling**       | SSMS, Azure Data Studio                |
+| **Existing permissions**   | AD/Entra ID authentication             |
+| **High availability**      | Always On, geo-replication             |
+
+### Current Workarounds
+
+Until SQL Server support arrives:
+
+1.  **PostgreSQL** - Use Azure Database for PostgreSQL in Azure
+    environments
+2.  **SQLite** - Store catalog file on Azure Files or shared storage
+3.  **Hybrid approach** - Keep DuckLake metadata in PostgreSQL, source
+    data in SQL Server
+
+------------------------------------------------------------------------
+
+## Future: Quack Remote Protocol
+
+### What is Quack?
+
+[Quack](https://duckdb.org/2026/05/12/quack-remote-protocol) is DuckDB’s
+new client-server protocol, released with DuckDB v1.5.2:
+
+- **RPC protocol** for DuckDB-to-DuckDB communication
+- **HTTP-based** for network compatibility
+- **Native serialisation** of DuckDB’s internal data vectors
+- **Multi-writer support** without locking
+
+### How Quack Changes Everything
+
+    Before Quack (DuckDB catalog):                After Quack:
+    ┌─────────────────────────────┐             ┌─────────────────────────────┐
+    │     Single Client Only      │             │   Multiple Clients          │
+    │                             │             │                             │
+    │  Client ──► DuckDB File     │             │  Client A ──┐               │
+    │             (locked)        │             │  Client B ──┼──► DuckDB     │
+    │                             │             │  Client C ──┘    Server     │
+    └─────────────────────────────┘             └─────────────────────────────┘
+
+### DuckLake + Quack Integration
+
+DuckDB plans to integrate Quack into DuckLake, enabling:
+
+``` r
+
+# Future: Remote DuckDB server as catalog
+db_connect(
+  catalog_type = "quack",
+  metadata_path = "quack://duckdb-server.example.com:4242",
+  data_path = "/data/lake"
+)
+```
+
+**Benefits:**
+
+| Feature                  | Impact                                           |
+|--------------------------|--------------------------------------------------|
+| **Multi-writer DuckDB**  | Native DuckDB speed with concurrent access       |
+| **Inlining performance** | Much faster than SQLite/PostgreSQL for streaming |
+| **Simplified stack**     | DuckDB for everything - no PostgreSQL needed     |
+| **Edge deployment**      | Run DuckDB server close to data                  |
+
+### Timeline
+
+- **Now (v1.5.2)**: Quack available in `core_nightly`
+- **Fall 2026 (v2.0)**: Production-ready Quack release
+- **TBD**: DuckLake Quack catalog integration
+
+------------------------------------------------------------------------
+
+## Geospatial Data Considerations
+
+### Native Geometry Support
+
+DuckLake 1.0 includes native support for geometry types via the DuckDB
+spatial extension:
+
+``` r
+
+# Load spatial extension
+DBI::dbExecute(con, "INSTALL spatial; LOAD spatial;")
+
+# Write geospatial data
+db_write(
+  geo_data,
+  table = "boundaries",
+  mode = "overwrite"
+)
+```
+
+**Supported geometry types:**
+
+- POINT, LINESTRING, POLYGON
+- MULTIPOINT, MULTILINESTRING, MULTIPOLYGON
+- GEOMETRYCOLLECTION
+
+### GeoParquet Storage
+
+DuckDB reads and writes [GeoParquet](https://geoparquet.org/) natively:
+
+``` r
+
+# Spatial data stored as GeoParquet
+boundaries <- db_read(table = "boundaries")
+
+boundaries |>
+  filter(ST_Intersects(geometry, ST_Point(-6.26, 53.35))) |>
+  collect()
+```
+
+### Formats That Can’t Be Stored Directly
+
+Some geospatial formats don’t fit the tabular model:
+
+| Format | Issue | Solution |
+|----|----|----|
+| **Raster (GeoTIFF, COG)** | Grid data, not rows | Store file reference + metadata |
+| **Point clouds (LAS/LAZ)** | Billions of points | Store summary + file path |
+| **3D models (CityGML)** | Complex hierarchical | Store metadata + file reference |
+| **Vector tiles (MVT)** | Pre-rendered tiles | Store tile index + paths |
+
+### Metadata-Only Approach
+
+For unsupported formats, store metadata in DuckLake while keeping files
+external:
+
+``` r
+
+# Create a metadata table for raster files
+raster_catalog <- data.frame(
+  file_id = 1:3,
+  file_path = c(
+    "/data/rasters/dem_2024.tif",
+    "/data/rasters/landcover_2024.tif",
+    "/data/rasters/ndvi_2024_q1.tif"
+  ),
+  format = "GeoTIFF",
+  crs = "EPSG:2157",
+  bounds_wkt = c(
+    "POLYGON((-10.5 51.4, -5.5 51.4, -5.5 55.4, -10.5 55.4, -10.5 51.4))",
+    "POLYGON((-10.5 51.4, -5.5 51.4, -5.5 55.4, -10.5 55.4, -10.5 51.4))",
+    "POLYGON((-10.5 51.4, -5.5 51.4, -5.5 55.4, -10.5 55.4, -10.5 51.4))"
+  ),
+  resolution_m = c(10, 30, 10),
+  acquisition_date = as.Date(c("2024-01-15", "2024-06-01", "2024-03-15")),
+  file_size_mb = c(450, 120, 380),
+  description = c(
+    "Digital Elevation Model - 10m resolution",
+    "CORINE Land Cover 2024",
+    "NDVI composite Q1 2024"
+  )
+)
+
+db_write(raster_catalog, table = "raster_catalog", mode = "overwrite")
+
+# Document the catalog
+db_describe(
+  table = "raster_catalog",
+  description = "Metadata catalog for raster files stored externally",
+  owner = "GIS Team",
+  tags = c("geospatial", "raster", "metadata-only")
+)
+```
+
+### Querying Spatial Metadata
+
+``` r
+
+# Find rasters that intersect an area of interest
+raster_catalog <- db_read(table = "raster_catalog")
+
+aoi <- "POLYGON((-7 53, -6 53, -6 54, -7 54, -7 53))"
+
+raster_catalog |>
+  filter(ST_Intersects(ST_GeomFromText(bounds_wkt), ST_GeomFromText(aoi))) |>
+  select(file_path, description, acquisition_date) |>
+  collect()
+```
+
+### Hybrid Architecture for Geospatial
+
+    ┌─────────────────────────────────────────────────────────────┐
+    │                  Geospatial Data Architecture               │
+    ├─────────────────────────────────────────────────────────────┤
+    │                                                             │
+    │  DuckLake (Tabular + Vector Geometry)                       │
+    │  ┌─────────────────────────────────────────────────────┐   │
+    │  │  boundaries     (POLYGON geometries)                 │   │
+    │  │  points_of_interest (POINT geometries)               │   │
+    │  │  road_network   (LINESTRING geometries)              │   │
+    │  │  raster_catalog (metadata only - file references)    │   │
+    │  │  pointcloud_index (metadata only - file references)  │   │
+    │  └─────────────────────────────────────────────────────┘   │
+    │                           │                                 │
+    │                           ▼                                 │
+    │  External Storage (Non-tabular formats)                     │
+    │  ┌─────────────────────────────────────────────────────┐   │
+    │  │  /data/rasters/          (GeoTIFF, COG)              │   │
+    │  │  /data/pointclouds/      (LAS, LAZ)                  │   │
+    │  │  /data/tiles/            (MVT, PMTiles)              │   │
+    │  └─────────────────────────────────────────────────────┘   │
+    │                                                             │
+    └─────────────────────────────────────────────────────────────┘
+
+------------------------------------------------------------------------
+
+## Decision Guide
+
+### Quick Reference
+
+    Are you the only user?
+    ├─ Yes ──► DuckDB (simplest)
+    └─ No
+       └─ Do you need concurrent writes?
+          ├─ No (occasional writes) ──► SQLite
+          └─ Yes (frequent writes)
+             └─ Do you have SQL Server and need it?
+                ├─ Yes ──► Wait for MSSQL support, use PostgreSQL interim
+                └─ No ──► PostgreSQL
+
+### Migration Path
+
+Start simple, scale up as needed:
+
+    Development     Team Pilot      Production       Enterprise
+        │               │               │                │
+        ▼               ▼               ▼                ▼
+     DuckDB ────► SQLite ────► PostgreSQL ────► PostgreSQL HA
+                                          └───► Quack (future)
+
+The data files (Parquet) remain unchanged - only the catalog backend
+changes.
+
+------------------------------------------------------------------------
+
+## Summary
+
+| Backend        | Best For                          | Key Limitation    |
+|----------------|-----------------------------------|-------------------|
+| **DuckDB**     | Solo development                  | Single client     |
+| **SQLite**     | Small teams, network drives       | Single writer     |
+| **PostgreSQL** | Enterprise, high concurrency      | Requires server   |
+| **SQL Server** | Microsoft shops                   | Not yet supported |
+| **Quack**      | Future DuckDB-native multi-writer | Coming in v2.0    |
+
+For most users starting out, **SQLite is the recommended default** -
+it’s simple, requires no infrastructure, and handles typical team usage
+patterns well.
+
+------------------------------------------------------------------------
+
+## References
+
+- [DuckLake Catalog
+  Documentation](https://ducklake.select/docs/stable/duckdb/usage/choosing_storage)
+- [Quack Protocol
+  Announcement](https://duckdb.org/2026/05/12/quack-remote-protocol)
+- [DuckDB Spatial Extension](https://duckdb.org/docs/extensions/spatial)
+- [GeoParquet Specification](https://geoparquet.org/)
+- [SQL Server Support
+  Discussion](https://github.com/duckdb/ducklake/discussions/892)
+- [MSSQL Extension](https://github.com/hugr-lab/mssql-extension)

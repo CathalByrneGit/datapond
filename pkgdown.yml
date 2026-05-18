@@ -1,10 +1,11 @@
-pandoc: 3.1.11
+pandoc: 3.8.3
 pkgdown: 2.2.0
 pkgdown_sha: ~
 articles:
+  catalog-backends: catalog-backends.html
   code-walkthrough: code-walkthrough.html
   concepts: concepts.html
-last_built: 2026-04-27T21:59Z
+last_built: 2026-05-18T13:41Z
 urls:
   reference: https://cathalbyrnegit.github.io/datapond/reference
   article: https://cathalbyrnegit.github.io/datapond/articles

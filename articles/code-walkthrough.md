@@ -40,6 +40,7 @@ The package maintains a single connection stored in a private
 environment:
 
 ``` r
+
 .db_env <- new.env(parent = emptyenv())
 ```
 
@@ -57,6 +58,7 @@ creating new ones.
 All user inputs are validated early with clear error messages:
 
 ``` r
+
 .db_validate_name <- function(x, arg = "name") {
   # Must be single non-empty string
   # Only allows A-Z a-z 0-9 _ -
@@ -72,6 +74,7 @@ cause harm.
 Read functions return **lazy** dplyr tables, not collected data:
 
 ``` r
+
 dplyr::tbl(con, dplyr::sql(query))
 ```
 
@@ -94,6 +97,7 @@ This file handles connecting to and disconnecting from DuckLake.
 ### Private Environment and Helpers
 
 ``` r
+
 .db_env <- new.env(parent = emptyenv())
 ```
 
@@ -107,6 +111,7 @@ store:
 - `metadata_path` - path to catalog file/connection string
 
 ``` r
+
 .db_get_con <- function() {
   # Returns the connection if it exists and is valid, NULL otherwise
   if (exists("con", envir = .db_env) && DBI::dbIsValid(.db_env$con)) {
@@ -120,6 +125,7 @@ This is the safe way to get the connection - it checks validity, not
 just existence.
 
 ``` r
+
 .db_get <- function(name, default = NULL) {
   # Safe getter with default value
   if (exists(name, envir = .db_env)) {
@@ -137,6 +143,7 @@ Used throughout the package to retrieve stored values.
 These internal functions handle the different catalog backend types:
 
 ``` r
+
 .db_build_ducklake_dsn <- function(catalog_type, metadata_path) {
   switch(catalog_type,
     duckdb = paste0("ducklake:", metadata_path),
@@ -153,6 +160,7 @@ backend: - DuckDB: `ducklake:metadata.ducklake` - SQLite:
 `ducklake:postgres:dbname=... host=...`
 
 ``` r
+
 .db_load_catalog_extensions <- function(con, catalog_type) {
   # Always need ducklake
   try(DBI::dbExecute(con, "INSTALL ducklake"), silent = TRUE)
@@ -174,6 +182,7 @@ DuckDB needs extra extensions loaded for SQLite and PostgreSQL backends.
 ### `db_connect()` - DuckLake Connection
 
 ``` r
+
 db_connect <- function(duckdb_db = ":memory:",
                        catalog = "cso",
                        catalog_type = c("duckdb", "sqlite", "postgres"),
@@ -243,6 +252,7 @@ db_connect <- function(duckdb_db = ":memory:",
 ### `db_write()` - DuckLake Tables
 
 ``` r
+
 db_write <- function(data, schema = "main", table,
                      mode = c("overwrite", "append"),
                      partition_by = NULL,
@@ -300,6 +310,7 @@ db_write <- function(data, schema = "main", table,
 ### `db_upsert()` - Update + Insert
 
 ``` r
+
 db_upsert <- function(data, schema = "main", table, by,
                       strict = TRUE, update_cols = NULL,
                       commit_author = NULL, commit_message = NULL) {
@@ -366,6 +377,7 @@ Documentation metadata is stored in a `_metadata` schema within the
 DuckLake catalog:
 
 ``` r
+
 .db_ensure_metadata_table <- function(con, catalog) {
   DBI::dbExecute(con, "CREATE SCHEMA IF NOT EXISTS {catalog}._metadata")
   DBI::dbExecute(con, "CREATE TABLE IF NOT EXISTS {catalog}._metadata.table_docs (...)")
@@ -376,6 +388,7 @@ DuckLake catalog:
 ### `db_describe()` - Document a Table
 
 ``` r
+
 db_describe <- function(schema = "main", table = NULL,
                         description = NULL, owner = NULL, tags = NULL) {
 
@@ -390,6 +403,7 @@ db_describe <- function(schema = "main", table = NULL,
 ### `db_dictionary()` - Generate Data Dictionary
 
 ``` r
+
 db_dictionary <- function(schema = NULL, include_columns = TRUE) {
 
   # Query information_schema and _metadata tables
@@ -407,6 +421,7 @@ db_dictionary <- function(schema = NULL, include_columns = TRUE) {
 ### `db_search()` - Find Tables
 
 ``` r
+
 db_search <- function(pattern, field = c("all", "name", "description", "owner", "tags")) {
   # Get full dictionary (without columns for speed)
   dict <- db_dictionary(include_columns = FALSE)
@@ -426,6 +441,7 @@ db_search <- function(pattern, field = c("all", "name", "description", "owner", 
 ### `db_lineage()` - Record Data Lineage
 
 ``` r
+
 db_lineage <- function(schema = "main", table, sources, transformation = NULL) {
   # Ensure lineage table exists
   DBI::dbExecute(con, "CREATE TABLE IF NOT EXISTS {catalog}._metadata.lineage (...)")
@@ -450,6 +466,7 @@ db_lineage <- function(schema = "main", table, sources, transformation = NULL) {
 ### `db_preview_write()` - Preview Before Writing
 
 ``` r
+
 db_preview_write <- function(data, schema = "main", table,
                              mode = c("overwrite", "append")) {
 
@@ -488,6 +505,7 @@ db_preview_write <- function(data, schema = "main", table,
 ### `db_preview_upsert()` - Preview Insert vs Update Counts
 
 ``` r
+
 db_preview_upsert <- function(data, schema, table, by, update_cols = NULL) {
 
   # Register data temporarily
@@ -526,6 +544,7 @@ db_preview_upsert <- function(data, schema, table, by, update_cols = NULL) {
 ### DuckLake Discovery
 
 ``` r
+
 db_tables <- function(schema = "main") {
   sql <- glue::glue("
     SELECT table_name
@@ -550,6 +569,7 @@ db_tables <- function(schema = "main") {
 ### `db_vacuum()` - Clean Up Old Snapshots
 
 ``` r
+
 db_vacuum <- function(older_than = "30 days", dry_run = TRUE) {
   # Get snapshots before
   snapshots_before <- db_snapshots()
@@ -575,6 +595,7 @@ db_vacuum <- function(older_than = "30 days", dry_run = TRUE) {
 ### `db_rollback()` - Restore Previous Version
 
 ``` r
+
 db_rollback <- function(schema, table, version = NULL, timestamp = NULL) {
   # Build time travel clause
   at_clause <- glue::glue("AT (VERSION => {version})")
@@ -596,6 +617,7 @@ db_rollback <- function(schema, table, version = NULL, timestamp = NULL) {
 ### `db_diff()` - Compare Versions
 
 ``` r
+
 db_diff <- function(schema, table, from_version, to_version, key_cols = NULL) {
   # ADDED: rows in 'to' but not in 'from'
   added_sql <- glue::glue("SELECT * FROM {to_ref} EXCEPT SELECT * FROM {from_ref}")
@@ -627,6 +649,7 @@ db_diff <- function(schema, table, from_version, to_version, key_cols = NULL) {
 ### `db_compact()` - Merge Small Files
 
 ``` r
+
 db_compact <- function(schema = "main", table = NULL, max_files = NULL) {
   # Build the SQL call with optional parameters
   sql <- glue::glue("CALL ducklake_merge_adjacent_files({catalog}, {table}, ...)")
@@ -652,6 +675,7 @@ db_compact <- function(schema = "main", table = NULL, max_files = NULL) {
 ### `db_file_stats()` - Check File Statistics
 
 ``` r
+
 db_file_stats <- function(schema = "main", table = NULL) {
   sql <- glue::glue("FROM ducklake_table_info({.db_sql_quote(catalog)})")
   info <- DBI::dbGetQuery(con, sql)
@@ -673,6 +697,7 @@ db_file_stats <- function(schema = "main", table = NULL) {
 ### `db_cleanup_files()` - Remove Orphaned Files
 
 ``` r
+
 db_cleanup_files <- function(dry_run = TRUE) {
   if (dry_run) {
     # Show preview of what would be cleaned
@@ -693,6 +718,7 @@ db_cleanup_files <- function(dry_run = TRUE) {
 - Reclaims disk space by removing unreferenced Parquet files
 
 &nbsp;
+
 
     **Key points:**
 
@@ -746,6 +772,7 @@ Used standalone via
 [`db_browser_server()`](https://cathalbyrnegit.github.io/datapond/reference/db_browser_server.md)
 
 ``` r
+
 # Standalone usage
 db_browser()
 
@@ -761,6 +788,7 @@ server <- function(input, output, session) {
 ### `browser.R` - Launcher
 
 ``` r
+
 db_browser <- function(height = "500px", viewer = c("dialog", "browser", "pane")) {
   # Check packages are available
   .db_assert_browser_packages()
@@ -782,6 +810,7 @@ db_browser <- function(height = "500px", viewer = c("dialog", "browser", "pane")
 The UI is built with `bslib` for modern Bootstrap 5 styling:
 
 ``` r
+
 db_browser_ui <- function(id, height = "500px") {
   ns <- shiny::NS(id)  # Namespace for module
 
@@ -813,6 +842,7 @@ db_browser_ui <- function(id, height = "500px") {
 ### `browser_server.R` - Module Server
 
 ``` r
+
 db_browser_server <- function(id, height = "500px") {
   shiny::moduleServer(id, function(input, output, session) {
 
@@ -874,6 +904,7 @@ All user inputs that go into SQL are either:
 2.  **Quoted** with `.db_sql_quote()` (escapes single quotes)
 
 ``` r
+
 # This is safe:
 table <- .db_validate_name(table)  # Rejects "../../../etc"
 path <- .db_sql_quote(glob_path)   # Escapes quotes properly
@@ -887,6 +918,7 @@ path <- .db_sql_quote(glob_path)   # Escapes quotes properly
 This prevents attacks like:
 
 ``` r
+
 db_read(table = "../../../etc/passwd")  # Rejected!
 ```
 

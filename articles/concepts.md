@@ -105,6 +105,7 @@ metadata:
 ### 1. DuckDB (Single User)
 
 ``` r
+
 db_connect(
   catalog_type = "duckdb",
   metadata_path = "metadata.ducklake",
@@ -119,6 +120,7 @@ db_connect(
 ### 2. SQLite (Multiple Local Users) - RECOMMENDED
 
 ``` r
+
 db_connect(
   catalog_type = "sqlite",
   metadata_path = "//CSO-NAS/DataLake/catalog.sqlite",
@@ -140,6 +142,7 @@ typical usage where writes are less frequent than reads.
 ### 3. PostgreSQL (Multi-User Lakehouse)
 
 ``` r
+
 db_connect(
   catalog_type = "postgres",
   metadata_path = "dbname=ducklake_catalog host=db.cso.ie",
@@ -175,6 +178,7 @@ gracefully.
 Query data as it existed at any point in the past:
 
 ``` r
+
 # Current data
 products <- db_read(table = "products")
 
@@ -198,6 +202,7 @@ This is invaluable when:
 Every change creates a new **snapshot** with metadata:
 
 ``` r
+
 db_snapshots()
 #>   snapshot_id snapshot_time       commit_author commit_message
 #> 1           1 2025-01-01 09:00:00 jsmith        Initial load
@@ -213,6 +218,7 @@ Changes are **atomic** - they either fully succeed or fully fail. No
 partial updates that leave data in a broken state.
 
 ``` r
+
 # If this fails halfway through, no data is changed
 db_write(big_dataset, table = "imports", mode = "overwrite")
 ```
@@ -230,6 +236,7 @@ DuckLake supports partitioning tables by column values for improved
 query performance:
 
 ``` r
+
 # Create a partitioned table
 db_write(
   my_data,
@@ -253,6 +260,7 @@ partitioning distributes data into a fixed number of files using
 Iceberg-compatible Murmur3 hashing:
 
 ``` r
+
 # Bucket partition by user_id into 16 buckets
 db_write(
   events_data,
@@ -278,6 +286,7 @@ small files - You need efficient point lookups by the partitioned column
 Clustering keeps data sorted within files for faster range scans:
 
 ``` r
+
 # Create a clustered table
 db_write(
   sales_data,
@@ -303,6 +312,7 @@ writes by staging data in the catalog database instead of creating new
 parquet files:
 
 ``` r
+
 # Stream small batches with inlining
 for (batch in batches) {
   db_write(batch, table = "events", mode = "append", inline = TRUE)
@@ -325,6 +335,7 @@ Export DuckLake tables to Iceberg format for use with other engines
 (Spark, Trino, Presto):
 
 ``` r
+
 # Export to Iceberg format
 db_export_iceberg(table = "sales")
 
@@ -361,6 +372,7 @@ related tables together.
 ### Using Schemas
 
 ``` r
+
 # Create a schema for your section
 db_create_schema("trade")
 
@@ -384,6 +396,7 @@ built-in tools to document your datasets and generate a data dictionary.
 ### Documenting Tables
 
 ``` r
+
 # Add metadata to a table
 db_describe(
   table = "imports",
@@ -410,6 +423,7 @@ db_describe_column(
 ### Searching and Discovery
 
 ``` r
+
 # Search tables by any field
 db_search("trade")                        # Matches name, description, owner, or tags
 db_search("monthly", field = "tags")      # Search only tags
@@ -426,6 +440,7 @@ db_search_columns("country")
 ### Generating a Data Dictionary
 
 ``` r
+
 # Full data dictionary with column details
 dict <- db_dictionary()
 
@@ -450,6 +465,7 @@ timestamps
 Track where your data comes from and how it was transformed:
 
 ``` r
+
 # Record lineage when creating derived tables
 db_lineage(
   table = "monthly_summary",
@@ -482,6 +498,7 @@ happen:
 ### Write Preview
 
 ``` r
+
 db_preview_write(my_data, table = "imports", mode = "overwrite")
 ```
 
@@ -491,6 +508,7 @@ append to non-existent table)
 ### Upsert Preview
 
 ``` r
+
 db_preview_upsert(my_data, table = "products", by = "product_id")
 ```
 
@@ -525,6 +543,7 @@ used.
 ### Setting Up Schemas
 
 ``` r
+
 # Connect to DuckLake
 db_connect(
   catalog_type = "sqlite",
@@ -549,11 +568,11 @@ db_write(countries, schema = "reference", table = "countries")
 
 ### How It Works
 
-| Component                | Access Controlled By                                     |
-|--------------------------|----------------------------------------------------------|
-| Catalog file (`.sqlite`) | File permissions - need read to query, write to modify   |
-| Schema data folder       | Folder ACLs - each schema can have different permissions |
-| Table data               | Inherited from schema folder                             |
+| Component | Access Controlled By |
+|----|----|
+| Catalog file (`.sqlite`) | File permissions - need read to query, write to modify |
+| Schema data folder | Folder ACLs - each schema can have different permissions |
+| Table data | Inherited from schema folder |
 
 **Benefits**: - **Zero configuration** - folder structure created
 automatically - **Familiar model** - uses standard folder permissions -
@@ -572,6 +591,7 @@ sizes.
 ### Checking File Statistics
 
 ``` r
+
 # See file counts and sizes for all tables
 db_file_stats()
 #>   schema_name table_name file_count total_rows total_bytes avg_file_bytes
@@ -586,6 +606,7 @@ stats[stats$file_count > 100 & stats$avg_file_bytes < 1e7, ]
 ### Compacting Files
 
 ``` r
+
 # Merge small files into larger ones
 db_compact(table = "imports")
 #> Compacting files...
@@ -608,6 +629,7 @@ After compacting or vacuuming, old files become orphaned. Clean them up
 to reclaim disk space:
 
 ``` r
+
 # Preview what would be deleted
 db_cleanup_files(dry_run = TRUE)
 
@@ -617,12 +639,12 @@ db_cleanup_files(dry_run = FALSE)
 
 ### Recommended Maintenance Schedule
 
-| Operation                                                                         | Frequency                   | Purpose                    |
-|-----------------------------------------------------------------------------------|-----------------------------|----------------------------|
-| `db_file_stats()`                                                                 | Weekly                      | Monitor file fragmentation |
-| `db_compact()`                                                                    | Monthly or after bulk loads | Merge small files          |
-| [`db_vacuum()`](https://cathalbyrnegit.github.io/datapond/reference/db_vacuum.md) | Monthly                     | Remove old snapshots       |
-| `db_cleanup_files()`                                                              | After vacuum or compact     | Reclaim disk space         |
+| Operation | Frequency | Purpose |
+|----|----|----|
+| `db_file_stats()` | Weekly | Monitor file fragmentation |
+| `db_compact()` | Monthly or after bulk loads | Merge small files |
+| [`db_vacuum()`](https://cathalbyrnegit.github.io/datapond/reference/db_vacuum.md) | Monthly | Remove old snapshots |
+| `db_cleanup_files()` | After vacuum or compact | Reclaim disk space |
 
 ------------------------------------------------------------------------
 
@@ -633,6 +655,7 @@ Here’s how a typical workflow might look:
 ### Publishing Data (Producer)
 
 ``` r
+
 library(datapond)
 
 # Connect to DuckLake
@@ -672,6 +695,7 @@ db_disconnect()
 ### Consuming Data (Consumer)
 
 ``` r
+
 library(datapond)
 
 # Connect to DuckLake (read access to catalog and data folder)
@@ -706,24 +730,24 @@ db_disconnect()
 
 ## Glossary
 
-| Term                 | Meaning                                                                               |
-|----------------------|---------------------------------------------------------------------------------------|
-| **Parquet**          | Columnar file format for storing tabular data efficiently                             |
-| **DuckLake**         | Metadata layer that adds versioning and transactions to Parquet files                 |
-| **Catalog**          | Database storing DuckLake metadata (can be DuckDB, SQLite, or PostgreSQL)             |
-| **Snapshot**         | A point-in-time version of the data in DuckLake                                       |
-| **Time travel**      | Querying data as it existed at a past version or timestamp                            |
-| **Schema**           | A namespace for organising related tables                                             |
-| **Hive Partition**   | Organising data by column values (e.g., year, month) into separate directories        |
+| Term | Meaning |
+|----|----|
+| **Parquet** | Columnar file format for storing tabular data efficiently |
+| **DuckLake** | Metadata layer that adds versioning and transactions to Parquet files |
+| **Catalog** | Database storing DuckLake metadata (can be DuckDB, SQLite, or PostgreSQL) |
+| **Snapshot** | A point-in-time version of the data in DuckLake |
+| **Time travel** | Querying data as it existed at a past version or timestamp |
+| **Schema** | A namespace for organising related tables |
+| **Hive Partition** | Organising data by column values (e.g., year, month) into separate directories |
 | **Bucket Partition** | Distributing data into fixed buckets using hash function for high-cardinality columns |
-| **Clustering**       | Keeping data sorted within files for faster range scans                               |
-| **Inlining**         | Staging small writes in the catalog database to avoid creating many small files       |
-| **ACID**             | Atomicity, Consistency, Isolation, Durability - database reliability guarantees       |
-| **Upsert**           | Update existing rows + insert new rows in one operation                               |
-| **Data dictionary**  | Documentation of all datasets, their columns, types, and descriptions                 |
-| **Lineage**          | Tracking the sources and transformations that produced a dataset                      |
-| **Compaction**       | Merging many small files into fewer larger files for better performance               |
-| **Iceberg**          | Open table format for large analytic tables, compatible with Spark/Trino/Presto       |
+| **Clustering** | Keeping data sorted within files for faster range scans |
+| **Inlining** | Staging small writes in the catalog database to avoid creating many small files |
+| **ACID** | Atomicity, Consistency, Isolation, Durability - database reliability guarantees |
+| **Upsert** | Update existing rows + insert new rows in one operation |
+| **Data dictionary** | Documentation of all datasets, their columns, types, and descriptions |
+| **Lineage** | Tracking the sources and transformations that produced a dataset |
+| **Compaction** | Merging many small files into fewer larger files for better performance |
+| **Iceberg** | Open table format for large analytic tables, compatible with Spark/Trino/Presto |
 
 ------------------------------------------------------------------------
 

@@ -7,8 +7,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <title>Local Data Lake Infrastructure for R • datapond</title>
 <script src="deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-<link href="deps/bootstrap-5.3.1/bootstrap.min.css" rel="stylesheet">
-<script src="deps/bootstrap-5.3.1/bootstrap.bundle.min.js"></script><link href="deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
+<link href="deps/bootstrap-5.3.8/bootstrap.min.css" rel="stylesheet">
+<script src="deps/bootstrap-5.3.8/bootstrap.bundle.min.js"></script><link href="deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
 <link href="deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
 <script src="deps/headroom-0.11.0/headroom.min.js"></script><script src="deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="deps/search-1.0.0/fuse.min.js"></script><script src="deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="pkgdown.js"></script><meta property="og:title" content="Local Data Lake Infrastructure for R">
 <meta name="description" content="Provides a unified interface for working with local data infrastructure. Supports two storage backends: a hive-partitioned parquet lake (similar to existing SAS storage) and DuckLake (with time travel capabilities). Facilitates data sharing between sections with built-in governance, access control via file system permissions, and dataset publishing workflows.">
@@ -36,6 +36,7 @@
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles">
 <li><a class="dropdown-item" href="articles/concepts.html">Data Lake Concepts</a></li>
+    <li><a class="dropdown-item" href="articles/catalog-backends.html">Catalog Backends: Choosing Your Metadata Store</a></li>
     <li><a class="dropdown-item" href="articles/code-walkthrough.html">Code Walkthrough</a></li>
   </ul>
 </li>
@@ -258,18 +259,20 @@
 <span></span>
 <span><span class="co"># Launch interactive browser</span></span>
 <span><span class="fu"><a href="reference/db_browser.html">db_browser</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
-<p>The browser provides a point-and-click interface for:</p>
+<p>The browser provides a point-and-click interface with six tabs:</p>
 <ul>
 <li>
-<strong>Browse</strong> - Navigate schemas and tables in a tree view</li>
+<strong>Preview</strong> - View sample rows from any table (select from tree on left)</li>
 <li>
-<strong>Preview</strong> - View sample rows from any table</li>
+<strong>Metadata</strong> - See documentation, owner, tags, and column descriptions</li>
 <li>
-<strong>Metadata</strong> - See documentation, owner, and tags</li>
+<strong>Search</strong> - Find tables by name, description, owner, or tags; search columns across all tables</li>
 <li>
-<strong>Search</strong> - Find tables by name, description, or tags</li>
+<strong>Dictionary</strong> - Generate and export a full data dictionary as CSV</li>
 <li>
-<strong>Dictionary</strong> - Generate and export a data dictionary</li>
+<strong>Access Control</strong> - Guidance on folder-based permissions with DuckLake</li>
+<li>
+<strong>Connection</strong> - View current connection status and catalog info</li>
 </ul>
 </div>
 </div>
@@ -284,26 +287,26 @@
 <col width="25%">
 <col width="25%">
 </colgroup>
-<thead><tr class="header">
+<thead><tr>
 <th>Backend</th>
 <th><code>catalog_type</code></th>
 <th>Concurrency</th>
 <th>Best For</th>
 </tr></thead>
 <tbody>
-<tr class="odd">
+<tr>
 <td>DuckDB</td>
 <td><code>"duckdb"</code></td>
 <td>Single client only</td>
 <td>Personal/dev use</td>
 </tr>
-<tr class="even">
+<tr>
 <td><strong>SQLite</strong></td>
 <td><code>"sqlite"</code></td>
 <td>Multi-read, single-write</td>
 <td><strong>Shared network drives</strong></td>
 </tr>
-<tr class="odd">
+<tr>
 <td>PostgreSQL</td>
 <td><code>"postgres"</code></td>
 <td>Full concurrent access</td>
@@ -367,20 +370,20 @@
 <col width="50%">
 <col width="50%">
 </colgroup>
-<thead><tr class="header">
+<thead><tr>
 <th>Function</th>
 <th>Description</th>
 </tr></thead>
 <tbody>
-<tr class="odd">
+<tr>
 <td><code><a href="reference/db_connect.html">db_connect()</a></code></td>
 <td>Connect to a DuckLake catalog (supports duckdb/sqlite/postgres backends)</td>
 </tr>
-<tr class="even">
+<tr>
 <td><code><a href="reference/db_disconnect.html">db_disconnect()</a></code></td>
 <td>Close connection</td>
 </tr>
-<tr class="odd">
+<tr>
 <td><code><a href="reference/db_status.html">db_status()</a></code></td>
 <td>Show connection info (including catalog type)</td>
 </tr>
@@ -395,11 +398,11 @@
 <col width="50%">
 <col width="50%">
 </colgroup>
-<thead><tr class="header">
+<thead><tr>
 <th>Function</th>
 <th>Description</th>
 </tr></thead>
-<tbody><tr class="odd">
+<tbody><tr>
 <td><code>db_read()</code></td>
 <td>Read table (with optional time travel by version or timestamp)</td>
 </tr></tbody>
@@ -413,16 +416,16 @@
 <col width="50%">
 <col width="50%">
 </colgroup>
-<thead><tr class="header">
+<thead><tr>
 <th>Function</th>
 <th>Description</th>
 </tr></thead>
 <tbody>
-<tr class="odd">
+<tr>
 <td><code>db_write()</code></td>
 <td>Write table (overwrite/append, with partitioning, bucketing, sorting, inlining)</td>
 </tr>
-<tr class="even">
+<tr>
 <td><code><a href="reference/db_upsert.html">db_upsert()</a></code></td>
 <td>MERGE operation (update existing rows + insert new rows)</td>
 </tr>
@@ -433,16 +436,16 @@
 <h3 id="preview-operations">Preview Operations<a class="anchor" aria-label="anchor" href="#preview-operations"></a>
 </h3>
 <table class="table">
-<thead><tr class="header">
+<thead><tr>
 <th>Function</th>
 <th>Description</th>
 </tr></thead>
 <tbody>
-<tr class="odd">
+<tr>
 <td><code>db_preview_write()</code></td>
 <td>Preview write impact before executing</td>
 </tr>
-<tr class="even">
+<tr>
 <td><code><a href="reference/db_preview_upsert.html">db_preview_upsert()</a></code></td>
 <td>Preview inserts vs updates before executing</td>
 </tr>
@@ -453,28 +456,28 @@
 <h3 id="discovery">Discovery<a class="anchor" aria-label="anchor" href="#discovery"></a>
 </h3>
 <table class="table">
-<thead><tr class="header">
+<thead><tr>
 <th>Function</th>
 <th>Description</th>
 </tr></thead>
 <tbody>
-<tr class="odd">
+<tr>
 <td><code><a href="reference/db_list_schemas.html">db_list_schemas()</a></code></td>
 <td>List schemas</td>
 </tr>
-<tr class="even">
+<tr>
 <td><code><a href="reference/db_tables.html">db_tables()</a></code></td>
 <td>List tables in a schema</td>
 </tr>
-<tr class="odd">
+<tr>
 <td><code><a href="reference/db_list_views.html">db_list_views()</a></code></td>
 <td>List views in a schema</td>
 </tr>
-<tr class="even">
+<tr>
 <td><code><a href="reference/db_table_exists.html">db_table_exists()</a></code></td>
 <td>Check if a table exists</td>
 </tr>
-<tr class="odd">
+<tr>
 <td><code><a href="reference/db_create_schema.html">db_create_schema()</a></code></td>
 <td>Create a new schema</td>
 </tr>
@@ -489,40 +492,40 @@
 <col width="50%">
 <col width="50%">
 </colgroup>
-<thead><tr class="header">
+<thead><tr>
 <th>Function</th>
 <th>Description</th>
 </tr></thead>
 <tbody>
-<tr class="odd">
+<tr>
 <td><code><a href="reference/db_describe.html">db_describe()</a></code></td>
 <td>Add description, owner, tags to a table</td>
 </tr>
-<tr class="even">
+<tr>
 <td><code><a href="reference/db_describe_column.html">db_describe_column()</a></code></td>
 <td>Document a column (description, units, notes)</td>
 </tr>
-<tr class="odd">
+<tr>
 <td><code><a href="reference/db_get_docs.html">db_get_docs()</a></code></td>
 <td>Retrieve documentation for a table</td>
 </tr>
-<tr class="even">
+<tr>
 <td><code><a href="reference/db_dictionary.html">db_dictionary()</a></code></td>
 <td>Generate full data dictionary</td>
 </tr>
-<tr class="odd">
+<tr>
 <td><code><a href="reference/db_search.html">db_search()</a></code></td>
 <td>Search by name, description, owner, or tags</td>
 </tr>
-<tr class="even">
+<tr>
 <td><code><a href="reference/db_search_columns.html">db_search_columns()</a></code></td>
 <td>Find columns by name across all tables</td>
 </tr>
-<tr class="odd">
+<tr>
 <td><code>db_lineage()</code></td>
 <td>Record data lineage (sources and transformations)</td>
 </tr>
-<tr class="even">
+<tr>
 <td><code>db_get_lineage()</code></td>
 <td>Retrieve lineage information for a table</td>
 </tr>
@@ -537,24 +540,24 @@
 <col width="50%">
 <col width="50%">
 </colgroup>
-<thead><tr class="header">
+<thead><tr>
 <th>Function</th>
 <th>Description</th>
 </tr></thead>
 <tbody>
-<tr class="odd">
+<tr>
 <td><code><a href="reference/db_set_partitioning.html">db_set_partitioning()</a></code></td>
 <td>Set or remove partitioning on a table</td>
 </tr>
-<tr class="even">
+<tr>
 <td><code><a href="reference/db_get_partitioning.html">db_get_partitioning()</a></code></td>
 <td>Get current partition columns for a table</td>
 </tr>
-<tr class="odd">
+<tr>
 <td><code>db_set_clustering()</code></td>
 <td>Set sort/clustering order for better query performance</td>
 </tr>
-<tr class="even">
+<tr>
 <td><code>db_recluster()</code></td>
 <td>Re-sort existing data to match clustering order</td>
 </tr>
@@ -569,16 +572,16 @@
 <col width="50%">
 <col width="50%">
 </colgroup>
-<thead><tr class="header">
+<thead><tr>
 <th>Function</th>
 <th>Description</th>
 </tr></thead>
 <tbody>
-<tr class="odd">
+<tr>
 <td><code>db_flush_inlined()</code></td>
 <td>Write inlined data to parquet files</td>
 </tr>
-<tr class="even">
+<tr>
 <td><code>db_set_inline_threshold()</code></td>
 <td>Configure auto-flush threshold for inlined data</td>
 </tr>
@@ -593,16 +596,16 @@
 <col width="50%">
 <col width="50%">
 </colgroup>
-<thead><tr class="header">
+<thead><tr>
 <th>Function</th>
 <th>Description</th>
 </tr></thead>
 <tbody>
-<tr class="odd">
+<tr>
 <td><code>db_export_iceberg()</code></td>
 <td>Export table to Iceberg format for Spark/Trino/Presto</td>
 </tr>
-<tr class="even">
+<tr>
 <td><code>db_iceberg_metadata()</code></td>
 <td>Get Iceberg-compatible metadata for a table</td>
 </tr>
@@ -617,52 +620,52 @@
 <col width="50%">
 <col width="50%">
 </colgroup>
-<thead><tr class="header">
+<thead><tr>
 <th>Function</th>
 <th>Description</th>
 </tr></thead>
 <tbody>
-<tr class="odd">
+<tr>
 <td><code><a href="reference/db_snapshots.html">db_snapshots()</a></code></td>
 <td>List all snapshots</td>
 </tr>
-<tr class="even">
+<tr>
 <td><code><a href="reference/db_catalog.html">db_catalog()</a></code></td>
 <td>Table info and stats</td>
 </tr>
-<tr class="odd">
+<tr>
 <td><code><a href="reference/db_table_cols.html">db_table_cols()</a></code></td>
 <td>Get column names for a table</td>
 </tr>
-<tr class="even">
+<tr>
 <td><code><a href="reference/db_view_cols.html">db_view_cols()</a></code></td>
 <td>Get column names for a view</td>
 </tr>
-<tr class="odd">
+<tr>
 <td><code><a href="reference/db_diff.html">db_diff()</a></code></td>
 <td>Compare two snapshots</td>
 </tr>
-<tr class="even">
+<tr>
 <td><code><a href="reference/db_rollback.html">db_rollback()</a></code></td>
 <td>Restore table to a previous version</td>
 </tr>
-<tr class="odd">
+<tr>
 <td><code><a href="reference/db_vacuum.html">db_vacuum()</a></code></td>
 <td>Clean up old snapshots and unreferenced files</td>
 </tr>
-<tr class="even">
+<tr>
 <td><code>db_compact()</code></td>
 <td>Merge small Parquet files for better performance</td>
 </tr>
-<tr class="odd">
+<tr>
 <td><code>db_file_stats()</code></td>
 <td>Get file counts and sizes to identify compaction candidates</td>
 </tr>
-<tr class="even">
+<tr>
 <td><code>db_cleanup_files()</code></td>
 <td>Remove orphaned files after vacuum or compact</td>
 </tr>
-<tr class="odd">
+<tr>
 <td><code><a href="reference/db_query.html">db_query()</a></code></td>
 <td>Run arbitrary SQL</td>
 </tr>
@@ -677,16 +680,16 @@
 <col width="50%">
 <col width="50%">
 </colgroup>
-<thead><tr class="header">
+<thead><tr>
 <th>Function</th>
 <th>Description</th>
 </tr></thead>
 <tbody>
-<tr class="odd">
+<tr>
 <td><code><a href="reference/db_browser.html">db_browser()</a></code></td>
 <td>Launch interactive Shiny browser for exploring data</td>
 </tr>
-<tr class="even">
+<tr>
 <td><code><a href="reference/run_example.html">run_example()</a></code></td>
 <td>Run bundled example scripts (call without args to list)</td>
 </tr>
