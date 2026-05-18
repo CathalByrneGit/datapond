@@ -212,6 +212,193 @@ db_connect(
 
 ------------------------------------------------------------------------
 
+## Security & Access Control
+
+DuckLake’s security model has two distinct layers:
+
+1.  **Catalog security** - Who can read/modify table definitions and
+    metadata
+2.  **Data security** - Who can read/write the actual Parquet files
+
+### Current Model: File System Permissions
+
+Currently, DuckLake relies on **file system permissions** for data
+access control:
+
+    ┌─────────────────────────────────────────────────────────────┐
+    │                   Security Architecture                      │
+    ├─────────────────────────────────────────────────────────────┤
+    │                                                              │
+    │  Catalog (Metadata)              Data (Parquet Files)        │
+    │  ┌──────────────────┐           ┌──────────────────────┐    │
+    │  │ catalog.sqlite   │           │ /data/trade/         │    │
+    │  │                  │           │   imports/*.parquet  │    │
+    │  │ - Table schemas  │           │   exports/*.parquet  │    │
+    │  │ - Snapshots      │           │                      │    │
+    │  │ - File refs      │           │ /data/labour/        │    │
+    │  └────────┬─────────┘           │   employment/*.parquet│   │
+    │           │                     └──────────┬───────────┘    │
+    │           ▼                                ▼                │
+    │    File/DB permissions            Folder ACLs (Windows/NFS) │
+    │                                                              │
+    └─────────────────────────────────────────────────────────────┘
+
+**Important limitation:** If a user can read the Parquet files directly
+(bypassing DuckLake), they have full access to that data. DuckLake does
+not encrypt data at rest or enforce row/column-level security.
+
+### Security by Backend
+
+| Backend        | Catalog Security                   | Data Security    |
+|----------------|------------------------------------|------------------|
+| **DuckDB**     | File permissions only              | File/folder ACLs |
+| **SQLite**     | File permissions only              | File/folder ACLs |
+| **PostgreSQL** | Full RBAC, SSL, row-level security | File/folder ACLs |
+
+### PostgreSQL: Enhanced Security Options
+
+PostgreSQL offers significantly more security features for the
+**catalog**:
+
+``` r
+
+# SSL/TLS encrypted connection
+db_connect(
+  catalog_type = "postgres",
+  metadata_path = "host=db.example.com dbname=ducklake user=app sslmode=require"
+)
+```
+
+**PostgreSQL security features:**
+
+| Feature | Description |
+|----|----|
+| **Role-based access (RBAC)** | Grant/revoke permissions per user/role |
+| **SSL/TLS encryption** | Encrypt metadata in transit |
+| **Row-level security (RLS)** | Restrict which snapshots/tables users can see |
+| **Audit logging** | Track who accessed/modified metadata |
+| **LDAP/Kerberos/SCRAM** | Enterprise authentication integration |
+| **Connection pooling** | PgBouncer for secure connection management |
+
+**Example: Restricting schema access in PostgreSQL:**
+
+``` sql
+-- Create roles for different teams
+CREATE ROLE trade_team;
+CREATE ROLE labour_team;
+
+-- Grant access to specific schema metadata only
+GRANT SELECT ON ducklake_schema TO trade_team
+  WHERE schema_name = 'trade';
+
+-- Users inherit permissions from their role
+GRANT trade_team TO alice, bob;
+```
+
+### Future: Native DuckLake Security
+
+DuckLake may introduce native security features in future releases:
+
+**Potential features being discussed:**
+
+- **Catalog-level RBAC** - Define permissions in DuckLake metadata
+  itself
+- **Schema-level grants** - `GRANT SELECT ON SCHEMA trade TO role_x`
+- **Table-level grants** - `GRANT INSERT ON table TO role_y`
+- **Encryption at rest** - Encrypted Parquet files with key management
+- **Column masking** - Hide sensitive columns from certain users
+
+**Current workaround for sensitive data:**
+
+``` r
+
+# Store sensitive data in a separate schema with restricted folder ACLs
+db_write(sensitive_data, schema = "restricted", table = "pii")
+
+# Folder structure:
+# /data/restricted/  <- Only authorized users have ACL access
+#   pii/*.parquet
+```
+
+### Quack Security Considerations
+
+When Quack becomes available as a catalog backend, it will introduce new
+security considerations:
+
+    ┌─────────────────────────────────────────────────────────────┐
+    │                    Quack Security Model                      │
+    ├─────────────────────────────────────────────────────────────┤
+    │                                                              │
+    │  Client ──── HTTPS ────► DuckDB Server ────► Data Files     │
+    │                              │                               │
+    │                              ▼                               │
+    │                    Authentication                            │
+    │                    Authorization                             │
+    │                    Audit logging                             │
+    │                                                              │
+    └─────────────────────────────────────────────────────────────┘
+
+**Expected Quack security features:**
+
+| Feature                   | Status                       |
+|---------------------------|------------------------------|
+| **HTTPS transport**       | Available now                |
+| **Token authentication**  | Available now                |
+| **Reverse proxy support** | Available now (nginx, Caddy) |
+| **Native RBAC**           | Planned                      |
+| **Query auditing**        | Planned                      |
+
+**Securing Quack with a reverse proxy:**
+
+    # nginx configuration for Quack
+    server {
+        listen 443 ssl;
+        server_name duckdb.example.com;
+
+        ssl_certificate /etc/ssl/certs/duckdb.crt;
+        ssl_certificate_key /etc/ssl/private/duckdb.key;
+
+        location / {
+            proxy_pass http://localhost:4242;
+            proxy_set_header Authorization $http_authorization;
+        }
+    }
+
+### Security Recommendations by Use Case
+
+| Use Case | Recommended Backend | Security Approach |
+|----|----|----|
+| **Personal/Dev** | DuckDB | Local file permissions |
+| **Team, low sensitivity** | SQLite | Folder ACLs per schema |
+| **Team, sensitive data** | PostgreSQL | RBAC + folder ACLs + SSL |
+| **Enterprise, compliance** | PostgreSQL | Full RBAC + RLS + audit + encryption |
+| **Multi-tenant** | PostgreSQL + Quack | Row-level security + API gateway |
+
+### Data Cannot Be Fully Controlled via Catalog
+
+**Critical understanding:** The catalog backend only controls **metadata
+access**. The actual data files (Parquet) are controlled by file system
+permissions.
+
+``` r
+
+# Even if PostgreSQL restricts a user from seeing table metadata...
+# ...they could still read the parquet files directly if they have folder access:
+
+# Direct file access bypasses DuckLake entirely
+arrow::read_parquet("/data/trade/imports/file-001.parquet")
+```
+
+**Mitigations:**
+
+1.  **Folder ACLs** - Ensure Parquet folders have appropriate
+    permissions
+2.  **Network isolation** - Store data on restricted network shares
+3.  **Encryption** - Use encrypted storage (BitLocker, LUKS, cloud KMS)
+4.  **Monitoring** - Audit file access at the OS level
+
+------------------------------------------------------------------------
+
 ## Future: SQL Server Support
 
 ### Current Status

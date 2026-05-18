@@ -148,6 +148,21 @@
 <span><span class="co"># Then flush when ready</span></span>
 <span><span class="fu">db_flush_inlined</span><span class="op">(</span>table <span class="op">=</span> <span class="st">"events"</span><span class="op">)</span></span>
 <span></span>
+<span><span class="co"># Explicit column types for stricter schema control</span></span>
+<span><span class="fu">db_write</span><span class="op">(</span></span>
+<span>  <span class="va">financial_data</span>,</span>
+<span>  table <span class="op">=</span> <span class="st">"transactions"</span>,</span>
+<span>  col_types <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>    id <span class="op">=</span> <span class="st">"BIGINT"</span>,</span>
+<span>    amount <span class="op">=</span> <span class="st">"DECIMAL(12,2)"</span>,</span>
+<span>    rate <span class="op">=</span> <span class="st">"DOUBLE"</span></span>
+<span>  <span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Arrow integration - read/write without DuckDB compute</span></span>
+<span><span class="va">arrow_tbl</span> <span class="op">&lt;-</span> <span class="fu">db_read_arrow</span><span class="op">(</span>table <span class="op">=</span> <span class="st">"imports"</span>, as_data_frame <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
+<span><span class="fu">db_write_arrow</span><span class="op">(</span><span class="va">arrow_tbl</span>, table <span class="op">=</span> <span class="st">"imports_copy"</span><span class="op">)</span></span>
+<span></span>
 <span><span class="co"># Preview upsert to see how many inserts vs updates</span></span>
 <span><span class="fu"><a href="reference/db_preview_upsert.html">db_preview_upsert</a></span><span class="op">(</span><span class="va">my_data</span>, schema <span class="op">=</span> <span class="st">"trade"</span>, table <span class="op">=</span> <span class="st">"products"</span>, by <span class="op">=</span> <span class="st">"product_id"</span><span class="op">)</span></span>
 <span></span>
@@ -423,11 +438,35 @@
 <tbody>
 <tr>
 <td><code>db_write()</code></td>
-<td>Write table (overwrite/append, with partitioning, bucketing, sorting, inlining)</td>
+<td>Write table (overwrite/append, with partitioning, bucketing, sorting, inlining, explicit schema)</td>
 </tr>
 <tr>
 <td><code><a href="reference/db_upsert.html">db_upsert()</a></code></td>
 <td>MERGE operation (update existing rows + insert new rows)</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section level3">
+<h3 id="arrow-integration">Arrow Integration<a class="anchor" aria-label="anchor" href="#arrow-integration"></a>
+</h3>
+<table class="table">
+<colgroup>
+<col width="50%">
+<col width="50%">
+</colgroup>
+<thead><tr>
+<th>Function</th>
+<th>Description</th>
+</tr></thead>
+<tbody>
+<tr>
+<td><code>db_read_arrow()</code></td>
+<td>Read table directly as Arrow Table (bypasses DuckDB compute)</td>
+</tr>
+<tr>
+<td><code>db_write_arrow()</code></td>
+<td>Write Arrow Table/RecordBatch to DuckLake</td>
 </tr>
 </tbody>
 </table>
