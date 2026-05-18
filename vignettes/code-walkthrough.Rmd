@@ -252,9 +252,21 @@ db_connect <- function(duckdb_db = ":memory:",
 ```{r}
 db_write <- function(data, schema = "main", table,
                      mode = c("overwrite", "append"),
-                     partition_by = NULL,
+                     col_types = NULL,       # Explicit column types
+                     partition_by = NULL,    # Hive partitioning
+                     bucket_by = NULL,       # Bucket partitioning
+                     sort_by = NULL,         # Clustering
+                     inline = FALSE,         # Data inlining
                      commit_author = NULL,
                      commit_message = NULL) {
+
+  # Build column definitions with explicit types where specified
+  cols <- vapply(data, .db_r_to_duckdb_type, character(1))
+  if (!is.null(col_types)) {
+    for (col_name in names(col_types)) {
+      cols[col_name] <- col_types[[col_name]]
+    }
+  }
 
   # Register data temporarily
   tmp <- .db_temp_name()
@@ -269,21 +281,16 @@ db_write <- function(data, schema = "main", table,
     ))
   }
 
-  # Write data
-  if (mode == "overwrite") {
-    sql <- glue::glue("CREATE OR REPLACE TABLE {qname} AS SELECT * FROM {tmp}")
-  } else {
-    sql <- glue::glue("INSERT INTO {qname} SELECT * FROM {tmp}")
-  }
+  # Create table with explicit column types
+  create_sql <- glue::glue("CREATE TABLE {qname} ({col_defs})")
+  DBI::dbExecute(con, create_sql)
+
+  # Set partitioning (hive + bucket)
+  # Set clustering (sort_by)
+  # Insert data (with optional inlining)
 
   tryCatch({
     DBI::dbExecute(con, sql)
-
-    # Set partitioning if specified
-    if (!is.null(partition_by)) {
-      db_set_partitioning(schema, table, partition_by)
-    }
-
     DBI::dbExecute(con, "COMMIT")
   }, error = function(e) {
     DBI::dbExecute(con, "ROLLBACK")
@@ -296,8 +303,40 @@ db_write <- function(data, schema = "main", table,
 
 - Uses transactions (`BEGIN`/`COMMIT`) for atomicity
 - `ROLLBACK` on error ensures no partial changes
+- `col_types` allows explicit type specification (e.g., `DECIMAL(12,2)`, `BIGINT`)
 - `ducklake_set_commit_message(catalog, author, message)` records metadata in the snapshot
-- Partitioning is set after table creation
+- Supports hive partitioning, bucket partitioning, clustering, and data inlining
+
+### `R/arrow.R` - Arrow Integration
+
+```{r}
+# Read directly as Arrow Table (bypasses DuckDB compute)
+db_read_arrow <- function(schema = "main", table, columns = NULL, as_data_frame = TRUE) {
+  # Get parquet file paths from DuckLake metadata
+  files <- .db_get_table_files(con, catalog, schema, table)
+
+  # Read via Arrow
+  if (length(files) == 1) {
+    arrow::read_parquet(files[1], col_select = columns)
+  } else {
+    arrow::open_dataset(files) |> dplyr::collect()
+  }
+}
+
+# Write Arrow Table to DuckLake
+db_write_arrow <- function(data, schema = "main", table, mode = c("overwrite", "append"), ...) {
+  # Convert Arrow to data.frame and delegate to db_write
+  if (inherits(data, c("ArrowTabular", "Table"))) {
+    data <- as.data.frame(data)
+  }
+  db_write(data, schema, table, mode, ...)
+}
+```
+
+**When to use Arrow functions:**
+
+- `db_read_arrow()`: Direct Parquet access, Arrow ecosystem interop, large data transfers
+- `db_write_arrow()`: When data is already in Arrow format
 
 ---
 
