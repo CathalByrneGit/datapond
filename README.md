@@ -213,13 +213,14 @@ db_connect(
 db_browser()
 ```
 
-The browser provides a point-and-click interface for:
+The browser provides a point-and-click interface with six tabs:
 
-- **Browse** - Navigate schemas and tables in a tree view
-- **Preview** - View sample rows from any table
-- **Metadata** - See documentation, owner, and tags
-- **Search** - Find tables by name, description, or tags
-- **Dictionary** - Generate and export a data dictionary
+- **Preview** - View sample rows from any table (select from tree on left)
+- **Metadata** - See documentation, owner, tags, and column descriptions
+- **Search** - Find tables by name, description, owner, or tags; search columns across all tables
+- **Dictionary** - Generate and export a full data dictionary as CSV
+- **Access Control** - Guidance on folder-based permissions with DuckLake
+- **Connection** - View current connection status and catalog info
 
 ## Choosing a Catalog Backend
 
