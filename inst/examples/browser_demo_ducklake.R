@@ -29,7 +29,7 @@ data_path <- file.path(lake_path, "data")
 dir.create(data_path, recursive = TRUE, showWarnings = FALSE)
 
 # Connect to DuckLake
-db_lake_connect(
+db_connect(
   catalog = "demo",
   catalog_type = "sqlite",
   metadata_path = catalog_path,
@@ -64,7 +64,7 @@ imports <- data.frame(
   quantity = sample(100:5000, 24)
 )
 
-db_lake_write(imports, schema = "trade", table = "imports",
+db_write(imports, schema = "trade", table = "imports",
               commit_author = "demo", commit_message = "Initial load")
 cat("Created trade.imports\n")
 
@@ -78,7 +78,7 @@ exports <- data.frame(
   quantity = sample(50:3000, 24)
 )
 
-db_lake_write(exports, schema = "trade", table = "exports",
+db_write(exports, schema = "trade", table = "exports",
               commit_author = "demo", commit_message = "Initial load")
 cat("Created trade.exports\n")
 
@@ -92,7 +92,7 @@ employment <- data.frame(
   participation_rate = round(runif(12, 0.55, 0.75), 3)
 )
 
-db_lake_write(employment, schema = "labour", table = "employment",
+db_write(employment, schema = "labour", table = "employment",
               commit_author = "demo", commit_message = "Initial load")
 cat("Created labour.employment\n")
 
@@ -106,7 +106,7 @@ hospitals <- data.frame(
   type = sample(c("General", "Specialist", "Teaching"), 20, replace = TRUE)
 )
 
-db_lake_write(hospitals, schema = "health", table = "hospitals",
+db_write(hospitals, schema = "health", table = "hospitals",
               commit_author = "demo", commit_message = "Initial load")
 cat("Created health.hospitals\n")
 
@@ -117,7 +117,7 @@ countries <- data.frame(
   region = c("Europe", "Europe", "Europe", "Americas", "Asia", "Asia", "Europe")
 )
 
-db_lake_write(countries, schema = "reference", table = "countries",
+db_write(countries, schema = "reference", table = "countries",
               commit_author = "demo", commit_message = "Initial load")
 cat("Created reference.countries\n")
 
@@ -243,7 +243,7 @@ cat("Users can only query tables in folders they have access to.\n")
 
 cat("\n")
 cat("Launching browser...\n")
-cat("Check the 'Public Catalog' tab for information about access control.\n")
+cat("Check the 'Access Control' tab for information about folder-based permissions.\n")
 cat("(Close the browser window to return to R)\n\n")
 
 db_browser()
