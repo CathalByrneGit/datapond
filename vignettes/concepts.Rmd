@@ -337,6 +337,54 @@ meta$schema
 meta$partition_spec
 ```
 
+### 10. Explicit Schema Definition
+
+For stricter schema control, you can specify exact column types instead of relying on automatic inference:
+
+```{r}
+# Specify exact types for precision-sensitive columns
+db_write(
+  financial_data,
+  table = "transactions",
+  col_types = list(
+    id = "BIGINT",
+    amount = "DECIMAL(12,2)",
+    rate = "DOUBLE",
+    created_at = "TIMESTAMP"
+  )
+)
+
+# Shorthand with character vector
+db_write(data, table = "metrics", col_types = c(id = "INTEGER", value = "DOUBLE"))
+```
+
+**When to use explicit schema:**
+- Financial data requiring exact decimal precision
+- Interoperability with other systems expecting specific types
+- BIGINT for large IDs (R integers max out at ~2 billion)
+- GEOMETRY columns for spatial data
+
+### 11. Arrow Integration
+
+Read and write data via Apache Arrow, bypassing DuckDB's compute layer:
+
+```{r}
+# Read as Arrow Table (for interop with Arrow ecosystem)
+arrow_tbl <- db_read_arrow(table = "imports", as_data_frame = FALSE)
+
+# Read specific columns only
+df <- db_read_arrow(table = "imports", columns = c("year", "country", "value"))
+
+# Write Arrow Table directly
+db_write_arrow(arrow_tbl, table = "imports_copy")
+```
+
+**When to use Arrow integration:**
+- Interoperability with Arrow-based tools (sparklyr, polars, reticulate)
+- Large datasets where you want direct Parquet access
+- Avoiding DuckDB compute overhead for simple transfers
+- Working with Arrow-native data pipelines
+
 ---
 
 ## Schemas: Organising Tables
@@ -726,6 +774,8 @@ db_disconnect()
 | **Lineage** | Tracking the sources and transformations that produced a dataset |
 | **Compaction** | Merging many small files into fewer larger files for better performance |
 | **Iceberg** | Open table format for large analytic tables, compatible with Spark/Trino/Presto |
+| **Arrow** | Apache Arrow columnar memory format for efficient data interchange |
+| **col_types** | Explicit column type specification for stricter schema control |
 
 ---
 
