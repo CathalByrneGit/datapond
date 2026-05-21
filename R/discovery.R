@@ -328,3 +328,397 @@ db_get_partitioning <- function(schema = "main", table) {
 
   partition_keys
 }
+
+
+# ==============================================================================
+# Views
+# ==============================================================================
+
+#' Create a view in DuckLake
+#'
+#' @description Creates a SQL view stored in the DuckLake catalog. Views support
+#'   time travel - attaching at a previous snapshot will reflect the view definition
+#'   that existed at that point in time.
+#'
+#' @param schema Schema name (default "main")
+#' @param view View name
+#' @param query SQL query defining the view
+#' @param replace If TRUE, replace existing view (default FALSE)
+#' @return Invisibly returns the qualified view name
+#' @examples
+#' \dontrun{
+#' db_connect(...)
+#'
+#' # Create a simple view
+#' db_create_view(view = "active_users",
+#'                query = "SELECT * FROM users WHERE active = true")
+#'
+#' # Replace existing view
+#' db_create_view(view = "active_users",
+#'                query = "SELECT * FROM users WHERE active = true AND verified = true",
+#'                replace = TRUE)
+#'
+#' # View with aggregation
+#' db_create_view(schema = "reports", view = "monthly_totals",
+#'                query = "SELECT year, month, SUM(value) as total FROM sales GROUP BY year, month")
+#' }
+#' @seealso [db_list_views()], [db_drop_view()]
+#' @export
+db_create_view <- function(schema = "main", view, query, replace = FALSE) {
+  schema <- .db_validate_name(schema, "schema")
+  view <- .db_validate_name(view, "view")
+
+  if (missing(query) || !is.character(query) || length(query) != 1 || !nzchar(query)) {
+    stop("query must be a non-empty SQL string.", call. = FALSE)
+  }
+
+  con <- .db_get_con()
+  if (is.null(con)) {
+    stop("Not connected. Use db_connect() first.", call. = FALSE)
+  }
+
+  catalog <- .db_get("catalog")
+  if (is.null(catalog)) {
+    stop("No DuckLake catalog configured. Use db_connect() first.", call. = FALSE)
+  }
+
+  qname <- paste0(catalog, ".", schema, ".", view)
+
+  create_keyword <- if (replace) "CREATE OR REPLACE VIEW" else "CREATE VIEW"
+  sql <- glue::glue("{create_keyword} {qname} AS {query}")
+
+  tryCatch({
+    DBI::dbExecute(con, sql)
+    message("Created view: ", qname)
+  }, error = function(e) {
+    stop("Failed to create view: ", e$message, call. = FALSE)
+  })
+
+  invisible(qname)
+}
+
+
+#' Drop a view from DuckLake
+#'
+#' @param schema Schema name (default "main")
+#' @param view View name
+#' @param if_exists If TRUE, don't error if view doesn't exist (default FALSE)
+#' @return Invisibly returns TRUE on success
+#' @export
+db_drop_view <- function(schema = "main", view, if_exists = FALSE) {
+  schema <- .db_validate_name(schema, "schema")
+  view <- .db_validate_name(view, "view")
+
+  con <- .db_get_con()
+  if (is.null(con)) {
+    stop("Not connected. Use db_connect() first.", call. = FALSE)
+  }
+
+  catalog <- .db_get("catalog")
+  if (is.null(catalog)) {
+    stop("No DuckLake catalog configured. Use db_connect() first.", call. = FALSE)
+  }
+
+  qname <- paste0(catalog, ".", schema, ".", view)
+  exists_clause <- if (if_exists) "IF EXISTS " else ""
+  sql <- glue::glue("DROP VIEW {exists_clause}{qname}")
+
+  DBI::dbExecute(con, sql)
+  message("Dropped view: ", qname)
+
+  invisible(TRUE)
+}
+
+
+# ==============================================================================
+# Macros
+# ==============================================================================
+
+#' Create a macro in DuckLake
+#'
+#' @description Creates a SQL macro stored in the DuckLake catalog. Macros are
+#'   reusable SQL expressions that can be scalar (return a single value) or
+#'   table-valued (return a table). Macros support time travel.
+#'
+#' @param schema Schema name (default "main")
+#' @param name Macro name
+#' @param params Character vector of parameter names, or named character vector
+#'   with types (e.g., `c(a = "INTEGER", b = "VARCHAR")`)
+#' @param body SQL expression for the macro body
+#' @param table_macro If TRUE, create a table macro (returns a table). Default FALSE.
+#' @param replace If TRUE, replace existing macro (default FALSE)
+#' @return Invisibly returns the qualified macro name
+#' @examples
+#' \dontrun{
+#' db_connect(...)
+#'
+#' # Scalar macro
+#' db_create_macro(name = "add_values",
+#'                 params = c("a", "b"),
+#'                 body = "a + b")
+#'
+#' # Table macro
+#' db_create_macro(name = "filtered_sales",
+#'                 params = c(min_value = "INTEGER"),
+#'                 body = "SELECT * FROM sales WHERE value > min_value",
+#'                 table_macro = TRUE)
+#'
+#' # Use the macros
+#' db_query("SELECT add_values(10, 20)")
+#' db_query("SELECT * FROM filtered_sales(100)")
+#' }
+#' @seealso [db_list_macros()], [db_drop_macro()]
+#' @export
+db_create_macro <- function(schema = "main", name, params = character(0),
+                            body, table_macro = FALSE, replace = FALSE) {
+  schema <- .db_validate_name(schema, "schema")
+  name <- .db_validate_name(name, "macro name")
+
+  if (missing(body) || !is.character(body) || length(body) != 1 || !nzchar(body)) {
+    stop("body must be a non-empty SQL string.", call. = FALSE)
+  }
+
+  con <- .db_get_con()
+  if (is.null(con)) {
+    stop("Not connected. Use db_connect() first.", call. = FALSE)
+  }
+
+  catalog <- .db_get("catalog")
+  if (is.null(catalog)) {
+    stop("No DuckLake catalog configured. Use db_connect() first.", call. = FALSE)
+  }
+
+  qname <- paste0(catalog, ".", schema, ".", name)
+
+  # Build parameter list
+  if (length(params) == 0) {
+    param_clause <- ""
+  } else if (is.null(names(params)) || all(names(params) == "")) {
+    # Untyped parameters
+    param_clause <- paste(params, collapse = ", ")
+  } else {
+    # Typed parameters
+    param_clause <- paste(names(params), params, collapse = ", ")
+  }
+
+  create_keyword <- if (replace) "CREATE OR REPLACE MACRO" else "CREATE MACRO"
+  table_keyword <- if (table_macro) " AS TABLE " else " AS "
+
+  sql <- glue::glue("{create_keyword} {qname}({param_clause}){table_keyword}{body}")
+
+  tryCatch({
+    DBI::dbExecute(con, sql)
+    message("Created macro: ", qname)
+  }, error = function(e) {
+    stop("Failed to create macro: ", e$message, call. = FALSE)
+  })
+
+  invisible(qname)
+}
+
+
+#' List macros in a DuckLake schema
+#'
+#' @param schema Schema name (default "main")
+#' @return Character vector of macro names
+#' @export
+db_list_macros <- function(schema = "main") {
+  schema <- .db_validate_name(schema, "schema")
+
+  con <- .db_get_con()
+  if (is.null(con)) {
+    stop("Not connected. Use db_connect() first.", call. = FALSE)
+  }
+
+  catalog <- .db_get("catalog")
+  if (is.null(catalog)) {
+    stop("No DuckLake catalog configured. Use db_connect() first.", call. = FALSE)
+  }
+
+  # Query DuckLake metadata for macros
+  metadata_schema <- paste0("__ducklake_metadata_", catalog)
+
+  result <- tryCatch({
+    DBI::dbGetQuery(con, glue::glue("
+      SELECT m.macro_name
+      FROM {metadata_schema}.ducklake_macro m
+      JOIN {metadata_schema}.ducklake_schema s ON m.schema_id = s.schema_id
+      WHERE s.schema_name = '{schema}'
+      ORDER BY m.macro_name
+    "))
+  }, error = function(e) {
+    # Fallback to duckdb_functions if metadata query fails
+    tryCatch({
+      DBI::dbGetQuery(con, glue::glue("
+        SELECT DISTINCT function_name as macro_name
+        FROM duckdb_functions()
+        WHERE schema_name = '{catalog}.{schema}'
+          AND function_type = 'macro'
+        ORDER BY function_name
+      "))
+    }, error = function(e2) {
+      data.frame(macro_name = character(0))
+    })
+  })
+
+  result$macro_name
+}
+
+
+#' Drop a macro from DuckLake
+#'
+#' @param schema Schema name (default "main")
+#' @param name Macro name
+#' @param if_exists If TRUE, don't error if macro doesn't exist (default FALSE)
+#' @return Invisibly returns TRUE on success
+#' @export
+db_drop_macro <- function(schema = "main", name, if_exists = FALSE) {
+  schema <- .db_validate_name(schema, "schema")
+  name <- .db_validate_name(name, "macro name")
+
+  con <- .db_get_con()
+  if (is.null(con)) {
+    stop("Not connected. Use db_connect() first.", call. = FALSE)
+  }
+
+  catalog <- .db_get("catalog")
+  if (is.null(catalog)) {
+    stop("No DuckLake catalog configured. Use db_connect() first.", call. = FALSE)
+  }
+
+  qname <- paste0(catalog, ".", schema, ".", name)
+  exists_clause <- if (if_exists) "IF EXISTS " else ""
+  sql <- glue::glue("DROP MACRO {exists_clause}{qname}")
+
+  DBI::dbExecute(con, sql)
+  message("Dropped macro: ", qname)
+
+  invisible(TRUE)
+}
+
+
+# ==============================================================================
+# Comments (SQL COMMENT ON)
+# ==============================================================================
+
+#' Add SQL comment to table or column
+#'
+#' @description Adds a SQL COMMENT to a table or column using DuckLake's native
+#'   COMMENT ON statement. Comments are stored in the DuckLake metadata and
+#'   support time travel. This is distinct from the higher-level documentation
+#'   provided by [db_describe()].
+#'
+#' @param schema Schema name (default "main")
+#' @param table Table name
+#' @param column Optional column name. If NULL, comment is added to the table.
+#' @param comment The comment text. Use NULL to remove comment.
+#' @return Invisibly returns TRUE on success
+#' @examples
+#' \dontrun{
+#' db_connect(...)
+#'
+#' # Comment on table
+#' db_comment(table = "users", comment = "Active user accounts")
+#'
+#' # Comment on column
+#' db_comment(table = "users", column = "email",
+#'            comment = "Primary email, must be unique")
+#'
+#' # Remove comment
+#' db_comment(table = "users", column = "email", comment = NULL)
+#' }
+#' @seealso [db_describe()] for higher-level documentation with tags and owner
+#' @export
+db_comment <- function(schema = "main", table, column = NULL, comment) {
+ schema <- .db_validate_name(schema, "schema")
+  table <- .db_validate_name(table, "table")
+
+  con <- .db_get_con()
+  if (is.null(con)) {
+    stop("Not connected. Use db_connect() first.", call. = FALSE)
+  }
+
+  catalog <- .db_get("catalog")
+  if (is.null(catalog)) {
+    stop("No DuckLake catalog configured. Use db_connect() first.", call. = FALSE)
+  }
+
+  qname <- paste0(catalog, ".", schema, ".", table)
+
+  if (is.null(column)) {
+    # Table comment
+    if (is.null(comment)) {
+      sql <- glue::glue("COMMENT ON TABLE {qname} IS NULL")
+    } else {
+      sql <- glue::glue("COMMENT ON TABLE {qname} IS {.db_sql_quote(comment)}")
+    }
+    DBI::dbExecute(con, sql)
+    message("Set comment on table ", qname)
+  } else {
+    # Column comment
+    column <- .db_validate_name(column, "column")
+    if (is.null(comment)) {
+      sql <- glue::glue("COMMENT ON COLUMN {qname}.{column} IS NULL")
+    } else {
+      sql <- glue::glue("COMMENT ON COLUMN {qname}.{column} IS {.db_sql_quote(comment)}")
+    }
+    DBI::dbExecute(con, sql)
+    message("Set comment on column ", qname, ".", column)
+  }
+
+  invisible(TRUE)
+}
+
+
+# ==============================================================================
+# Logging
+# ==============================================================================
+
+#' Enable DuckDB/DuckLake logging
+#'
+#' @description Enables logging for debugging and monitoring DuckLake operations.
+#'   DuckLake registers a dedicated log type for metadata queries. The built-in
+#'   QueryLog type can trace all SQL queries including internal ones.
+#'
+#' @param enable If TRUE, enable logging. If FALSE, disable.
+#' @param log_type Type of logging: "query" for SQL queries, "metadata" for
+#'   DuckLake metadata operations, or "all" for both. Default "query".
+#' @return Invisibly returns TRUE on success
+#' @examples
+#' \dontrun{
+#' db_connect(...)
+#'
+#' # Enable query logging
+#' db_enable_logging(TRUE)
+#'
+#' # Run some operations...
+#' db_read(table = "users") |> head()
+#'
+#' # View logs
+#' db_query("SELECT * FROM duckdb_logs() ORDER BY timestamp DESC LIMIT 20")
+#'
+#' # Disable logging
+#' db_enable_logging(FALSE)
+#' }
+#' @export
+db_enable_logging <- function(enable = TRUE, log_type = c("query", "metadata", "all")) {
+  log_type <- match.arg(log_type)
+
+  con <- .db_get_con()
+  if (is.null(con)) {
+    stop("Not connected. Use db_connect() first.", call. = FALSE)
+  }
+
+  if (enable) {
+    # Enable logging based on type
+    if (log_type %in% c("query", "all")) {
+      DBI::dbExecute(con, "SET enable_logging = true")
+    }
+    message("Logging enabled (", log_type, "). View with: db_query(\"SELECT * FROM duckdb_logs()\")")
+  } else {
+    DBI::dbExecute(con, "SET enable_logging = false")
+    message("Logging disabled")
+  }
+
+  invisible(TRUE)
+}
