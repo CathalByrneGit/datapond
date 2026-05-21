@@ -36,6 +36,8 @@
 <li><a class="dropdown-item" href="../articles/concepts.html">Data Lake Concepts</a></li>
     <li><a class="dropdown-item" href="../articles/catalog-backends.html">Catalog Backends: Choosing Your Metadata Store</a></li>
     <li><a class="dropdown-item" href="../articles/code-walkthrough.html">Code Walkthrough</a></li>
+    <li><hr class="dropdown-divider"></li>
+    <li><a class="dropdown-item" href="../articles/index.html">More articles...</a></li>
   </ul>
 </li>
       </ul>
@@ -937,245 +939,46 @@ may change before v2.0. Use in production at your own risk.</p>
 <span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level3">
-<h3 id="quack-security-future-possibilities">Quack Security: Future Possibilities<a class="anchor" aria-label="anchor" href="#quack-security-future-possibilities"></a>
+<h3 id="running-a-quack-server-1">Running a Quack Server<a class="anchor" aria-label="anchor" href="#running-a-quack-server-1"></a>
 </h3>
-<p>Quack is designed with a “bring your own security” philosophy. While
-datapond currently supports only token authentication, Quack itself
-supports custom authentication and authorization callbacks. Future
-datapond releases may support: | Feature | Description | Status |
-|———|————-|——–| | <strong>Token auth</strong> | Simple shared secret |
-Implemented | | <strong>Environment variable</strong> |
-<code>QUACK_TOKEN</code> fallback | Implemented | | <strong>Custom
-headers</strong> | JWT/Bearer tokens via reverse proxy | Future | |
-<strong>Credential callback</strong> | Dynamic token retrieval (e.g.,
-from keyring) | Future | | <strong>LDAP/AD integration</strong> |
-Enterprise directory auth | Requires server-side setup |</p>
-<p><strong>Production deployment pattern:</strong></p>
-<p>For production, the recommended approach is to put Quack behind a
-reverse proxy (nginx, Caddy) that handles TLS termination and
-authentication:</p>
-<pre><code>Client ──► HTTPS ──► nginx ──► HTTP ──► Quack Server
-                      │
-                TLS + Auth headers
-                Rate limiting
-                Audit logging</code></pre>
-<p>This keeps Quack simple while leveraging battle-tested HTTP
-infrastructure for security.</p>
-<p>See <a href="https://duckdb.org/docs/current/quack/setup/reverse_proxy" class="external-link">Securing
-Quack with a Reverse Proxy</a> for detailed setup instructions.</p>
+<p>To use Quack as a catalog backend, you need a running DuckDB server.
+A minimal server:</p>
+<div class="sourceCode" id="cb19"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb19-1"><a href="#cb19-1" tabindex="-1"></a><span class="ex">duckdb</span> <span class="at">-cmd</span> <span class="st">"</span></span>
+<span id="cb19-2"><a href="#cb19-2" tabindex="-1"></a><span class="st">  INSTALL quack; LOAD quack;</span></span>
+<span id="cb19-3"><a href="#cb19-3" tabindex="-1"></a><span class="st">  INSTALL ducklake; LOAD ducklake;</span></span>
+<span id="cb19-4"><a href="#cb19-4" tabindex="-1"></a><span class="st">  SET quack_token = 'my-secret-token';</span></span>
+<span id="cb19-5"><a href="#cb19-5" tabindex="-1"></a><span class="st">  ATTACH 'ducklake:catalog.ducklake' AS lake (DATA_PATH '/data/lake');</span></span>
+<span id="cb19-6"><a href="#cb19-6" tabindex="-1"></a><span class="st">  SELECT * FROM quack_serve();</span></span>
+<span id="cb19-7"><a href="#cb19-7" tabindex="-1"></a><span class="st">"</span></span></code></pre></div>
+<p>For production deployments (systemd, Docker, nginx, cloud), see
+<code><a href="../articles/quack-server.html">vignette("quack-server")</a></code>.</p>
 </div>
 <div class="section level3">
-<h3 id="setting-up-a-quack-server">Setting up a Quack Server<a class="anchor" aria-label="anchor" href="#setting-up-a-quack-server"></a>
+<h3 id="status-and-timeline-1">Status and Timeline<a class="anchor" aria-label="anchor" href="#status-and-timeline-1"></a>
 </h3>
-<p>Unlike SQLite or DuckDB file-based catalogs, Quack requires a running
-DuckDB server process. This section covers how to set up and run a Quack
-server for use with datapond.</p>
-<div class="section level4">
-<h4 id="basic-server-setup">Basic Server Setup<a class="anchor" aria-label="anchor" href="#basic-server-setup"></a>
-</h4>
-<p><strong>1. Start a simple server (development/testing):</strong></p>
-<div class="sourceCode" id="cb20"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb20-1"><a href="#cb20-1" tabindex="-1"></a><span class="co"># Start DuckDB with Quack server</span></span>
-<span id="cb20-2"><a href="#cb20-2" tabindex="-1"></a><span class="ex">duckdb</span> <span class="at">-cmd</span> <span class="st">"</span></span>
-<span id="cb20-3"><a href="#cb20-3" tabindex="-1"></a><span class="st">  INSTALL quack;</span></span>
-<span id="cb20-4"><a href="#cb20-4" tabindex="-1"></a><span class="st">  LOAD quack;</span></span>
-<span id="cb20-5"><a href="#cb20-5" tabindex="-1"></a><span class="st">  INSTALL ducklake;</span></span>
-<span id="cb20-6"><a href="#cb20-6" tabindex="-1"></a><span class="st">  LOAD ducklake;</span></span>
-<span id="cb20-7"><a href="#cb20-7" tabindex="-1"></a></span>
-<span id="cb20-8"><a href="#cb20-8" tabindex="-1"></a><span class="st">  -- Create and attach the DuckLake catalog</span></span>
-<span id="cb20-9"><a href="#cb20-9" tabindex="-1"></a><span class="st">  ATTACH 'ducklake:catalog.ducklake' AS lake (DATA_PATH '/data/lake');</span></span>
-<span id="cb20-10"><a href="#cb20-10" tabindex="-1"></a></span>
-<span id="cb20-11"><a href="#cb20-11" tabindex="-1"></a><span class="st">  -- Start the Quack server</span></span>
-<span id="cb20-12"><a href="#cb20-12" tabindex="-1"></a><span class="st">  SELECT * FROM quack_serve();</span></span>
-<span id="cb20-13"><a href="#cb20-13" tabindex="-1"></a><span class="st">"</span></span></code></pre></div>
-<p>This prints the connection details:</p>
-<pre><code>┌─────────────────────────────────┬────────────────────────────────┬──────────────────────────┐
-│ listen_uri                      │ http_url                       │ token                    │
-├─────────────────────────────────┼────────────────────────────────┼──────────────────────────┤
-│ quack:localhost:9494            │ http://localhost:9494          │ abc123xyz...             │
-└─────────────────────────────────┴────────────────────────────────┴──────────────────────────┘</code></pre>
-<p><strong>2. Set a custom token:</strong></p>
-<div class="sourceCode" id="cb22"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb22-1"><a href="#cb22-1" tabindex="-1"></a><span class="ex">duckdb</span> <span class="at">-cmd</span> <span class="st">"</span></span>
-<span id="cb22-2"><a href="#cb22-2" tabindex="-1"></a><span class="st">  INSTALL quack; LOAD quack;</span></span>
-<span id="cb22-3"><a href="#cb22-3" tabindex="-1"></a><span class="st">  INSTALL ducklake; LOAD ducklake;</span></span>
-<span id="cb22-4"><a href="#cb22-4" tabindex="-1"></a></span>
-<span id="cb22-5"><a href="#cb22-5" tabindex="-1"></a><span class="st">  -- Set a known token (min 4 characters)</span></span>
-<span id="cb22-6"><a href="#cb22-6" tabindex="-1"></a><span class="st">  SET quack_token = 'my-secret-token';</span></span>
-<span id="cb22-7"><a href="#cb22-7" tabindex="-1"></a></span>
-<span id="cb22-8"><a href="#cb22-8" tabindex="-1"></a><span class="st">  ATTACH 'ducklake:catalog.ducklake' AS lake (DATA_PATH '/data/lake');</span></span>
-<span id="cb22-9"><a href="#cb22-9" tabindex="-1"></a><span class="st">  SELECT * FROM quack_serve();</span></span>
-<span id="cb22-10"><a href="#cb22-10" tabindex="-1"></a><span class="st">"</span></span></code></pre></div>
-<p><strong>3. Connect from R:</strong></p>
-<div class="sourceCode" id="cb23"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="../reference/db_connect.html">db_connect</a></span><span class="op">(</span></span>
-<span>  catalog_type <span class="op">=</span> <span class="st">"quack"</span>,</span>
-<span>  metadata_path <span class="op">=</span> <span class="st">"quack:localhost:9494/lake"</span>,</span>
-<span>  data_path <span class="op">=</span> <span class="st">"/data/lake"</span>,</span>
-<span>  quack_token <span class="op">=</span> <span class="st">"my-secret-token"</span></span>
-<span><span class="op">)</span></span></code></pre></div>
-</div>
-<div class="section level4">
-<h4 id="running-as-a-service-linux">Running as a Service (Linux)<a class="anchor" aria-label="anchor" href="#running-as-a-service-linux"></a>
-</h4>
-<p>For production, run the Quack server as a systemd service:</p>
-<p><strong>1. Create a startup script</strong>
-(<code>/opt/duckdb/start-quack.sql</code>):</p>
-<div class="sourceCode" id="cb24"><pre class="sourceCode sql"><code class="sourceCode sql"><span id="cb24-1"><a href="#cb24-1" tabindex="-1"></a>INSTALL quack;</span>
-<span id="cb24-2"><a href="#cb24-2" tabindex="-1"></a>LOAD quack;</span>
-<span id="cb24-3"><a href="#cb24-3" tabindex="-1"></a>INSTALL ducklake;</span>
-<span id="cb24-4"><a href="#cb24-4" tabindex="-1"></a>LOAD ducklake;</span>
-<span id="cb24-5"><a href="#cb24-5" tabindex="-1"></a></span>
-<span id="cb24-6"><a href="#cb24-6" tabindex="-1"></a><span class="co">-- Set authentication token from environment</span></span>
-<span id="cb24-7"><a href="#cb24-7" tabindex="-1"></a><span class="kw">SET</span> quack_token <span class="op">=</span> getenv(<span class="st">'QUACK_TOKEN'</span>);</span>
-<span id="cb24-8"><a href="#cb24-8" tabindex="-1"></a></span>
-<span id="cb24-9"><a href="#cb24-9" tabindex="-1"></a><span class="co">-- Attach the DuckLake catalog</span></span>
-<span id="cb24-10"><a href="#cb24-10" tabindex="-1"></a>ATTACH <span class="st">'ducklake:/opt/duckdb/catalog.ducklake'</span> <span class="kw">AS</span> lake</span>
-<span id="cb24-11"><a href="#cb24-11" tabindex="-1"></a>  (DATA_PATH <span class="st">'/data/lake'</span>);</span>
-<span id="cb24-12"><a href="#cb24-12" tabindex="-1"></a></span>
-<span id="cb24-13"><a href="#cb24-13" tabindex="-1"></a><span class="co">-- Start server (blocks)</span></span>
-<span id="cb24-14"><a href="#cb24-14" tabindex="-1"></a><span class="kw">SELECT</span> <span class="op">*</span> <span class="kw">FROM</span> quack_serve(port <span class="op">:=</span> <span class="dv">9494</span>);</span></code></pre></div>
-<p><strong>2. Create systemd service</strong>
-(<code>/etc/systemd/system/duckdb-quack.service</code>):</p>
-<div class="sourceCode" id="cb25"><pre class="sourceCode ini"><code class="sourceCode ini"><span id="cb25-1"><a href="#cb25-1" tabindex="-1"></a><span class="kw">[Unit]</span></span>
-<span id="cb25-2"><a href="#cb25-2" tabindex="-1"></a><span class="dt">Description</span><span class="ot">=</span><span class="st">DuckDB Quack Server</span></span>
-<span id="cb25-3"><a href="#cb25-3" tabindex="-1"></a><span class="dt">After</span><span class="ot">=</span><span class="st">network.target</span></span>
-<span id="cb25-4"><a href="#cb25-4" tabindex="-1"></a></span>
-<span id="cb25-5"><a href="#cb25-5" tabindex="-1"></a><span class="kw">[Service]</span></span>
-<span id="cb25-6"><a href="#cb25-6" tabindex="-1"></a><span class="dt">Type</span><span class="ot">=</span><span class="st">simple</span></span>
-<span id="cb25-7"><a href="#cb25-7" tabindex="-1"></a><span class="dt">User</span><span class="ot">=</span><span class="st">duckdb</span></span>
-<span id="cb25-8"><a href="#cb25-8" tabindex="-1"></a><span class="dt">Group</span><span class="ot">=</span><span class="st">duckdb</span></span>
-<span id="cb25-9"><a href="#cb25-9" tabindex="-1"></a><span class="dt">Environment</span><span class="ot">=</span><span class="st">QUACK_TOKEN=your-secret-token-here</span></span>
-<span id="cb25-10"><a href="#cb25-10" tabindex="-1"></a><span class="dt">WorkingDirectory</span><span class="ot">=</span><span class="st">/opt/duckdb</span></span>
-<span id="cb25-11"><a href="#cb25-11" tabindex="-1"></a><span class="dt">ExecStart</span><span class="ot">=</span><span class="st">/usr/local/bin/duckdb -init /opt/duckdb/start-quack.sql</span></span>
-<span id="cb25-12"><a href="#cb25-12" tabindex="-1"></a><span class="dt">Restart</span><span class="ot">=</span><span class="st">always</span></span>
-<span id="cb25-13"><a href="#cb25-13" tabindex="-1"></a><span class="dt">RestartSec</span><span class="ot">=</span><span class="dv">10</span></span>
-<span id="cb25-14"><a href="#cb25-14" tabindex="-1"></a></span>
-<span id="cb25-15"><a href="#cb25-15" tabindex="-1"></a><span class="kw">[Install]</span></span>
-<span id="cb25-16"><a href="#cb25-16" tabindex="-1"></a><span class="dt">WantedBy</span><span class="ot">=</span><span class="st">multi-user.target</span></span></code></pre></div>
-<p><strong>3. Enable and start:</strong></p>
-<div class="sourceCode" id="cb26"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb26-1"><a href="#cb26-1" tabindex="-1"></a><span class="fu">sudo</span> systemctl daemon-reload</span>
-<span id="cb26-2"><a href="#cb26-2" tabindex="-1"></a><span class="fu">sudo</span> systemctl enable duckdb-quack</span>
-<span id="cb26-3"><a href="#cb26-3" tabindex="-1"></a><span class="fu">sudo</span> systemctl start duckdb-quack</span>
-<span id="cb26-4"><a href="#cb26-4" tabindex="-1"></a></span>
-<span id="cb26-5"><a href="#cb26-5" tabindex="-1"></a><span class="co"># Check status</span></span>
-<span id="cb26-6"><a href="#cb26-6" tabindex="-1"></a><span class="fu">sudo</span> systemctl status duckdb-quack</span></code></pre></div>
-</div>
-<div class="section level4">
-<h4 id="running-with-docker">Running with Docker<a class="anchor" aria-label="anchor" href="#running-with-docker"></a>
-</h4>
-<div class="sourceCode" id="cb27"><pre class="sourceCode dockerfile"><code class="sourceCode dockerfile"><span id="cb27-1"><a href="#cb27-1" tabindex="-1"></a><span class="co"># Dockerfile</span></span>
-<span id="cb27-2"><a href="#cb27-2" tabindex="-1"></a><span class="kw">FROM</span> ubuntu:22.04</span>
-<span id="cb27-3"><a href="#cb27-3" tabindex="-1"></a></span>
-<span id="cb27-4"><a href="#cb27-4" tabindex="-1"></a><span class="kw">RUN</span> <span class="ex">apt-get</span> update <span class="kw">&amp;&amp;</span> <span class="ex">apt-get</span> install <span class="at">-y</span> wget unzip</span>
-<span id="cb27-5"><a href="#cb27-5" tabindex="-1"></a><span class="kw">RUN</span> <span class="fu">wget</span> https://github.com/duckdb/duckdb/releases/download/v1.5.3/duckdb_cli-linux-amd64.zip <span class="dt">\</span></span>
-<span id="cb27-6"><a href="#cb27-6" tabindex="-1"></a>    <span class="kw">&amp;&amp;</span> <span class="fu">unzip</span> duckdb_cli-linux-amd64.zip <span class="at">-d</span> /usr/local/bin/</span>
-<span id="cb27-7"><a href="#cb27-7" tabindex="-1"></a></span>
-<span id="cb27-8"><a href="#cb27-8" tabindex="-1"></a><span class="kw">COPY</span> start-quack.sql /opt/duckdb/</span>
-<span id="cb27-9"><a href="#cb27-9" tabindex="-1"></a><span class="kw">VOLUME</span> [<span class="st">"/data"</span>]</span>
-<span id="cb27-10"><a href="#cb27-10" tabindex="-1"></a><span class="kw">EXPOSE</span> 9494</span>
-<span id="cb27-11"><a href="#cb27-11" tabindex="-1"></a></span>
-<span id="cb27-12"><a href="#cb27-12" tabindex="-1"></a><span class="kw">CMD</span> [<span class="st">"duckdb"</span>, <span class="st">"-init"</span>, <span class="st">"/opt/duckdb/start-quack.sql"</span>]</span></code></pre></div>
-<div class="sourceCode" id="cb28"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb28-1"><a href="#cb28-1" tabindex="-1"></a><span class="co"># Build and run</span></span>
-<span id="cb28-2"><a href="#cb28-2" tabindex="-1"></a><span class="ex">docker</span> build <span class="at">-t</span> duckdb-quack .</span>
-<span id="cb28-3"><a href="#cb28-3" tabindex="-1"></a><span class="ex">docker</span> run <span class="at">-d</span> <span class="dt">\</span></span>
-<span id="cb28-4"><a href="#cb28-4" tabindex="-1"></a>  <span class="at">-p</span> 9494:9494 <span class="dt">\</span></span>
-<span id="cb28-5"><a href="#cb28-5" tabindex="-1"></a>  <span class="at">-v</span> /path/to/data:/data <span class="dt">\</span></span>
-<span id="cb28-6"><a href="#cb28-6" tabindex="-1"></a>  <span class="at">-e</span> QUACK_TOKEN=my-secret-token <span class="dt">\</span></span>
-<span id="cb28-7"><a href="#cb28-7" tabindex="-1"></a>  <span class="at">--name</span> quack-server <span class="dt">\</span></span>
-<span id="cb28-8"><a href="#cb28-8" tabindex="-1"></a>  duckdb-quack</span></code></pre></div>
-</div>
-<div class="section level4">
-<h4 id="production-setup-with-nginx">Production Setup with nginx<a class="anchor" aria-label="anchor" href="#production-setup-with-nginx"></a>
-</h4>
-<p>For production, put nginx in front of Quack for TLS and additional
-security:</p>
-<p><strong>1. nginx configuration</strong>
-(<code>/etc/nginx/sites-available/quack</code>):</p>
-<pre class="nginx"><code>server {
-    listen 443 ssl http2;
-    server_name duckdb.example.com;
-
-    ssl_certificate /etc/letsencrypt/live/duckdb.example.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/duckdb.example.com/privkey.pem;
-
-    location / {
-        proxy_pass http://127.0.0.1:9494;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        # Pass through authentication header
-        proxy_set_header Authorization $http_authorization;
-
-        # Timeouts for long queries
-        proxy_read_timeout 300s;
-        proxy_connect_timeout 75s;
-    }
-}</code></pre>
-<p><strong>2. Connect via HTTPS:</strong></p>
-<div class="sourceCode" id="cb30"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Quack client assumes HTTPS for non-localhost URIs</span></span>
-<span><span class="fu"><a href="../reference/db_connect.html">db_connect</a></span><span class="op">(</span></span>
-<span>  catalog_type <span class="op">=</span> <span class="st">"quack"</span>,</span>
-<span>  metadata_path <span class="op">=</span> <span class="st">"quack:duckdb.example.com/lake"</span>,</span>
-<span>  data_path <span class="op">=</span> <span class="st">"/data/lake"</span>,</span>
-<span>  quack_token <span class="op">=</span> <span class="st">"my-secret-token"</span></span>
-<span><span class="op">)</span></span></code></pre></div>
-</div>
-<div class="section level4">
-<h4 id="quick-deployment-aws">Quick Deployment (AWS)<a class="anchor" aria-label="anchor" href="#quick-deployment-aws"></a>
-</h4>
-<p>DuckDB provides a one-click CloudFormation template for AWS:</p>
-<ol style="list-style-type: decimal">
-<li>Go to <a href="https://duckdb.org/docs/current/quack/setup/deployment" class="external-link">Deploying
-Quack</a>
-</li>
-<li>Click “Launch Stack” for your region</li>
-<li>Configure instance size, token, and data path</li>
-<li>Stack provisions EC2 + nginx + Let’s Encrypt automatically</li>
-</ol>
-</div>
-<div class="section level4">
-<h4 id="monitoring-and-troubleshooting">Monitoring and Troubleshooting<a class="anchor" aria-label="anchor" href="#monitoring-and-troubleshooting"></a>
-</h4>
-<p><strong>Check server status:</strong></p>
-<div class="sourceCode" id="cb31"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb31-1"><a href="#cb31-1" tabindex="-1"></a><span class="co"># Is the server running?</span></span>
-<span id="cb31-2"><a href="#cb31-2" tabindex="-1"></a><span class="ex">curl</span> http://localhost:9494/health</span>
-<span id="cb31-3"><a href="#cb31-3" tabindex="-1"></a></span>
-<span id="cb31-4"><a href="#cb31-4" tabindex="-1"></a><span class="co"># View connections (from DuckDB CLI on server)</span></span>
-<span id="cb31-5"><a href="#cb31-5" tabindex="-1"></a><span class="ex">SELECT</span> <span class="pp">*</span> FROM quack_connections<span class="er">(</span><span class="kw">);</span></span></code></pre></div>
-<p><strong>Common issues:</strong></p>
 <table class="table">
-<colgroup>
-<col width="41%">
-<col width="58%">
-</colgroup>
 <thead><tr class="header">
-<th>Issue</th>
-<th>Solution</th>
+<th>Version</th>
+<th>Status</th>
 </tr></thead>
 <tbody>
 <tr class="odd">
-<td>Connection refused</td>
-<td>Check server is running, firewall allows port 9494</td>
+<td><strong>DuckDB 1.5.2</strong></td>
+<td>Quack beta available</td>
 </tr>
 <tr class="even">
-<td>Authentication failed</td>
-<td>Verify token matches between client and server</td>
+<td><strong>DuckDB 1.5.3</strong></td>
+<td>DuckLake + Quack integration</td>
 </tr>
 <tr class="odd">
-<td>Timeout on large queries</td>
-<td>Increase <code>proxy_read_timeout</code> in nginx</td>
-</tr>
-<tr class="even">
-<td>“Extension not found”</td>
-<td>Run <code>INSTALL quack; INSTALL ducklake;</code> on server</td>
+<td><strong>DuckDB 2.0 (Fall 2026)</strong></td>
+<td>Production-ready Quack</td>
 </tr>
 </tbody>
 </table>
+<p><strong>Warning:</strong> The protocol, function names, and defaults
+may change before v2.0. Use in production at your own risk.</p>
 <hr>
-</div>
 </div>
 </div>
 <div class="section level2">
@@ -1186,7 +989,7 @@ Quack</a>
 </h3>
 <p>DuckLake 1.0 includes native support for geometry types via the
 DuckDB spatial extension:</p>
-<div class="sourceCode" id="cb32"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Load spatial extension</span></span>
 <span><span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbExecute.html" class="external-link">dbExecute</a></span><span class="op">(</span><span class="va">con</span>, <span class="st">"INSTALL spatial; LOAD spatial;"</span><span class="op">)</span></span>
 <span></span>
@@ -1207,7 +1010,7 @@ DuckDB spatial extension:</p>
 <h3 id="geoparquet-storage">GeoParquet Storage<a class="anchor" aria-label="anchor" href="#geoparquet-storage"></a>
 </h3>
 <p>DuckDB reads and writes <a href="https://geoparquet.org/" class="external-link">GeoParquet</a> natively:</p>
-<div class="sourceCode" id="cb33"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Spatial data stored as GeoParquet</span></span>
 <span><span class="va">boundaries</span> <span class="op">&lt;-</span> <span class="fu">db_read</span><span class="op">(</span>table <span class="op">=</span> <span class="st">"boundaries"</span><span class="op">)</span></span>
 <span></span>
@@ -1259,7 +1062,7 @@ DuckDB spatial extension:</p>
 </h3>
 <p>For unsupported formats, store metadata in DuckLake while keeping
 files external:</p>
-<div class="sourceCode" id="cb34"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Create a metadata table for raster files</span></span>
 <span><span class="va">raster_catalog</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
 <span>  file_id <span class="op">=</span> <span class="fl">1</span><span class="op">:</span><span class="fl">3</span>,</span>
@@ -1298,7 +1101,7 @@ files external:</p>
 <div class="section level3">
 <h3 id="querying-spatial-metadata">Querying Spatial Metadata<a class="anchor" aria-label="anchor" href="#querying-spatial-metadata"></a>
 </h3>
-<div class="sourceCode" id="cb35"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb23"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Find rasters that intersect an area of interest</span></span>
 <span><span class="va">raster_catalog</span> <span class="op">&lt;-</span> <span class="fu">db_read</span><span class="op">(</span>table <span class="op">=</span> <span class="st">"raster_catalog"</span><span class="op">)</span></span>
 <span></span>
@@ -1468,7 +1271,7 @@ changes the calculus significantly from cloud deployments.</p>
 </h4>
 <p>For most internal analytics teams, <strong>SQLite on a network
 share</strong> is the best choice:</p>
-<div class="sourceCode" id="cb39"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb27"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/db_connect.html">db_connect</a></span><span class="op">(</span></span>
 <span>  catalog_type <span class="op">=</span> <span class="st">"sqlite"</span>,</span>
 <span>  metadata_path <span class="op">=</span> <span class="st">"//FILE-SERVER/DataLake/catalog.sqlite"</span>,</span>

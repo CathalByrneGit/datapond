@@ -5,7 +5,8 @@ articles:
   catalog-backends: catalog-backends.html
   code-walkthrough: code-walkthrough.html
   concepts: concepts.html
-last_built: 2026-05-21T16:41Z
+  quack-server: quack-server.html
+last_built: 2026-05-21T23:08Z
 urls:
   reference: https://cathalbyrnegit.github.io/datapond/reference
   article: https://cathalbyrnegit.github.io/datapond/articles

@@ -565,259 +565,34 @@ db_connect(
 )
 ```
 
-### Quack Security: Future Possibilities
+### Running a Quack Server
 
-Quack is designed with a “bring your own security” philosophy. While
-datapond currently supports only token authentication, Quack itself
-supports custom authentication and authorization callbacks. Future
-datapond releases may support: \| Feature \| Description \| Status \|
-\|———\|————-\|——–\| \| **Token auth** \| Simple shared secret \|
-Implemented \| \| **Environment variable** \| `QUACK_TOKEN` fallback \|
-Implemented \| \| **Custom headers** \| JWT/Bearer tokens via reverse
-proxy \| Future \| \| **Credential callback** \| Dynamic token retrieval
-(e.g., from keyring) \| Future \| \| **LDAP/AD integration** \|
-Enterprise directory auth \| Requires server-side setup \|
-
-**Production deployment pattern:**
-
-For production, the recommended approach is to put Quack behind a
-reverse proxy (nginx, Caddy) that handles TLS termination and
-authentication:
-
-    Client ──► HTTPS ──► nginx ──► HTTP ──► Quack Server
-                          │
-                    TLS + Auth headers
-                    Rate limiting
-                    Audit logging
-
-This keeps Quack simple while leveraging battle-tested HTTP
-infrastructure for security.
-
-See [Securing Quack with a Reverse
-Proxy](https://duckdb.org/docs/current/quack/setup/reverse_proxy) for
-detailed setup instructions.
-
-### Setting up a Quack Server
-
-Unlike SQLite or DuckDB file-based catalogs, Quack requires a running
-DuckDB server process. This section covers how to set up and run a Quack
-server for use with datapond.
-
-#### Basic Server Setup
-
-**1. Start a simple server (development/testing):**
-
-``` bash
-# Start DuckDB with Quack server
-duckdb -cmd "
-  INSTALL quack;
-  LOAD quack;
-  INSTALL ducklake;
-  LOAD ducklake;
-
-  -- Create and attach the DuckLake catalog
-  ATTACH 'ducklake:catalog.ducklake' AS lake (DATA_PATH '/data/lake');
-
-  -- Start the Quack server
-  SELECT * FROM quack_serve();
-"
-```
-
-This prints the connection details:
-
-    ┌─────────────────────────────────┬────────────────────────────────┬──────────────────────────┐
-    │ listen_uri                      │ http_url                       │ token                    │
-    ├─────────────────────────────────┼────────────────────────────────┼──────────────────────────┤
-    │ quack:localhost:9494            │ http://localhost:9494          │ abc123xyz...             │
-    └─────────────────────────────────┴────────────────────────────────┴──────────────────────────┘
-
-**2. Set a custom token:**
+To use Quack as a catalog backend, you need a running DuckDB server. A
+minimal server:
 
 ``` bash
 duckdb -cmd "
   INSTALL quack; LOAD quack;
   INSTALL ducklake; LOAD ducklake;
-
-  -- Set a known token (min 4 characters)
   SET quack_token = 'my-secret-token';
-
   ATTACH 'ducklake:catalog.ducklake' AS lake (DATA_PATH '/data/lake');
   SELECT * FROM quack_serve();
 "
 ```
 
-**3. Connect from R:**
+For production deployments (systemd, Docker, nginx, cloud), see
+[`vignette("quack-server")`](https://cathalbyrnegit.github.io/datapond/articles/quack-server.md).
 
-``` r
+### Status and Timeline
 
-db_connect(
-  catalog_type = "quack",
-  metadata_path = "quack:localhost:9494/lake",
-  data_path = "/data/lake",
-  quack_token = "my-secret-token"
-)
-```
+| Version                    | Status                       |
+|----------------------------|------------------------------|
+| **DuckDB 1.5.2**           | Quack beta available         |
+| **DuckDB 1.5.3**           | DuckLake + Quack integration |
+| **DuckDB 2.0 (Fall 2026)** | Production-ready Quack       |
 
-#### Running as a Service (Linux)
-
-For production, run the Quack server as a systemd service:
-
-**1. Create a startup script** (`/opt/duckdb/start-quack.sql`):
-
-``` sql
-INSTALL quack;
-LOAD quack;
-INSTALL ducklake;
-LOAD ducklake;
-
--- Set authentication token from environment
-SET quack_token = getenv('QUACK_TOKEN');
-
--- Attach the DuckLake catalog
-ATTACH 'ducklake:/opt/duckdb/catalog.ducklake' AS lake
-  (DATA_PATH '/data/lake');
-
--- Start server (blocks)
-SELECT * FROM quack_serve(port := 9494);
-```
-
-**2. Create systemd service**
-(`/etc/systemd/system/duckdb-quack.service`):
-
-``` ini
-[Unit]
-Description=DuckDB Quack Server
-After=network.target
-
-[Service]
-Type=simple
-User=duckdb
-Group=duckdb
-Environment=QUACK_TOKEN=your-secret-token-here
-WorkingDirectory=/opt/duckdb
-ExecStart=/usr/local/bin/duckdb -init /opt/duckdb/start-quack.sql
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-```
-
-**3. Enable and start:**
-
-``` bash
-sudo systemctl daemon-reload
-sudo systemctl enable duckdb-quack
-sudo systemctl start duckdb-quack
-
-# Check status
-sudo systemctl status duckdb-quack
-```
-
-#### Running with Docker
-
-``` dockerfile
-# Dockerfile
-FROM ubuntu:22.04
-
-RUN apt-get update && apt-get install -y wget unzip
-RUN wget https://github.com/duckdb/duckdb/releases/download/v1.5.3/duckdb_cli-linux-amd64.zip \
-    && unzip duckdb_cli-linux-amd64.zip -d /usr/local/bin/
-
-COPY start-quack.sql /opt/duckdb/
-VOLUME ["/data"]
-EXPOSE 9494
-
-CMD ["duckdb", "-init", "/opt/duckdb/start-quack.sql"]
-```
-
-``` bash
-# Build and run
-docker build -t duckdb-quack .
-docker run -d \
-  -p 9494:9494 \
-  -v /path/to/data:/data \
-  -e QUACK_TOKEN=my-secret-token \
-  --name quack-server \
-  duckdb-quack
-```
-
-#### Production Setup with nginx
-
-For production, put nginx in front of Quack for TLS and additional
-security:
-
-**1. nginx configuration** (`/etc/nginx/sites-available/quack`):
-
-``` nginx
-server {
-    listen 443 ssl http2;
-    server_name duckdb.example.com;
-
-    ssl_certificate /etc/letsencrypt/live/duckdb.example.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/duckdb.example.com/privkey.pem;
-
-    location / {
-        proxy_pass http://127.0.0.1:9494;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        # Pass through authentication header
-        proxy_set_header Authorization $http_authorization;
-
-        # Timeouts for long queries
-        proxy_read_timeout 300s;
-        proxy_connect_timeout 75s;
-    }
-}
-```
-
-**2. Connect via HTTPS:**
-
-``` r
-
-# Quack client assumes HTTPS for non-localhost URIs
-db_connect(
-  catalog_type = "quack",
-  metadata_path = "quack:duckdb.example.com/lake",
-  data_path = "/data/lake",
-  quack_token = "my-secret-token"
-)
-```
-
-#### Quick Deployment (AWS)
-
-DuckDB provides a one-click CloudFormation template for AWS:
-
-1.  Go to [Deploying
-    Quack](https://duckdb.org/docs/current/quack/setup/deployment)
-2.  Click “Launch Stack” for your region
-3.  Configure instance size, token, and data path
-4.  Stack provisions EC2 + nginx + Let’s Encrypt automatically
-
-#### Monitoring and Troubleshooting
-
-**Check server status:**
-
-``` bash
-# Is the server running?
-curl http://localhost:9494/health
-
-# View connections (from DuckDB CLI on server)
-SELECT * FROM quack_connections();
-```
-
-**Common issues:**
-
-| Issue | Solution |
-|----|----|
-| Connection refused | Check server is running, firewall allows port 9494 |
-| Authentication failed | Verify token matches between client and server |
-| Timeout on large queries | Increase `proxy_read_timeout` in nginx |
-| “Extension not found” | Run `INSTALL quack; INSTALL ducklake;` on server |
+**Warning:** The protocol, function names, and defaults may change
+before v2.0. Use in production at your own risk.
 
 ------------------------------------------------------------------------
 

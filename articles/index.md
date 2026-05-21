@@ -8,3 +8,8 @@
   Store](https://cathalbyrnegit.github.io/datapond/articles/catalog-backends.md):
 - [Code
   Walkthrough](https://cathalbyrnegit.github.io/datapond/articles/code-walkthrough.md):
+
+### Advanced
+
+- [Setting up a Quack
+  Server](https://cathalbyrnegit.github.io/datapond/articles/quack-server.md):
