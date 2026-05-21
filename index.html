@@ -159,6 +159,15 @@
 <span>  <span class="op">)</span></span>
 <span><span class="op">)</span></span>
 <span></span>
+<span><span class="co"># Transform data without leaving DuckDB (zero-copy, no R memory)</span></span>
+<span><span class="co"># Just pipe a lazy table from db_read() through dplyr and into db_write()</span></span>
+<span><span class="fu">db_read</span><span class="op">(</span>table <span class="op">=</span> <span class="st">"raw_imports"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/stats/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">year</span> <span class="op">==</span> <span class="fl">2024</span>, <span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NA.html" class="external-link">is.na</a></span><span class="op">(</span><span class="va">value</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu">mutate</span><span class="op">(</span>value_eur <span class="op">=</span> <span class="va">value</span> <span class="op">*</span> <span class="va">exchange_rate</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu">group_by</span><span class="op">(</span><span class="va">country</span>, <span class="va">month</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu">summarise</span><span class="op">(</span>total <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/sum.html" class="external-link">sum</a></span><span class="op">(</span><span class="va">value_eur</span><span class="op">)</span>, .groups <span class="op">=</span> <span class="st">"drop"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu">db_write</span><span class="op">(</span>schema <span class="op">=</span> <span class="st">"clean"</span>, table <span class="op">=</span> <span class="st">"monthly_summary"</span><span class="op">)</span></span>
+<span></span>
 <span><span class="co"># Arrow integration - read/write without DuckDB compute</span></span>
 <span><span class="va">arrow_tbl</span> <span class="op">&lt;-</span> <span class="fu">db_read_arrow</span><span class="op">(</span>table <span class="op">=</span> <span class="st">"imports"</span>, as_data_frame <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
 <span><span class="fu">db_write_arrow</span><span class="op">(</span><span class="va">arrow_tbl</span>, table <span class="op">=</span> <span class="st">"imports_copy"</span><span class="op">)</span></span>
@@ -294,7 +303,7 @@
 <div class="section level2">
 <h2 id="choosing-a-catalog-backend">Choosing a Catalog Backend<a class="anchor" aria-label="anchor" href="#choosing-a-catalog-backend"></a>
 </h2>
-<p>DuckLake stores metadata (table definitions, snapshots, file tracking) in a <strong>catalog database</strong>. You can choose from three backends:</p>
+<p>DuckLake stores metadata (table definitions, snapshots, file tracking) in a <strong>catalog database</strong>. You can choose from four backends:</p>
 <table class="table">
 <colgroup>
 <col width="25%">
@@ -327,6 +336,12 @@
 <td>Full concurrent access</td>
 <td>Large teams, remote access</td>
 </tr>
+<tr>
+<td>Quack</td>
+<td><code>"quack"</code></td>
+<td>Multi-writer (EXPERIMENTAL)</td>
+<td>Future: serverless multi-writer</td>
+</tr>
 </tbody>
 </table>
 <div class="section level3">
@@ -357,12 +372,34 @@
 <span>  data_path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/data"</span></span>
 <span><span class="op">)</span></span></code></pre></div>
 </div>
+<div class="section level3">
+<h3 id="quack-remote-protocol-experimental">Quack Remote Protocol (EXPERIMENTAL)<a class="anchor" aria-label="anchor" href="#quack-remote-protocol-experimental"></a>
+</h3>
+<p>The <a href="https://duckdb.org/2026/05/12/quack-remote-protocol" class="external-link">Quack protocol</a> enables client-server DuckDB with multiple concurrent writers. DuckLake now supports Quack as a catalog backend (DuckDB 1.5.3+).</p>
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Connect to a DuckDB server running Quack</span></span>
+<span><span class="fu"><a href="reference/db_connect.html">db_connect</a></span><span class="op">(</span></span>
+<span>  catalog_type <span class="op">=</span> <span class="st">"quack"</span>,</span>
+<span>  metadata_path <span class="op">=</span> <span class="st">"quack:db-server.cso.ie:9494/catalog.ducklake"</span>,</span>
+<span>  data_path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/data"</span>,</span>
+<span>  quack_token <span class="op">=</span> <span class="st">"my-secret-token"</span>  </span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Or use environment variable</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/Sys.setenv.html" class="external-link">Sys.setenv</a></span><span class="op">(</span>QUACK_TOKEN <span class="op">=</span> <span class="st">"my-secret-token"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/db_connect.html">db_connect</a></span><span class="op">(</span></span>
+<span>  catalog_type <span class="op">=</span> <span class="st">"quack"</span>,</span>
+<span>  metadata_path <span class="op">=</span> <span class="st">"quack:db-server.cso.ie:9494/catalog.ducklake"</span>,</span>
+<span>  data_path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/data"</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+<p><strong>Note:</strong> Quack is currently in beta (DuckDB 1.5.x). Production-ready version planned for DuckDB 2.0 (Fall 2026). See <code><a href="articles/catalog-backends.html">vignette("catalog-backends")</a></code> for security options.</p>
+</div>
 </div>
 <div class="section level2">
 <h2 id="access-control">Access Control<a class="anchor" aria-label="anchor" href="#access-control"></a>
 </h2>
 <p>datapond relies on <strong>file system permissions</strong> for access control. DuckLake automatically organises data into <code>{schema}/{table}/</code> folders within the data path, so you can grant permissions at the schema level.</p>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Create schemas - DuckLake creates data folders automatically</span></span>
 <span><span class="fu"><a href="reference/db_create_schema.html">db_create_schema</a></span><span class="op">(</span><span class="st">"trade"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="reference/db_create_schema.html">db_create_schema</a></span><span class="op">(</span><span class="st">"labour"</span><span class="op">)</span></span>
@@ -438,7 +475,7 @@
 <tbody>
 <tr>
 <td><code>db_write()</code></td>
-<td>Write table (overwrite/append, with partitioning, bucketing, sorting, inlining, explicit schema)</td>
+<td>Write data.frame or lazy dplyr query (zero-copy transforms stay in DuckDB)</td>
 </tr>
 <tr>
 <td><code><a href="reference/db_upsert.html">db_upsert()</a></code></td>
@@ -446,6 +483,7 @@
 </tr>
 </tbody>
 </table>
+<p><em>Note: <code>db_write()</code> accepts both data.frames (data passes through R) and lazy dbplyr tables from <code>db_read()</code> (stays entirely in DuckDB, no R memory used). Use the lazy approach for in-lake transformations.</em></p>
 </div>
 <div class="section level3">
 <h3 id="arrow-integration">Arrow Integration<a class="anchor" aria-label="anchor" href="#arrow-integration"></a>

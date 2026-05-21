@@ -96,7 +96,8 @@ The metadata lives in a <strong>catalog database</strong>.</p>
 │    • DuckDB                                              │
 │    • SQLite                                              │
 │    • PostgreSQL                                          │
-│    • (Future: SQL Server, Quack)                         │
+│    • Quack (EXPERIMENTAL)                                │
+│    • (Future: SQL Server)                                │
 │                                                          │
 └─────────────────────────────────────────────────────────┘</code></pre>
 <p>The catalog database choice affects:</p>
@@ -312,12 +313,20 @@ User D writes ─────────────────┘
 <div class="section level2">
 <h2 id="comparison-matrix">Comparison Matrix<a class="anchor" aria-label="anchor" href="#comparison-matrix"></a>
 </h2>
-<table class="table">
+<table style="width:100%;" class="table">
+<colgroup>
+<col width="20%">
+<col width="18%">
+<col width="18%">
+<col width="27%">
+<col width="15%">
+</colgroup>
 <thead><tr class="header">
 <th>Feature</th>
 <th>DuckDB</th>
 <th>SQLite</th>
 <th>PostgreSQL</th>
+<th>Quack</th>
 </tr></thead>
 <tbody>
 <tr class="odd">
@@ -325,16 +334,19 @@ User D writes ─────────────────┘
 <td>Trivial</td>
 <td>Simple</td>
 <td>Moderate</td>
+<td>Moderate</td>
 </tr>
 <tr class="even">
 <td><strong>Infrastructure</strong></td>
 <td>None</td>
 <td>None</td>
 <td>Server required</td>
+<td>DuckDB server</td>
 </tr>
 <tr class="odd">
 <td><strong>Concurrent readers</strong></td>
 <td>1</td>
+<td>Unlimited</td>
 <td>Unlimited</td>
 <td>Unlimited</td>
 </tr>
@@ -343,11 +355,13 @@ User D writes ─────────────────┘
 <td>1</td>
 <td>1 (queued)</td>
 <td>Unlimited</td>
+<td>Unlimited</td>
 </tr>
 <tr class="odd">
 <td><strong>Network drive friendly</strong></td>
 <td>No</td>
 <td>Yes</td>
+<td>N/A</td>
 <td>N/A</td>
 </tr>
 <tr class="even">
@@ -355,24 +369,35 @@ User D writes ─────────────────┘
 <td>No</td>
 <td>No</td>
 <td>Yes</td>
+<td>No</td>
 </tr>
 <tr class="odd">
 <td><strong>Metadata query speed</strong></td>
 <td>Fastest</td>
 <td>Fast</td>
 <td>Network dependent</td>
+<td>Fast</td>
 </tr>
 <tr class="even">
 <td><strong>Backup strategy</strong></td>
 <td>Copy file</td>
 <td>Copy file</td>
 <td>pg_dump / replication</td>
+<td>DuckDB backup</td>
 </tr>
 <tr class="odd">
 <td><strong>Best team size</strong></td>
 <td>1</td>
 <td>2-20</td>
 <td>20+</td>
+<td>2-50</td>
+</tr>
+<tr class="even">
+<td><strong>Status</strong></td>
+<td>Stable</td>
+<td>Stable</td>
+<td>Stable</td>
+<td>EXPERIMENTAL</td>
 </tr>
 </tbody>
 </table>
@@ -777,25 +802,28 @@ PostgreSQL, source data in SQL Server</li>
 </div>
 </div>
 <div class="section level2">
-<h2 id="future-quack-remote-protocol">Future: Quack Remote Protocol<a class="anchor" aria-label="anchor" href="#future-quack-remote-protocol"></a>
+<h2 id="quack-remote-protocol-experimental">Quack Remote Protocol (EXPERIMENTAL)<a class="anchor" aria-label="anchor" href="#quack-remote-protocol-experimental"></a>
 </h2>
 <div class="section level3">
 <h3 id="what-is-quack">What is Quack?<a class="anchor" aria-label="anchor" href="#what-is-quack"></a>
 </h3>
 <p><a href="https://duckdb.org/2026/05/12/quack-remote-protocol" class="external-link">Quack</a> is
-DuckDB’s new client-server protocol, released with DuckDB v1.5.2:</p>
+DuckDB’s client-server protocol, available since DuckDB v1.5.2:</p>
 <ul>
 <li>
 <strong>RPC protocol</strong> for DuckDB-to-DuckDB
 communication</li>
 <li>
-<strong>HTTP-based</strong> for network compatibility</li>
+<strong>HTTP-based</strong> for network compatibility (port 9494 by
+default)</li>
 <li>
 <strong>Native serialisation</strong> of DuckDB’s internal data
 vectors</li>
 <li>
 <strong>Multi-writer support</strong> without locking</li>
 </ul>
+<p>As of DuckDB 1.5.3, DuckLake supports Quack as a catalog backend.
+datapond includes experimental support for this.</p>
 </div>
 <div class="section level3">
 <h3 id="how-quack-changes-everything">How Quack Changes Everything<a class="anchor" aria-label="anchor" href="#how-quack-changes-everything"></a>
@@ -810,16 +838,18 @@ vectors</li>
 └─────────────────────────────┘             └─────────────────────────────┘</code></pre>
 </div>
 <div class="section level3">
-<h3 id="ducklake-quack-integration">DuckLake + Quack Integration<a class="anchor" aria-label="anchor" href="#ducklake-quack-integration"></a>
+<h3 id="using-quack-with-datapond">Using Quack with datapond<a class="anchor" aria-label="anchor" href="#using-quack-with-datapond"></a>
 </h3>
-<p>DuckDB plans to integrate Quack into DuckLake, enabling:</p>
+<p>datapond supports Quack as an experimental catalog backend:</p>
 <div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Future: Remote DuckDB server as catalog</span></span>
+<code class="sourceCode R"><span><span class="co"># Connect to a DuckDB server running Quack</span></span>
 <span><span class="fu"><a href="../reference/db_connect.html">db_connect</a></span><span class="op">(</span></span>
 <span>  catalog_type <span class="op">=</span> <span class="st">"quack"</span>,</span>
-<span>  metadata_path <span class="op">=</span> <span class="st">"quack://duckdb-server.example.com:4242"</span>,</span>
+<span>  metadata_path <span class="op">=</span> <span class="st">"quack:duckdb-server.example.com:9494/catalog.ducklake"</span>,</span>
 <span>  data_path <span class="op">=</span> <span class="st">"/data/lake"</span></span>
 <span><span class="op">)</span></span></code></pre></div>
+<p>You will see a warning about the experimental status. This is
+expected.</p>
 <p><strong>Benefits:</strong></p>
 <table class="table">
 <colgroup>
@@ -851,19 +881,88 @@ vectors</li>
 </table>
 </div>
 <div class="section level3">
-<h3 id="timeline">Timeline<a class="anchor" aria-label="anchor" href="#timeline"></a>
+<h3 id="running-a-quack-server">Running a Quack Server<a class="anchor" aria-label="anchor" href="#running-a-quack-server"></a>
 </h3>
-<ul>
-<li>
-<strong>Now (v1.5.2)</strong>: Quack available in
-<code>core_nightly</code>
-</li>
-<li>
-<strong>Fall 2026 (v2.0)</strong>: Production-ready Quack
-release</li>
-<li>
-<strong>TBD</strong>: DuckLake Quack catalog integration</li>
-</ul>
+<p>To use Quack, you need a DuckDB server:</p>
+<div class="sourceCode" id="cb17"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb17-1"><a href="#cb17-1" tabindex="-1"></a><span class="co"># Start DuckDB with Quack server enabled</span></span>
+<span id="cb17-2"><a href="#cb17-2" tabindex="-1"></a><span class="ex">duckdb</span> <span class="at">-cmd</span> <span class="st">"INSTALL quack; LOAD quack; CALL quack_start_server();"</span></span></code></pre></div>
+<p>The server listens on port 9494 by default. See the <a href="https://duckdb.org/docs/current/quack/setup/overview" class="external-link">Quack
+documentation</a> for configuration options.</p>
+</div>
+<div class="section level3">
+<h3 id="status-and-timeline">Status and Timeline<a class="anchor" aria-label="anchor" href="#status-and-timeline"></a>
+</h3>
+<table class="table">
+<thead><tr class="header">
+<th>Version</th>
+<th>Status</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td><strong>DuckDB 1.5.2</strong></td>
+<td>Quack beta available</td>
+</tr>
+<tr class="even">
+<td><strong>DuckDB 1.5.3</strong></td>
+<td>DuckLake + Quack integration</td>
+</tr>
+<tr class="odd">
+<td><strong>DuckDB 2.0 (Fall 2026)</strong></td>
+<td>Production-ready Quack</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Warning:</strong> The protocol, function names, and defaults
+may change before v2.0. Use in production at your own risk.</p>
+</div>
+<div class="section level3">
+<h3 id="quack-authentication">Quack Authentication<a class="anchor" aria-label="anchor" href="#quack-authentication"></a>
+</h3>
+<p>datapond supports basic token authentication for Quack:</p>
+<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Option 1: Explicit token parameter</span></span>
+<span><span class="fu"><a href="../reference/db_connect.html">db_connect</a></span><span class="op">(</span></span>
+<span>  catalog_type <span class="op">=</span> <span class="st">"quack"</span>,</span>
+<span>  metadata_path <span class="op">=</span> <span class="st">"quack:server:9494/catalog"</span>,</span>
+<span>  data_path <span class="op">=</span> <span class="st">"/data/lake"</span>,</span>
+<span>  quack_token <span class="op">=</span> <span class="st">"my-secret-token"</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Option 2: Environment variable (recommended for scripts)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/Sys.setenv.html" class="external-link">Sys.setenv</a></span><span class="op">(</span>QUACK_TOKEN <span class="op">=</span> <span class="st">"my-secret-token"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/db_connect.html">db_connect</a></span><span class="op">(</span></span>
+<span>  catalog_type <span class="op">=</span> <span class="st">"quack"</span>,</span>
+<span>  metadata_path <span class="op">=</span> <span class="st">"quack:server:9494/catalog"</span>,</span>
+<span>  data_path <span class="op">=</span> <span class="st">"/data/lake"</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level3">
+<h3 id="quack-security-future-possibilities">Quack Security: Future Possibilities<a class="anchor" aria-label="anchor" href="#quack-security-future-possibilities"></a>
+</h3>
+<p>Quack is designed with a “bring your own security” philosophy. While
+datapond currently supports only token authentication, Quack itself
+supports custom authentication and authorization callbacks. Future
+datapond releases may support: | Feature | Description | Status |
+|———|————-|——–| | <strong>Token auth</strong> | Simple shared secret |
+Implemented | | <strong>Environment variable</strong> |
+<code>QUACK_TOKEN</code> fallback | Implemented | | <strong>Custom
+headers</strong> | JWT/Bearer tokens via reverse proxy | Future | |
+<strong>Credential callback</strong> | Dynamic token retrieval (e.g.,
+from keyring) | Future | | <strong>LDAP/AD integration</strong> |
+Enterprise directory auth | Requires server-side setup |</p>
+<p><strong>Production deployment pattern:</strong></p>
+<p>For production, the recommended approach is to put Quack behind a
+reverse proxy (nginx, Caddy) that handles TLS termination and
+authentication:</p>
+<pre><code>Client ──► HTTPS ──► nginx ──► HTTP ──► Quack Server
+                      │
+                TLS + Auth headers
+                Rate limiting
+                Audit logging</code></pre>
+<p>This keeps Quack simple while leveraging battle-tested HTTP
+infrastructure for security.</p>
+<p>See <a href="https://duckdb.org/docs/current/quack/setup/reverse_proxy" class="external-link">Securing
+Quack with a Reverse Proxy</a> for detailed setup instructions.</p>
 <hr>
 </div>
 </div>
@@ -875,7 +974,7 @@ release</li>
 </h3>
 <p>DuckLake 1.0 includes native support for geometry types via the
 DuckDB spatial extension:</p>
-<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Load spatial extension</span></span>
 <span><span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbExecute.html" class="external-link">dbExecute</a></span><span class="op">(</span><span class="va">con</span>, <span class="st">"INSTALL spatial; LOAD spatial;"</span><span class="op">)</span></span>
 <span></span>
@@ -896,7 +995,7 @@ DuckDB spatial extension:</p>
 <h3 id="geoparquet-storage">GeoParquet Storage<a class="anchor" aria-label="anchor" href="#geoparquet-storage"></a>
 </h3>
 <p>DuckDB reads and writes <a href="https://geoparquet.org/" class="external-link">GeoParquet</a> natively:</p>
-<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Spatial data stored as GeoParquet</span></span>
 <span><span class="va">boundaries</span> <span class="op">&lt;-</span> <span class="fu">db_read</span><span class="op">(</span>table <span class="op">=</span> <span class="st">"boundaries"</span><span class="op">)</span></span>
 <span></span>
@@ -948,7 +1047,7 @@ DuckDB spatial extension:</p>
 </h3>
 <p>For unsupported formats, store metadata in DuckLake while keeping
 files external:</p>
-<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Create a metadata table for raster files</span></span>
 <span><span class="va">raster_catalog</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
 <span>  file_id <span class="op">=</span> <span class="fl">1</span><span class="op">:</span><span class="fl">3</span>,</span>
@@ -987,7 +1086,7 @@ files external:</p>
 <div class="section level3">
 <h3 id="querying-spatial-metadata">Querying Spatial Metadata<a class="anchor" aria-label="anchor" href="#querying-spatial-metadata"></a>
 </h3>
-<div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb23"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Find rasters that intersect an area of interest</span></span>
 <span><span class="va">raster_catalog</span> <span class="op">&lt;-</span> <span class="fu">db_read</span><span class="op">(</span>table <span class="op">=</span> <span class="st">"raster_catalog"</span><span class="op">)</span></span>
 <span></span>
@@ -1060,6 +1159,11 @@ changes.</p>
 <h2 id="summary">Summary<a class="anchor" aria-label="anchor" href="#summary"></a>
 </h2>
 <table class="table">
+<colgroup>
+<col width="25%">
+<col width="28%">
+<col width="45%">
+</colgroup>
 <thead><tr class="header">
 <th>Backend</th>
 <th>Best For</th>
@@ -1082,20 +1186,22 @@ changes.</p>
 <td>Requires server</td>
 </tr>
 <tr class="even">
+<td><strong>Quack</strong></td>
+<td>DuckDB-native multi-writer</td>
+<td>EXPERIMENTAL (stable in v2.0)</td>
+</tr>
+<tr class="odd">
 <td><strong>SQL Server</strong></td>
 <td>Microsoft shops</td>
 <td>Not yet supported</td>
-</tr>
-<tr class="odd">
-<td><strong>Quack</strong></td>
-<td>Future DuckDB-native multi-writer</td>
-<td>Coming in v2.0</td>
 </tr>
 </tbody>
 </table>
 <p>For most users starting out, <strong>SQLite is the recommended
 default</strong> - it’s simple, requires no infrastructure, and handles
-typical team usage patterns well.</p>
+typical team usage patterns well. Once Quack reaches production status
+(DuckDB 2.0, Fall 2026), it may become the preferred option for teams
+wanting multi-writer without PostgreSQL infrastructure.</p>
 <hr>
 </div>
 <div class="section level2">

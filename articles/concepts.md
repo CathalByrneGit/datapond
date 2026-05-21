@@ -397,6 +397,69 @@ tools (sparklyr, polars, reticulate) - Large datasets where you want
 direct Parquet access - Avoiding DuckDB compute overhead for simple
 transfers - Working with Arrow-native data pipelines
 
+### 12. Zero-Copy Transforms (Lazy Tables)
+
+`db_write()` supports two approaches for writing data:
+
+**Approach 1: data.frame (data passes through R)**
+
+``` r
+
+# Load data into R, then write to lake
+my_data <- read.csv("data.csv")
+db_write(my_data, table = "imports")
+```
+
+This works well for: - Data from external sources (CSV, APIs, other
+databases) - Small to medium datasets that fit in R memory - Data that
+needs R-specific transformations
+
+**Approach 2: Lazy table (stays entirely in DuckDB)**
+
+``` r
+
+# Transform data without ever loading it into R
+db_read(table = "raw_imports") |>
+  filter(year == 2024, !is.na(value)) |>
+  mutate(value_eur = value * exchange_rate) |>
+  group_by(country, month) |>
+  summarise(total = sum(value_eur), .groups = "drop") |>
+  db_write(schema = "clean", table = "monthly_summary")
+```
+
+This is more efficient because: - No `collect()` needed - data never
+leaves DuckDB - No R memory used - handles datasets larger than RAM -
+Faster - single SQL operation instead of round-trip - The dplyr pipeline
+is converted to `CREATE TABLE AS SELECT`
+
+**When to use lazy tables:** - In-lake transformations (raw → clean →
+analysis) - Aggregations and summaries - Filtering large tables to
+smaller subsets - Joining tables within the lake - Any operation where
+source and destination are both in DuckLake
+
+``` r
+
+# Example: Building a data pipeline entirely in DuckDB
+# Raw data → Clean → Analysis (no R memory used)
+
+# Stage 1: Filter and clean
+db_read(table = "raw_events") |>
+  filter(!is.na(user_id), event_type != "test") |>
+  mutate(event_date = as.Date(event_time)) |>
+  db_write(schema = "clean", table = "events")
+
+# Stage 2: Aggregate for analysis
+db_read(schema = "clean", table = "events") |>
+  group_by(event_date, event_type) |>
+  summarise(count = n(), .groups = "drop") |>
+  db_write(schema = "analysis", table = "daily_event_counts")
+
+# Record lineage
+db_lineage(schema = "analysis", table = "daily_event_counts",
+           sources = "clean.events",
+           transformation = "Daily aggregation by event type")
+```
+
 ------------------------------------------------------------------------
 
 ## Schemas: Organising Tables

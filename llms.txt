@@ -107,6 +107,15 @@ db_write(
   )
 )
 
+# Transform data without leaving DuckDB (zero-copy, no R memory)
+# Just pipe a lazy table from db_read() through dplyr and into db_write()
+db_read(table = "raw_imports") |>
+  filter(year == 2024, !is.na(value)) |>
+  mutate(value_eur = value * exchange_rate) |>
+  group_by(country, month) |>
+  summarise(total = sum(value_eur), .groups = "drop") |>
+  db_write(schema = "clean", table = "monthly_summary")
+
 # Arrow integration - read/write without DuckDB compute
 arrow_tbl <- db_read_arrow(table = "imports", as_data_frame = FALSE)
 db_write_arrow(arrow_tbl, table = "imports_copy")
@@ -243,13 +252,14 @@ The browser provides a point-and-click interface with six tabs:
 ## Choosing a Catalog Backend
 
 DuckLake stores metadata (table definitions, snapshots, file tracking)
-in a **catalog database**. You can choose from three backends:
+in a **catalog database**. You can choose from four backends:
 
 | Backend | `catalog_type` | Concurrency | Best For |
 |----|----|----|----|
 | DuckDB | `"duckdb"` | Single client only | Personal/dev use |
 | **SQLite** | `"sqlite"` | Multi-read, single-write | **Shared network drives** |
 | PostgreSQL | `"postgres"` | Full concurrent access | Large teams, remote access |
+| Quack | `"quack"` | Multi-writer (EXPERIMENTAL) | Future: serverless multi-writer |
 
 ### Recommended: SQLite for Shared Drives
 
@@ -281,6 +291,37 @@ db_connect(
   data_path = "//CSO-NAS/DataLake/data"
 )
 ```
+
+### Quack Remote Protocol (EXPERIMENTAL)
+
+The [Quack
+protocol](https://duckdb.org/2026/05/12/quack-remote-protocol) enables
+client-server DuckDB with multiple concurrent writers. DuckLake now
+supports Quack as a catalog backend (DuckDB 1.5.3+).
+
+``` r
+
+# Connect to a DuckDB server running Quack
+db_connect(
+  catalog_type = "quack",
+  metadata_path = "quack:db-server.cso.ie:9494/catalog.ducklake",
+  data_path = "//CSO-NAS/DataLake/data",
+  quack_token = "my-secret-token"  
+)
+
+# Or use environment variable
+Sys.setenv(QUACK_TOKEN = "my-secret-token")
+db_connect(
+  catalog_type = "quack",
+  metadata_path = "quack:db-server.cso.ie:9494/catalog.ducklake",
+  data_path = "//CSO-NAS/DataLake/data"
+)
+```
+
+**Note:** Quack is currently in beta (DuckDB 1.5.x). Production-ready
+version planned for DuckDB 2.0 (Fall 2026). See
+[`vignette("catalog-backends")`](https://cathalbyrnegit.github.io/datapond/articles/catalog-backends.md)
+for security options.
 
 ## Access Control
 
@@ -322,8 +363,12 @@ db_write(imports_data, schema = "trade", table = "imports")
 
 | Function | Description |
 |----|----|
-| `db_write()` | Write table (overwrite/append, with partitioning, bucketing, sorting, inlining, explicit schema) |
+| `db_write()` | Write data.frame or lazy dplyr query (zero-copy transforms stay in DuckDB) |
 | [`db_upsert()`](https://cathalbyrnegit.github.io/datapond/reference/db_upsert.md) | MERGE operation (update existing rows + insert new rows) |
+
+*Note: `db_write()` accepts both data.frames (data passes through R) and
+lazy dbplyr tables from `db_read()` (stays entirely in DuckDB, no R
+memory used). Use the lazy approach for in-lake transformations.*
 
 ### Arrow Integration
 
