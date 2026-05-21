@@ -346,8 +346,18 @@ db_write(imports_data, schema = "trade", table = "imports")
 | [`db_list_schemas()`](https://cathalbyrnegit.github.io/datapond/reference/db_list_schemas.md) | List schemas |
 | [`db_tables()`](https://cathalbyrnegit.github.io/datapond/reference/db_tables.md) | List tables in a schema |
 | [`db_list_views()`](https://cathalbyrnegit.github.io/datapond/reference/db_list_views.md) | List views in a schema |
+| `db_list_macros()` | List macros in a schema |
 | [`db_table_exists()`](https://cathalbyrnegit.github.io/datapond/reference/db_table_exists.md) | Check if a table exists |
 | [`db_create_schema()`](https://cathalbyrnegit.github.io/datapond/reference/db_create_schema.md) | Create a new schema |
+
+### Views & Macros
+
+| Function            | Description                             |
+|---------------------|-----------------------------------------|
+| `db_create_view()`  | Create a SQL view stored in the catalog |
+| `db_drop_view()`    | Drop a view                             |
+| `db_create_macro()` | Create a scalar or table macro          |
+| `db_drop_macro()`   | Drop a macro                            |
 
 ### Documentation & Search
 
@@ -355,6 +365,7 @@ db_write(imports_data, schema = "trade", table = "imports")
 |----|----|
 | [`db_describe()`](https://cathalbyrnegit.github.io/datapond/reference/db_describe.md) | Add description, owner, tags to a table |
 | [`db_describe_column()`](https://cathalbyrnegit.github.io/datapond/reference/db_describe_column.md) | Document a column (description, units, notes) |
+| `db_comment()` | Add SQL COMMENT to table or column (stored in catalog) |
 | [`db_get_docs()`](https://cathalbyrnegit.github.io/datapond/reference/db_get_docs.md) | Retrieve documentation for a table |
 | [`db_dictionary()`](https://cathalbyrnegit.github.io/datapond/reference/db_dictionary.md) | Generate full data dictionary |
 | [`db_search()`](https://cathalbyrnegit.github.io/datapond/reference/db_search.md) | Search by name, description, owner, or tags |
@@ -400,6 +411,7 @@ db_write(imports_data, schema = "trade", table = "imports")
 | `db_file_stats()` | Get file counts and sizes to identify compaction candidates |
 | `db_cleanup_files()` | Remove orphaned files after vacuum or compact |
 | [`db_query()`](https://cathalbyrnegit.github.io/datapond/reference/db_query.md) | Run arbitrary SQL |
+| `db_enable_logging()` | Enable DuckDB/DuckLake logging for debugging |
 
 ### Interactive Tools
 

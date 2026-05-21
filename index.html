@@ -5,14 +5,14 @@
 <meta charset="utf-8">
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-<title>Local Data Lake Infrastructure for R • datapond</title>
+<title>Simple Data Lake Infrastructure for R with DuckLake • datapond</title>
 <script src="deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <link href="deps/bootstrap-5.3.8/bootstrap.min.css" rel="stylesheet">
 <script src="deps/bootstrap-5.3.8/bootstrap.bundle.min.js"></script><link href="deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
 <link href="deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
-<script src="deps/headroom-0.11.0/headroom.min.js"></script><script src="deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="deps/search-1.0.0/fuse.min.js"></script><script src="deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="pkgdown.js"></script><meta property="og:title" content="Local Data Lake Infrastructure for R">
-<meta name="description" content="Provides a unified interface for working with local data infrastructure. Supports two storage backends: a hive-partitioned parquet lake (similar to existing SAS storage) and DuckLake (with time travel capabilities). Facilitates data sharing between sections with built-in governance, access control via file system permissions, and dataset publishing workflows.">
-<meta property="og:description" content="Provides a unified interface for working with local data infrastructure. Supports two storage backends: a hive-partitioned parquet lake (similar to existing SAS storage) and DuckLake (with time travel capabilities). Facilitates data sharing between sections with built-in governance, access control via file system permissions, and dataset publishing workflows.">
+<script src="deps/headroom-0.11.0/headroom.min.js"></script><script src="deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="deps/search-1.0.0/fuse.min.js"></script><script src="deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="pkgdown.js"></script><meta property="og:title" content="Simple Data Lake Infrastructure for R with DuckLake">
+<meta name="description" content="Provides a unified R interface for DuckLake, a modern data lakehouse format built on DuckDB. Supports ACID transactions, time travel queries, schema evolution, and Iceberg export for Spark/Trino compatibility. Features include multiple catalog backends (DuckDB, SQLite, PostgreSQL), Hive and bucket partitioning, data clustering, streaming via data inlining, and direct Arrow integration. Facilitates data sharing between teams with built-in governance, table/column documentation via SQL COMMENT, views and macros stored in the catalog, and access control via file system permissions.">
+<meta property="og:description" content="Provides a unified R interface for DuckLake, a modern data lakehouse format built on DuckDB. Supports ACID transactions, time travel queries, schema evolution, and Iceberg export for Spark/Trino compatibility. Features include multiple catalog backends (DuckDB, SQLite, PostgreSQL), Hive and bucket partitioning, data clustering, streaming via data inlining, and direct Arrow integration. Facilitates data sharing between teams with built-in governance, table/column documentation via SQL COMMENT, views and macros stored in the catalog, and access control via file system permissions.">
 </head>
 <body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -513,12 +513,44 @@
 <td>List views in a schema</td>
 </tr>
 <tr>
+<td><code>db_list_macros()</code></td>
+<td>List macros in a schema</td>
+</tr>
+<tr>
 <td><code><a href="reference/db_table_exists.html">db_table_exists()</a></code></td>
 <td>Check if a table exists</td>
 </tr>
 <tr>
 <td><code><a href="reference/db_create_schema.html">db_create_schema()</a></code></td>
 <td>Create a new schema</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section level3">
+<h3 id="views--macros">Views &amp; Macros<a class="anchor" aria-label="anchor" href="#views--macros"></a>
+</h3>
+<table class="table">
+<thead><tr>
+<th>Function</th>
+<th>Description</th>
+</tr></thead>
+<tbody>
+<tr>
+<td><code>db_create_view()</code></td>
+<td>Create a SQL view stored in the catalog</td>
+</tr>
+<tr>
+<td><code>db_drop_view()</code></td>
+<td>Drop a view</td>
+</tr>
+<tr>
+<td><code>db_create_macro()</code></td>
+<td>Create a scalar or table macro</td>
+</tr>
+<tr>
+<td><code>db_drop_macro()</code></td>
+<td>Drop a macro</td>
 </tr>
 </tbody>
 </table>
@@ -543,6 +575,10 @@
 <tr>
 <td><code><a href="reference/db_describe_column.html">db_describe_column()</a></code></td>
 <td>Document a column (description, units, notes)</td>
+</tr>
+<tr>
+<td><code>db_comment()</code></td>
+<td>Add SQL COMMENT to table or column (stored in catalog)</td>
 </tr>
 <tr>
 <td><code><a href="reference/db_get_docs.html">db_get_docs()</a></code></td>
@@ -707,6 +743,10 @@
 <tr>
 <td><code><a href="reference/db_query.html">db_query()</a></code></td>
 <td>Run arbitrary SQL</td>
+</tr>
+<tr>
+<td><code>db_enable_logging()</code></td>
+<td>Enable DuckDB/DuckLake logging for debugging</td>
 </tr>
 </tbody>
 </table>
