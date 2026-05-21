@@ -963,7 +963,219 @@ authentication:</p>
 infrastructure for security.</p>
 <p>See <a href="https://duckdb.org/docs/current/quack/setup/reverse_proxy" class="external-link">Securing
 Quack with a Reverse Proxy</a> for detailed setup instructions.</p>
+</div>
+<div class="section level3">
+<h3 id="setting-up-a-quack-server">Setting up a Quack Server<a class="anchor" aria-label="anchor" href="#setting-up-a-quack-server"></a>
+</h3>
+<p>Unlike SQLite or DuckDB file-based catalogs, Quack requires a running
+DuckDB server process. This section covers how to set up and run a Quack
+server for use with datapond.</p>
+<div class="section level4">
+<h4 id="basic-server-setup">Basic Server Setup<a class="anchor" aria-label="anchor" href="#basic-server-setup"></a>
+</h4>
+<p><strong>1. Start a simple server (development/testing):</strong></p>
+<div class="sourceCode" id="cb20"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb20-1"><a href="#cb20-1" tabindex="-1"></a><span class="co"># Start DuckDB with Quack server</span></span>
+<span id="cb20-2"><a href="#cb20-2" tabindex="-1"></a><span class="ex">duckdb</span> <span class="at">-cmd</span> <span class="st">"</span></span>
+<span id="cb20-3"><a href="#cb20-3" tabindex="-1"></a><span class="st">  INSTALL quack;</span></span>
+<span id="cb20-4"><a href="#cb20-4" tabindex="-1"></a><span class="st">  LOAD quack;</span></span>
+<span id="cb20-5"><a href="#cb20-5" tabindex="-1"></a><span class="st">  INSTALL ducklake;</span></span>
+<span id="cb20-6"><a href="#cb20-6" tabindex="-1"></a><span class="st">  LOAD ducklake;</span></span>
+<span id="cb20-7"><a href="#cb20-7" tabindex="-1"></a></span>
+<span id="cb20-8"><a href="#cb20-8" tabindex="-1"></a><span class="st">  -- Create and attach the DuckLake catalog</span></span>
+<span id="cb20-9"><a href="#cb20-9" tabindex="-1"></a><span class="st">  ATTACH 'ducklake:catalog.ducklake' AS lake (DATA_PATH '/data/lake');</span></span>
+<span id="cb20-10"><a href="#cb20-10" tabindex="-1"></a></span>
+<span id="cb20-11"><a href="#cb20-11" tabindex="-1"></a><span class="st">  -- Start the Quack server</span></span>
+<span id="cb20-12"><a href="#cb20-12" tabindex="-1"></a><span class="st">  SELECT * FROM quack_serve();</span></span>
+<span id="cb20-13"><a href="#cb20-13" tabindex="-1"></a><span class="st">"</span></span></code></pre></div>
+<p>This prints the connection details:</p>
+<pre><code>┌─────────────────────────────────┬────────────────────────────────┬──────────────────────────┐
+│ listen_uri                      │ http_url                       │ token                    │
+├─────────────────────────────────┼────────────────────────────────┼──────────────────────────┤
+│ quack:localhost:9494            │ http://localhost:9494          │ abc123xyz...             │
+└─────────────────────────────────┴────────────────────────────────┴──────────────────────────┘</code></pre>
+<p><strong>2. Set a custom token:</strong></p>
+<div class="sourceCode" id="cb22"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb22-1"><a href="#cb22-1" tabindex="-1"></a><span class="ex">duckdb</span> <span class="at">-cmd</span> <span class="st">"</span></span>
+<span id="cb22-2"><a href="#cb22-2" tabindex="-1"></a><span class="st">  INSTALL quack; LOAD quack;</span></span>
+<span id="cb22-3"><a href="#cb22-3" tabindex="-1"></a><span class="st">  INSTALL ducklake; LOAD ducklake;</span></span>
+<span id="cb22-4"><a href="#cb22-4" tabindex="-1"></a></span>
+<span id="cb22-5"><a href="#cb22-5" tabindex="-1"></a><span class="st">  -- Set a known token (min 4 characters)</span></span>
+<span id="cb22-6"><a href="#cb22-6" tabindex="-1"></a><span class="st">  SET quack_token = 'my-secret-token';</span></span>
+<span id="cb22-7"><a href="#cb22-7" tabindex="-1"></a></span>
+<span id="cb22-8"><a href="#cb22-8" tabindex="-1"></a><span class="st">  ATTACH 'ducklake:catalog.ducklake' AS lake (DATA_PATH '/data/lake');</span></span>
+<span id="cb22-9"><a href="#cb22-9" tabindex="-1"></a><span class="st">  SELECT * FROM quack_serve();</span></span>
+<span id="cb22-10"><a href="#cb22-10" tabindex="-1"></a><span class="st">"</span></span></code></pre></div>
+<p><strong>3. Connect from R:</strong></p>
+<div class="sourceCode" id="cb23"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="../reference/db_connect.html">db_connect</a></span><span class="op">(</span></span>
+<span>  catalog_type <span class="op">=</span> <span class="st">"quack"</span>,</span>
+<span>  metadata_path <span class="op">=</span> <span class="st">"quack:localhost:9494/lake"</span>,</span>
+<span>  data_path <span class="op">=</span> <span class="st">"/data/lake"</span>,</span>
+<span>  quack_token <span class="op">=</span> <span class="st">"my-secret-token"</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level4">
+<h4 id="running-as-a-service-linux">Running as a Service (Linux)<a class="anchor" aria-label="anchor" href="#running-as-a-service-linux"></a>
+</h4>
+<p>For production, run the Quack server as a systemd service:</p>
+<p><strong>1. Create a startup script</strong>
+(<code>/opt/duckdb/start-quack.sql</code>):</p>
+<div class="sourceCode" id="cb24"><pre class="sourceCode sql"><code class="sourceCode sql"><span id="cb24-1"><a href="#cb24-1" tabindex="-1"></a>INSTALL quack;</span>
+<span id="cb24-2"><a href="#cb24-2" tabindex="-1"></a>LOAD quack;</span>
+<span id="cb24-3"><a href="#cb24-3" tabindex="-1"></a>INSTALL ducklake;</span>
+<span id="cb24-4"><a href="#cb24-4" tabindex="-1"></a>LOAD ducklake;</span>
+<span id="cb24-5"><a href="#cb24-5" tabindex="-1"></a></span>
+<span id="cb24-6"><a href="#cb24-6" tabindex="-1"></a><span class="co">-- Set authentication token from environment</span></span>
+<span id="cb24-7"><a href="#cb24-7" tabindex="-1"></a><span class="kw">SET</span> quack_token <span class="op">=</span> getenv(<span class="st">'QUACK_TOKEN'</span>);</span>
+<span id="cb24-8"><a href="#cb24-8" tabindex="-1"></a></span>
+<span id="cb24-9"><a href="#cb24-9" tabindex="-1"></a><span class="co">-- Attach the DuckLake catalog</span></span>
+<span id="cb24-10"><a href="#cb24-10" tabindex="-1"></a>ATTACH <span class="st">'ducklake:/opt/duckdb/catalog.ducklake'</span> <span class="kw">AS</span> lake</span>
+<span id="cb24-11"><a href="#cb24-11" tabindex="-1"></a>  (DATA_PATH <span class="st">'/data/lake'</span>);</span>
+<span id="cb24-12"><a href="#cb24-12" tabindex="-1"></a></span>
+<span id="cb24-13"><a href="#cb24-13" tabindex="-1"></a><span class="co">-- Start server (blocks)</span></span>
+<span id="cb24-14"><a href="#cb24-14" tabindex="-1"></a><span class="kw">SELECT</span> <span class="op">*</span> <span class="kw">FROM</span> quack_serve(port <span class="op">:=</span> <span class="dv">9494</span>);</span></code></pre></div>
+<p><strong>2. Create systemd service</strong>
+(<code>/etc/systemd/system/duckdb-quack.service</code>):</p>
+<div class="sourceCode" id="cb25"><pre class="sourceCode ini"><code class="sourceCode ini"><span id="cb25-1"><a href="#cb25-1" tabindex="-1"></a><span class="kw">[Unit]</span></span>
+<span id="cb25-2"><a href="#cb25-2" tabindex="-1"></a><span class="dt">Description</span><span class="ot">=</span><span class="st">DuckDB Quack Server</span></span>
+<span id="cb25-3"><a href="#cb25-3" tabindex="-1"></a><span class="dt">After</span><span class="ot">=</span><span class="st">network.target</span></span>
+<span id="cb25-4"><a href="#cb25-4" tabindex="-1"></a></span>
+<span id="cb25-5"><a href="#cb25-5" tabindex="-1"></a><span class="kw">[Service]</span></span>
+<span id="cb25-6"><a href="#cb25-6" tabindex="-1"></a><span class="dt">Type</span><span class="ot">=</span><span class="st">simple</span></span>
+<span id="cb25-7"><a href="#cb25-7" tabindex="-1"></a><span class="dt">User</span><span class="ot">=</span><span class="st">duckdb</span></span>
+<span id="cb25-8"><a href="#cb25-8" tabindex="-1"></a><span class="dt">Group</span><span class="ot">=</span><span class="st">duckdb</span></span>
+<span id="cb25-9"><a href="#cb25-9" tabindex="-1"></a><span class="dt">Environment</span><span class="ot">=</span><span class="st">QUACK_TOKEN=your-secret-token-here</span></span>
+<span id="cb25-10"><a href="#cb25-10" tabindex="-1"></a><span class="dt">WorkingDirectory</span><span class="ot">=</span><span class="st">/opt/duckdb</span></span>
+<span id="cb25-11"><a href="#cb25-11" tabindex="-1"></a><span class="dt">ExecStart</span><span class="ot">=</span><span class="st">/usr/local/bin/duckdb -init /opt/duckdb/start-quack.sql</span></span>
+<span id="cb25-12"><a href="#cb25-12" tabindex="-1"></a><span class="dt">Restart</span><span class="ot">=</span><span class="st">always</span></span>
+<span id="cb25-13"><a href="#cb25-13" tabindex="-1"></a><span class="dt">RestartSec</span><span class="ot">=</span><span class="dv">10</span></span>
+<span id="cb25-14"><a href="#cb25-14" tabindex="-1"></a></span>
+<span id="cb25-15"><a href="#cb25-15" tabindex="-1"></a><span class="kw">[Install]</span></span>
+<span id="cb25-16"><a href="#cb25-16" tabindex="-1"></a><span class="dt">WantedBy</span><span class="ot">=</span><span class="st">multi-user.target</span></span></code></pre></div>
+<p><strong>3. Enable and start:</strong></p>
+<div class="sourceCode" id="cb26"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb26-1"><a href="#cb26-1" tabindex="-1"></a><span class="fu">sudo</span> systemctl daemon-reload</span>
+<span id="cb26-2"><a href="#cb26-2" tabindex="-1"></a><span class="fu">sudo</span> systemctl enable duckdb-quack</span>
+<span id="cb26-3"><a href="#cb26-3" tabindex="-1"></a><span class="fu">sudo</span> systemctl start duckdb-quack</span>
+<span id="cb26-4"><a href="#cb26-4" tabindex="-1"></a></span>
+<span id="cb26-5"><a href="#cb26-5" tabindex="-1"></a><span class="co"># Check status</span></span>
+<span id="cb26-6"><a href="#cb26-6" tabindex="-1"></a><span class="fu">sudo</span> systemctl status duckdb-quack</span></code></pre></div>
+</div>
+<div class="section level4">
+<h4 id="running-with-docker">Running with Docker<a class="anchor" aria-label="anchor" href="#running-with-docker"></a>
+</h4>
+<div class="sourceCode" id="cb27"><pre class="sourceCode dockerfile"><code class="sourceCode dockerfile"><span id="cb27-1"><a href="#cb27-1" tabindex="-1"></a><span class="co"># Dockerfile</span></span>
+<span id="cb27-2"><a href="#cb27-2" tabindex="-1"></a><span class="kw">FROM</span> ubuntu:22.04</span>
+<span id="cb27-3"><a href="#cb27-3" tabindex="-1"></a></span>
+<span id="cb27-4"><a href="#cb27-4" tabindex="-1"></a><span class="kw">RUN</span> <span class="ex">apt-get</span> update <span class="kw">&amp;&amp;</span> <span class="ex">apt-get</span> install <span class="at">-y</span> wget unzip</span>
+<span id="cb27-5"><a href="#cb27-5" tabindex="-1"></a><span class="kw">RUN</span> <span class="fu">wget</span> https://github.com/duckdb/duckdb/releases/download/v1.5.3/duckdb_cli-linux-amd64.zip <span class="dt">\</span></span>
+<span id="cb27-6"><a href="#cb27-6" tabindex="-1"></a>    <span class="kw">&amp;&amp;</span> <span class="fu">unzip</span> duckdb_cli-linux-amd64.zip <span class="at">-d</span> /usr/local/bin/</span>
+<span id="cb27-7"><a href="#cb27-7" tabindex="-1"></a></span>
+<span id="cb27-8"><a href="#cb27-8" tabindex="-1"></a><span class="kw">COPY</span> start-quack.sql /opt/duckdb/</span>
+<span id="cb27-9"><a href="#cb27-9" tabindex="-1"></a><span class="kw">VOLUME</span> [<span class="st">"/data"</span>]</span>
+<span id="cb27-10"><a href="#cb27-10" tabindex="-1"></a><span class="kw">EXPOSE</span> 9494</span>
+<span id="cb27-11"><a href="#cb27-11" tabindex="-1"></a></span>
+<span id="cb27-12"><a href="#cb27-12" tabindex="-1"></a><span class="kw">CMD</span> [<span class="st">"duckdb"</span>, <span class="st">"-init"</span>, <span class="st">"/opt/duckdb/start-quack.sql"</span>]</span></code></pre></div>
+<div class="sourceCode" id="cb28"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb28-1"><a href="#cb28-1" tabindex="-1"></a><span class="co"># Build and run</span></span>
+<span id="cb28-2"><a href="#cb28-2" tabindex="-1"></a><span class="ex">docker</span> build <span class="at">-t</span> duckdb-quack .</span>
+<span id="cb28-3"><a href="#cb28-3" tabindex="-1"></a><span class="ex">docker</span> run <span class="at">-d</span> <span class="dt">\</span></span>
+<span id="cb28-4"><a href="#cb28-4" tabindex="-1"></a>  <span class="at">-p</span> 9494:9494 <span class="dt">\</span></span>
+<span id="cb28-5"><a href="#cb28-5" tabindex="-1"></a>  <span class="at">-v</span> /path/to/data:/data <span class="dt">\</span></span>
+<span id="cb28-6"><a href="#cb28-6" tabindex="-1"></a>  <span class="at">-e</span> QUACK_TOKEN=my-secret-token <span class="dt">\</span></span>
+<span id="cb28-7"><a href="#cb28-7" tabindex="-1"></a>  <span class="at">--name</span> quack-server <span class="dt">\</span></span>
+<span id="cb28-8"><a href="#cb28-8" tabindex="-1"></a>  duckdb-quack</span></code></pre></div>
+</div>
+<div class="section level4">
+<h4 id="production-setup-with-nginx">Production Setup with nginx<a class="anchor" aria-label="anchor" href="#production-setup-with-nginx"></a>
+</h4>
+<p>For production, put nginx in front of Quack for TLS and additional
+security:</p>
+<p><strong>1. nginx configuration</strong>
+(<code>/etc/nginx/sites-available/quack</code>):</p>
+<pre class="nginx"><code>server {
+    listen 443 ssl http2;
+    server_name duckdb.example.com;
+
+    ssl_certificate /etc/letsencrypt/live/duckdb.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/duckdb.example.com/privkey.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:9494;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Pass through authentication header
+        proxy_set_header Authorization $http_authorization;
+
+        # Timeouts for long queries
+        proxy_read_timeout 300s;
+        proxy_connect_timeout 75s;
+    }
+}</code></pre>
+<p><strong>2. Connect via HTTPS:</strong></p>
+<div class="sourceCode" id="cb30"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Quack client assumes HTTPS for non-localhost URIs</span></span>
+<span><span class="fu"><a href="../reference/db_connect.html">db_connect</a></span><span class="op">(</span></span>
+<span>  catalog_type <span class="op">=</span> <span class="st">"quack"</span>,</span>
+<span>  metadata_path <span class="op">=</span> <span class="st">"quack:duckdb.example.com/lake"</span>,</span>
+<span>  data_path <span class="op">=</span> <span class="st">"/data/lake"</span>,</span>
+<span>  quack_token <span class="op">=</span> <span class="st">"my-secret-token"</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level4">
+<h4 id="quick-deployment-aws">Quick Deployment (AWS)<a class="anchor" aria-label="anchor" href="#quick-deployment-aws"></a>
+</h4>
+<p>DuckDB provides a one-click CloudFormation template for AWS:</p>
+<ol style="list-style-type: decimal">
+<li>Go to <a href="https://duckdb.org/docs/current/quack/setup/deployment" class="external-link">Deploying
+Quack</a>
+</li>
+<li>Click “Launch Stack” for your region</li>
+<li>Configure instance size, token, and data path</li>
+<li>Stack provisions EC2 + nginx + Let’s Encrypt automatically</li>
+</ol>
+</div>
+<div class="section level4">
+<h4 id="monitoring-and-troubleshooting">Monitoring and Troubleshooting<a class="anchor" aria-label="anchor" href="#monitoring-and-troubleshooting"></a>
+</h4>
+<p><strong>Check server status:</strong></p>
+<div class="sourceCode" id="cb31"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb31-1"><a href="#cb31-1" tabindex="-1"></a><span class="co"># Is the server running?</span></span>
+<span id="cb31-2"><a href="#cb31-2" tabindex="-1"></a><span class="ex">curl</span> http://localhost:9494/health</span>
+<span id="cb31-3"><a href="#cb31-3" tabindex="-1"></a></span>
+<span id="cb31-4"><a href="#cb31-4" tabindex="-1"></a><span class="co"># View connections (from DuckDB CLI on server)</span></span>
+<span id="cb31-5"><a href="#cb31-5" tabindex="-1"></a><span class="ex">SELECT</span> <span class="pp">*</span> FROM quack_connections<span class="er">(</span><span class="kw">);</span></span></code></pre></div>
+<p><strong>Common issues:</strong></p>
+<table class="table">
+<colgroup>
+<col width="41%">
+<col width="58%">
+</colgroup>
+<thead><tr class="header">
+<th>Issue</th>
+<th>Solution</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td>Connection refused</td>
+<td>Check server is running, firewall allows port 9494</td>
+</tr>
+<tr class="even">
+<td>Authentication failed</td>
+<td>Verify token matches between client and server</td>
+</tr>
+<tr class="odd">
+<td>Timeout on large queries</td>
+<td>Increase <code>proxy_read_timeout</code> in nginx</td>
+</tr>
+<tr class="even">
+<td>“Extension not found”</td>
+<td>Run <code>INSTALL quack; INSTALL ducklake;</code> on server</td>
+</tr>
+</tbody>
+</table>
 <hr>
+</div>
 </div>
 </div>
 <div class="section level2">
@@ -974,7 +1186,7 @@ Quack with a Reverse Proxy</a> for detailed setup instructions.</p>
 </h3>
 <p>DuckLake 1.0 includes native support for geometry types via the
 DuckDB spatial extension:</p>
-<div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb32"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Load spatial extension</span></span>
 <span><span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbExecute.html" class="external-link">dbExecute</a></span><span class="op">(</span><span class="va">con</span>, <span class="st">"INSTALL spatial; LOAD spatial;"</span><span class="op">)</span></span>
 <span></span>
@@ -995,7 +1207,7 @@ DuckDB spatial extension:</p>
 <h3 id="geoparquet-storage">GeoParquet Storage<a class="anchor" aria-label="anchor" href="#geoparquet-storage"></a>
 </h3>
 <p>DuckDB reads and writes <a href="https://geoparquet.org/" class="external-link">GeoParquet</a> natively:</p>
-<div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb33"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Spatial data stored as GeoParquet</span></span>
 <span><span class="va">boundaries</span> <span class="op">&lt;-</span> <span class="fu">db_read</span><span class="op">(</span>table <span class="op">=</span> <span class="st">"boundaries"</span><span class="op">)</span></span>
 <span></span>
@@ -1047,7 +1259,7 @@ DuckDB spatial extension:</p>
 </h3>
 <p>For unsupported formats, store metadata in DuckLake while keeping
 files external:</p>
-<div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb34"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Create a metadata table for raster files</span></span>
 <span><span class="va">raster_catalog</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
 <span>  file_id <span class="op">=</span> <span class="fl">1</span><span class="op">:</span><span class="fl">3</span>,</span>
@@ -1086,7 +1298,7 @@ files external:</p>
 <div class="section level3">
 <h3 id="querying-spatial-metadata">Querying Spatial Metadata<a class="anchor" aria-label="anchor" href="#querying-spatial-metadata"></a>
 </h3>
-<div class="sourceCode" id="cb23"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb35"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Find rasters that intersect an area of interest</span></span>
 <span><span class="va">raster_catalog</span> <span class="op">&lt;-</span> <span class="fu">db_read</span><span class="op">(</span>table <span class="op">=</span> <span class="st">"raster_catalog"</span><span class="op">)</span></span>
 <span></span>
@@ -1129,29 +1341,268 @@ files external:</p>
 <h2 id="decision-guide">Decision Guide<a class="anchor" aria-label="anchor" href="#decision-guide"></a>
 </h2>
 <div class="section level3">
-<h3 id="quick-reference">Quick Reference<a class="anchor" aria-label="anchor" href="#quick-reference"></a>
+<h3 id="choosing-the-right-backend-for-your-environment">Choosing the Right Backend for Your Environment<a class="anchor" aria-label="anchor" href="#choosing-the-right-backend-for-your-environment"></a>
 </h3>
+<p>Most organisations deploying DuckLake will run it <strong>inside
+their corporate network</strong> on existing infrastructure. This
+changes the calculus significantly from cloud deployments.</p>
+<div class="section level4">
+<h4 id="internal-network-reality">Internal Network Reality<a class="anchor" aria-label="anchor" href="#internal-network-reality"></a>
+</h4>
+<pre><code>┌─────────────────────────────────────────────────────────────┐
+│                    Corporate Firewall                        │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │                  Internal Network                      │  │
+│  │                                                        │  │
+│  │  ┌──────────┐    ┌──────────┐    ┌────────────────┐   │  │
+│  │  │ Analysts │───►│ Catalog  │───►│ Network Share  │   │  │
+│  │  │ (R users)│    │ Database │    │ (Parquet data) │   │  │
+│  │  └──────────┘    └──────────┘    └────────────────┘   │  │
+│  │                                                        │  │
+│  │  Security: Windows ACLs / Active Directory             │  │
+│  │  Infrastructure: Existing file servers                 │  │
+│  └───────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘</code></pre>
+<p><strong>What you already have:</strong></p>
+<ul>
+<li>Network file shares with folder-based permissions</li>
+<li>IT team managing Windows/AD infrastructure</li>
+<li>Firewall protecting from external threats</li>
+<li>Users authenticated via domain credentials</li>
+</ul>
+</div>
+<div class="section level4">
+<h4 id="key-questions">Key Questions<a class="anchor" aria-label="anchor" href="#key-questions"></a>
+</h4>
+<p>Ask these questions to choose the right backend:</p>
+<p><strong>1. How many people will write data concurrently?</strong></p>
+<table class="table">
+<thead><tr class="header">
+<th>Writers</th>
+<th>Recommendation</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td>1 (just you)</td>
+<td>DuckDB - simplest possible</td>
+</tr>
+<tr class="even">
+<td>2-5 occasionally</td>
+<td>SQLite - handles this fine</td>
+</tr>
+<tr class="odd">
+<td>5-20 frequently</td>
+<td>SQLite usually works, monitor for contention</td>
+</tr>
+<tr class="even">
+<td>20+ heavy writes</td>
+<td>PostgreSQL or Quack</td>
+</tr>
+</tbody>
+</table>
+<p><strong>2. Do you have IT support for running servers?</strong></p>
+<table class="table">
+<thead><tr class="header">
+<th>IT Support</th>
+<th>Recommendation</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td>No dedicated IT</td>
+<td>SQLite (just files, no servers)</td>
+</tr>
+<tr class="even">
+<td>IT can run PostgreSQL</td>
+<td>PostgreSQL (if you need concurrency)</td>
+</tr>
+<tr class="odd">
+<td>IT can run custom services</td>
+<td>Quack (when stable)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>3. What infrastructure already exists?</strong></p>
+<table class="table">
+<thead><tr class="header">
+<th>Existing Infrastructure</th>
+<th>Recommendation</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td>Network shares only</td>
+<td>SQLite</td>
+</tr>
+<tr class="even">
+<td>PostgreSQL already in use</td>
+<td>PostgreSQL</td>
+</tr>
+<tr class="odd">
+<td>Strong Microsoft/Azure stack</td>
+<td>SQLite now, SQL Server when supported</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section level4">
+<h4 id="decision-flowchart">Decision Flowchart<a class="anchor" aria-label="anchor" href="#decision-flowchart"></a>
+</h4>
 <pre><code>Are you the only user?
 ├─ Yes ──► DuckDB (simplest)
 └─ No
-   └─ Do you need concurrent writes?
-      ├─ No (occasional writes) ──► SQLite
-      └─ Yes (frequent writes)
-         └─ Do you have SQL Server and need it?
-            ├─ Yes ──► Wait for MSSQL support, use PostgreSQL interim
-            └─ No ──► PostgreSQL</code></pre>
+   │
+   How many concurrent writers?
+   ├─ 1-5 occasional ──► SQLite (no server needed)
+   │
+   ├─ 5-20 frequent
+   │  └─ Is SQLite causing write contention?
+   │     ├─ No ──► Stay with SQLite
+   │     └─ Yes ──► PostgreSQL
+   │
+   └─ 20+ heavy writes
+      └─ Can IT provision a database server?
+         ├─ Yes ──► PostgreSQL
+         └─ No ──► SQLite + accept queuing</code></pre>
+</div>
+<div class="section level4">
+<h4 id="internal-network-sqlite-is-usually-right">Internal Network: SQLite is Usually Right<a class="anchor" aria-label="anchor" href="#internal-network-sqlite-is-usually-right"></a>
+</h4>
+<p>For most internal analytics teams, <strong>SQLite on a network
+share</strong> is the best choice:</p>
+<div class="sourceCode" id="cb39"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="../reference/db_connect.html">db_connect</a></span><span class="op">(</span></span>
+<span>  catalog_type <span class="op">=</span> <span class="st">"sqlite"</span>,</span>
+<span>  metadata_path <span class="op">=</span> <span class="st">"//FILE-SERVER/DataLake/catalog.sqlite"</span>,</span>
+<span>  data_path <span class="op">=</span> <span class="st">"//FILE-SERVER/DataLake/data"</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+<p><strong>Why SQLite wins internally:</strong></p>
+<table class="table">
+<thead><tr class="header">
+<th>Factor</th>
+<th>SQLite Advantage</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td><strong>Infrastructure</strong></td>
+<td>Zero - just a file on existing share</td>
+</tr>
+<tr class="even">
+<td><strong>Permissions</strong></td>
+<td>Use existing Windows/NFS ACLs</td>
+</tr>
+<tr class="odd">
+<td><strong>IT overhead</strong></td>
+<td>None - IT already manages file servers</td>
+</tr>
+<tr class="even">
+<td><strong>Backup</strong></td>
+<td>Included in existing file server backups</td>
+</tr>
+<tr class="odd">
+<td><strong>Concurrency</strong></td>
+<td>Multi-read, single-write (usually enough)</td>
+</tr>
+<tr class="even">
+<td><strong>Familiarity</strong></td>
+<td>IT knows files; they may not know PostgreSQL</td>
+</tr>
+</tbody>
+</table>
+<p><strong>When SQLite isn’t enough:</strong></p>
+<ul>
+<li>You’re seeing actual write contention errors (not theoretical)</li>
+<li>You need streaming/inlining at high throughput</li>
+<li>Multiple automated jobs write simultaneously</li>
+</ul>
+</div>
+<div class="section level4">
+<h4 id="when-to-consider-quack-internally">When to Consider Quack Internally<a class="anchor" aria-label="anchor" href="#when-to-consider-quack-internally"></a>
+</h4>
+<p>Quack adds complexity. Only consider it if:</p>
+<ol style="list-style-type: decimal">
+<li>
+<strong>SQLite write contention is actually happening</strong> (not
+just theoretically possible)</li>
+<li>
+<strong>You need high-performance inlining</strong> for streaming
+data</li>
+<li>
+<strong>IT is willing to run and maintain</strong> a DuckDB server
+process</li>
+<li>
+<strong>You have a plan for token distribution</strong> to
+authorized users</li>
+</ol>
+<p><strong>Internal Quack considerations:</strong></p>
+<table class="table">
+<colgroup>
+<col width="53%">
+<col width="46%">
+</colgroup>
+<thead><tr class="header">
+<th>Consideration</th>
+<th>Implication</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td><strong>New server to manage</strong></td>
+<td>IT must provision, monitor, update, restart on failure</td>
+</tr>
+<tr class="even">
+<td><strong>Token management</strong></td>
+<td>How do you securely distribute tokens to users?</td>
+</tr>
+<tr class="odd">
+<td><strong>HTTP on internal network</strong></td>
+<td>Traffic readable without TLS (may or may not matter)</td>
+</tr>
+<tr class="even">
+<td><strong>No Windows auth integration</strong></td>
+<td>Tokens are separate from AD credentials</td>
+</tr>
+<tr class="odd">
+<td><strong>Backup strategy</strong></td>
+<td>Need to back up DuckDB database on server</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section level4">
+<h4 id="recommended-starting-point">Recommended Starting Point<a class="anchor" aria-label="anchor" href="#recommended-starting-point"></a>
+</h4>
+<pre><code>┌─────────────────────────────────────────────────────────────┐
+│  Start Here: SQLite on Network Share                         │
+│                                                              │
+│  //FILE-SERVER/DataLake/                                     │
+│  ├── catalog.sqlite    ← Catalog (multi-reader)             │
+│  └── data/                                                   │
+│      ├── trade/        ← Team A: Read/Write ACL             │
+│      ├── labour/       ← Team B: Read/Write ACL             │
+│      └── shared/       ← Everyone: Read-only ACL            │
+│                                                              │
+│  • Zero infrastructure beyond existing file server           │
+│  • Familiar permissions model (IT already knows this)        │
+│  • Easy backup (part of normal file server backups)          │
+│  • Upgrade to PostgreSQL/Quack later if needed               │
+└─────────────────────────────────────────────────────────────┘</code></pre>
+</div>
 </div>
 <div class="section level3">
 <h3 id="migration-path">Migration Path<a class="anchor" aria-label="anchor" href="#migration-path"></a>
 </h3>
-<p>Start simple, scale up as needed:</p>
-<pre><code>Development     Team Pilot      Production       Enterprise
+<p>Start simple, scale up only when needed:</p>
+<pre><code>Development     Team Pilot      Production       Scale-Out
     │               │               │                │
     ▼               ▼               ▼                ▼
- DuckDB ────► SQLite ────► PostgreSQL ────► PostgreSQL HA
-                                      └───► Quack (future)</code></pre>
-<p>The data files (Parquet) remain unchanged - only the catalog backend
-changes.</p>
+ DuckDB ────► SQLite ────► SQLite ────────► PostgreSQL
+ (local)     (network     (still           (if actually
+              share)       works!)          needed)
+                              │
+                              └────────────► Quack (v2.0+)
+                                            (if inlining
+                                             perf needed)</code></pre>
+<p><strong>Key insight:</strong> The data files (Parquet) remain
+unchanged. You can switch catalog backends without migrating data - just
+point to a new catalog database.</p>
 <hr>
 </div>
 </div>

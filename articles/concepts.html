@@ -460,11 +460,107 @@ where you want direct Parquet access - Avoiding DuckDB compute overhead
 for simple transfers - Working with Arrow-native data pipelines</p>
 </div>
 <div class="section level3">
-<h3 id="zero-copy-transforms-lazy-tables">12. Zero-Copy Transforms (Lazy Tables)<a class="anchor" aria-label="anchor" href="#zero-copy-transforms-lazy-tables"></a>
+<h3 id="views-and-macros">12. Views and Macros<a class="anchor" aria-label="anchor" href="#views-and-macros"></a>
+</h3>
+<p>DuckLake stores SQL views and macros in the catalog, supporting time
+travel - attach at a previous snapshot and you’ll see the view/macro
+definitions that existed at that point.</p>
+<p><strong>Views:</strong></p>
+<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Create a view</span></span>
+<span><span class="fu">db_create_view</span><span class="op">(</span></span>
+<span>  view <span class="op">=</span> <span class="st">"active_users"</span>,</span>
+<span>  query <span class="op">=</span> <span class="st">"SELECT * FROM users WHERE active = true"</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Replace existing view</span></span>
+<span><span class="fu">db_create_view</span><span class="op">(</span></span>
+<span>  view <span class="op">=</span> <span class="st">"active_users"</span>,</span>
+<span>  query <span class="op">=</span> <span class="st">"SELECT * FROM users WHERE active = true AND verified = true"</span>,</span>
+<span>  replace <span class="op">=</span> <span class="cn">TRUE</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># List views in a schema</span></span>
+<span><span class="fu"><a href="../reference/db_list_views.html">db_list_views</a></span><span class="op">(</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Drop a view</span></span>
+<span><span class="fu">db_drop_view</span><span class="op">(</span>view <span class="op">=</span> <span class="st">"active_users"</span><span class="op">)</span></span></code></pre></div>
+<p><strong>Macros:</strong></p>
+<p>Macros are reusable SQL expressions - either scalar (return a value)
+or table-valued (return a table):</p>
+<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Scalar macro</span></span>
+<span><span class="fu">db_create_macro</span><span class="op">(</span></span>
+<span>  name <span class="op">=</span> <span class="st">"add_values"</span>,</span>
+<span>  params <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"a"</span>, <span class="st">"b"</span><span class="op">)</span>,</span>
+<span>  body <span class="op">=</span> <span class="st">"a + b"</span></span>
+<span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/db_query.html">db_query</a></span><span class="op">(</span><span class="st">"SELECT add_values(10, 20)"</span><span class="op">)</span>  <span class="co"># Returns 30</span></span>
+<span></span>
+<span><span class="co"># Table macro</span></span>
+<span><span class="fu">db_create_macro</span><span class="op">(</span></span>
+<span>  name <span class="op">=</span> <span class="st">"filtered_sales"</span>,</span>
+<span>  params <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>min_value <span class="op">=</span> <span class="st">"INTEGER"</span><span class="op">)</span>,</span>
+<span>  body <span class="op">=</span> <span class="st">"SELECT * FROM sales WHERE value &gt; min_value"</span>,</span>
+<span>  table_macro <span class="op">=</span> <span class="cn">TRUE</span></span>
+<span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/db_query.html">db_query</a></span><span class="op">(</span><span class="st">"SELECT * FROM filtered_sales(100)"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Typed parameters for stricter control</span></span>
+<span><span class="fu">db_create_macro</span><span class="op">(</span></span>
+<span>  name <span class="op">=</span> <span class="st">"typed_add"</span>,</span>
+<span>  params <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>a <span class="op">=</span> <span class="st">"INTEGER"</span>, b <span class="op">=</span> <span class="st">"INTEGER"</span><span class="op">)</span>,</span>
+<span>  body <span class="op">=</span> <span class="st">"a + b"</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># List and drop macros</span></span>
+<span><span class="fu">db_list_macros</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="fu">db_drop_macro</span><span class="op">(</span>name <span class="op">=</span> <span class="st">"add_values"</span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level3">
+<h3 id="sql-comments">13. SQL Comments<a class="anchor" aria-label="anchor" href="#sql-comments"></a>
+</h3>
+<p>Add SQL COMMENT to tables and columns (stored in catalog with time
+travel):</p>
+<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Comment on table</span></span>
+<span><span class="fu">db_comment</span><span class="op">(</span>table <span class="op">=</span> <span class="st">"users"</span>, comment <span class="op">=</span> <span class="st">"Active user accounts"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Comment on column</span></span>
+<span><span class="fu">db_comment</span><span class="op">(</span>table <span class="op">=</span> <span class="st">"users"</span>, column <span class="op">=</span> <span class="st">"email"</span>,</span>
+<span>           comment <span class="op">=</span> <span class="st">"Primary email, must be unique"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Remove comment</span></span>
+<span><span class="fu">db_comment</span><span class="op">(</span>table <span class="op">=</span> <span class="st">"users"</span>, column <span class="op">=</span> <span class="st">"email"</span>, comment <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span></span></code></pre></div>
+<p>This is distinct from <code><a href="../reference/db_describe.html">db_describe()</a></code> which stores richer
+metadata (owner, tags) in a separate metadata table.</p>
+</div>
+<div class="section level3">
+<h3 id="logging-and-debugging">14. Logging and Debugging<a class="anchor" aria-label="anchor" href="#logging-and-debugging"></a>
+</h3>
+<p>Enable DuckDB/DuckLake logging for troubleshooting:</p>
+<div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Enable query logging</span></span>
+<span><span class="fu">db_enable_logging</span><span class="op">(</span><span class="cn">TRUE</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Run operations...</span></span>
+<span><span class="fu">db_read</span><span class="op">(</span>table <span class="op">=</span> <span class="st">"users"</span><span class="op">)</span> <span class="op">|&gt;</span> <span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span> <span class="fu">collect</span><span class="op">(</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># View logs</span></span>
+<span><span class="fu"><a href="../reference/db_query.html">db_query</a></span><span class="op">(</span><span class="st">"SELECT * FROM duckdb_logs() ORDER BY timestamp DESC LIMIT 20"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Disable logging</span></span>
+<span><span class="fu">db_enable_logging</span><span class="op">(</span><span class="cn">FALSE</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Log types: "query" (SQL queries), "metadata" (DuckLake metadata ops), "all"</span></span>
+<span><span class="fu">db_enable_logging</span><span class="op">(</span><span class="cn">TRUE</span>, log_type <span class="op">=</span> <span class="st">"all"</span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level3">
+<h3 id="zero-copy-transforms-lazy-tables">15. Zero-Copy Transforms (Lazy Tables)<a class="anchor" aria-label="anchor" href="#zero-copy-transforms-lazy-tables"></a>
 </h3>
 <p><code>db_write()</code> supports two approaches for writing data:</p>
 <p><strong>Approach 1: data.frame (data passes through R)</strong></p>
-<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Load data into R, then write to lake</span></span>
 <span><span class="va">my_data</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/utils/read.table.html" class="external-link">read.csv</a></span><span class="op">(</span><span class="st">"data.csv"</span><span class="op">)</span></span>
 <span><span class="fu">db_write</span><span class="op">(</span><span class="va">my_data</span>, table <span class="op">=</span> <span class="st">"imports"</span><span class="op">)</span></span></code></pre></div>
@@ -473,7 +569,7 @@ databases) - Small to medium datasets that fit in R memory - Data that
 needs R-specific transformations</p>
 <p><strong>Approach 2: Lazy table (stays entirely in
 DuckDB)</strong></p>
-<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Transform data without ever loading it into R</span></span>
 <span><span class="fu">db_read</span><span class="op">(</span>table <span class="op">=</span> <span class="st">"raw_imports"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/stats/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">year</span> <span class="op">==</span> <span class="fl">2024</span>, <span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NA.html" class="external-link">is.na</a></span><span class="op">(</span><span class="va">value</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span></span>
@@ -489,7 +585,7 @@ dplyr pipeline is converted to <code>CREATE TABLE AS SELECT</code></p>
 (raw → clean → analysis) - Aggregations and summaries - Filtering large
 tables to smaller subsets - Joining tables within the lake - Any
 operation where source and destination are both in DuckLake</p>
-<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb23"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Example: Building a data pipeline entirely in DuckDB</span></span>
 <span><span class="co"># Raw data → Clean → Analysis (no R memory used)</span></span>
 <span></span>
@@ -533,7 +629,7 @@ They help organise related tables together.</p>
 <div class="section level3">
 <h3 id="using-schemas">Using Schemas<a class="anchor" aria-label="anchor" href="#using-schemas"></a>
 </h3>
-<div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb25"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Create a schema for your section</span></span>
 <span><span class="fu"><a href="../reference/db_create_schema.html">db_create_schema</a></span><span class="op">(</span><span class="st">"trade"</span><span class="op">)</span></span>
 <span></span>
@@ -557,7 +653,7 @@ dictionary.</p>
 <div class="section level3">
 <h3 id="documenting-tables">Documenting Tables<a class="anchor" aria-label="anchor" href="#documenting-tables"></a>
 </h3>
-<div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb26"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Add metadata to a table</span></span>
 <span><span class="fu"><a href="../reference/db_describe.html">db_describe</a></span><span class="op">(</span></span>
 <span>  table <span class="op">=</span> <span class="st">"imports"</span>,</span>
@@ -583,7 +679,7 @@ dictionary.</p>
 <div class="section level3">
 <h3 id="searching-and-discovery">Searching and Discovery<a class="anchor" aria-label="anchor" href="#searching-and-discovery"></a>
 </h3>
-<div class="sourceCode" id="cb23"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb27"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Search tables by any field</span></span>
 <span><span class="fu"><a href="../reference/db_search.html">db_search</a></span><span class="op">(</span><span class="st">"trade"</span><span class="op">)</span>                        <span class="co"># Matches name, description, owner, or tags</span></span>
 <span><span class="fu"><a href="../reference/db_search.html">db_search</a></span><span class="op">(</span><span class="st">"monthly"</span>, field <span class="op">=</span> <span class="st">"tags"</span><span class="op">)</span>      <span class="co"># Search only tags</span></span>
@@ -599,7 +695,7 @@ dictionary.</p>
 <div class="section level3">
 <h3 id="generating-a-data-dictionary">Generating a Data Dictionary<a class="anchor" aria-label="anchor" href="#generating-a-data-dictionary"></a>
 </h3>
-<div class="sourceCode" id="cb24"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb28"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Full data dictionary with column details</span></span>
 <span><span class="va">dict</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/db_dictionary.html">db_dictionary</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
@@ -621,7 +717,7 @@ updated timestamps</p>
 <h2 id="data-lineage">Data Lineage<a class="anchor" aria-label="anchor" href="#data-lineage"></a>
 </h2>
 <p>Track where your data comes from and how it was transformed:</p>
-<div class="sourceCode" id="cb25"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb29"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Record lineage when creating derived tables</span></span>
 <span><span class="fu">db_lineage</span><span class="op">(</span></span>
 <span>  table <span class="op">=</span> <span class="st">"monthly_summary"</span>,</span>
@@ -651,7 +747,7 @@ happen:</p>
 <div class="section level3">
 <h3 id="write-preview">Write Preview<a class="anchor" aria-label="anchor" href="#write-preview"></a>
 </h3>
-<div class="sourceCode" id="cb26"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb30"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu">db_preview_write</span><span class="op">(</span><span class="va">my_data</span>, table <span class="op">=</span> <span class="st">"imports"</span>, mode <span class="op">=</span> <span class="st">"overwrite"</span><span class="op">)</span></span></code></pre></div>
 <p>Shows: - Current vs new row counts - Schema comparison - Warnings
 (e.g., append to non-existent table)</p>
@@ -659,7 +755,7 @@ happen:</p>
 <div class="section level3">
 <h3 id="upsert-preview">Upsert Preview<a class="anchor" aria-label="anchor" href="#upsert-preview"></a>
 </h3>
-<div class="sourceCode" id="cb27"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb31"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/db_preview_upsert.html">db_preview_upsert</a></span><span class="op">(</span><span class="va">my_data</span>, table <span class="op">=</span> <span class="st">"products"</span>, by <span class="op">=</span> <span class="st">"product_id"</span><span class="op">)</span></span></code></pre></div>
 <p>Shows: - How many rows will be <strong>inserted</strong> (new keys) -
 How many rows will be <strong>updated</strong> (existing keys) -
@@ -693,7 +789,7 @@ model commonly used.</p>
 <div class="section level3">
 <h3 id="setting-up-schemas">Setting Up Schemas<a class="anchor" aria-label="anchor" href="#setting-up-schemas"></a>
 </h3>
-<div class="sourceCode" id="cb29"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb33"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Connect to DuckLake</span></span>
 <span><span class="fu"><a href="../reference/db_connect.html">db_connect</a></span><span class="op">(</span></span>
 <span>  catalog_type <span class="op">=</span> <span class="st">"sqlite"</span>,</span>
@@ -761,7 +857,7 @@ file sizes.</p>
 <div class="section level3">
 <h3 id="checking-file-statistics">Checking File Statistics<a class="anchor" aria-label="anchor" href="#checking-file-statistics"></a>
 </h3>
-<div class="sourceCode" id="cb30"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb34"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># See file counts and sizes for all tables</span></span>
 <span><span class="fu">db_file_stats</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="co">#&gt;   schema_name table_name file_count total_rows total_bytes avg_file_bytes</span></span>
@@ -775,7 +871,7 @@ file sizes.</p>
 <div class="section level3">
 <h3 id="compacting-files">Compacting Files<a class="anchor" aria-label="anchor" href="#compacting-files"></a>
 </h3>
-<div class="sourceCode" id="cb31"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb35"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Merge small files into larger ones</span></span>
 <span><span class="fu">db_compact</span><span class="op">(</span>table <span class="op">=</span> <span class="st">"imports"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; Compacting files...</span></span>
@@ -796,7 +892,7 @@ file sizes.</p>
 </h3>
 <p>After compacting or vacuuming, old files become orphaned. Clean them
 up to reclaim disk space:</p>
-<div class="sourceCode" id="cb32"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb36"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Preview what would be deleted</span></span>
 <span><span class="fu">db_cleanup_files</span><span class="op">(</span>dry_run <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
 <span></span>
@@ -845,7 +941,7 @@ up to reclaim disk space:</p>
 <div class="section level3">
 <h3 id="publishing-data-producer">Publishing Data (Producer)<a class="anchor" aria-label="anchor" href="#publishing-data-producer"></a>
 </h3>
-<div class="sourceCode" id="cb33"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb37"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/CathalByrneGit/datapond" class="external-link">datapond</a></span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Connect to DuckLake</span></span>
@@ -884,7 +980,7 @@ up to reclaim disk space:</p>
 <div class="section level3">
 <h3 id="consuming-data-consumer">Consuming Data (Consumer)<a class="anchor" aria-label="anchor" href="#consuming-data-consumer"></a>
 </h3>
-<div class="sourceCode" id="cb34"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb38"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/CathalByrneGit/datapond" class="external-link">datapond</a></span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Connect to DuckLake (read access to catalog and data folder)</span></span>
@@ -940,8 +1036,8 @@ files</td>
 </tr>
 <tr class="odd">
 <td><strong>Catalog</strong></td>
-<td>Database storing DuckLake metadata (can be DuckDB, SQLite, or
-PostgreSQL)</td>
+<td>Database storing DuckLake metadata (can be DuckDB, SQLite,
+PostgreSQL, or Quack)</td>
 </tr>
 <tr class="even">
 <td><strong>Snapshot</strong></td>
@@ -954,6 +1050,16 @@ PostgreSQL)</td>
 <tr class="even">
 <td><strong>Schema</strong></td>
 <td>A namespace for organising related tables</td>
+</tr>
+<tr class="odd">
+<td><strong>View</strong></td>
+<td>A stored SQL query that appears as a virtual table (supports time
+travel in DuckLake)</td>
+</tr>
+<tr class="even">
+<td><strong>Macro</strong></td>
+<td>A reusable SQL expression - scalar (returns value) or table-valued
+(returns rows)</td>
 </tr>
 <tr class="odd">
 <td><strong>Hive Partition</strong></td>
@@ -1011,6 +1117,16 @@ interchange</td>
 <tr class="even">
 <td><strong>col_types</strong></td>
 <td>Explicit column type specification for stricter schema control</td>
+</tr>
+<tr class="odd">
+<td><strong>Quack</strong></td>
+<td>Experimental HTTP-based remote DuckDB protocol with multi-writer
+support</td>
+</tr>
+<tr class="even">
+<td><strong>Zero-copy transform</strong></td>
+<td>Using lazy dbplyr tables to transform data entirely in DuckDB
+without R memory</td>
 </tr>
 </tbody>
 </table>
