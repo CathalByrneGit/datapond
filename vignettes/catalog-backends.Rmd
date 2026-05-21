@@ -531,6 +531,59 @@ The server listens on port 9494 by default. See the [Quack documentation](https:
 
 **Warning:** The protocol, function names, and defaults may change before v2.0. Use in production at your own risk.
 
+### Quack Authentication
+
+datapond supports basic token authentication for Quack:
+
+```{r}
+# Option 1: Explicit token parameter
+db_connect(
+  catalog_type = "quack",
+  metadata_path = "quack:server:9494/catalog",
+  data_path = "/data/lake",
+  quack_token = "my-secret-token"
+)
+
+# Option 2: Environment variable (recommended for scripts)
+Sys.setenv(QUACK_TOKEN = "my-secret-token")
+db_connect(
+  catalog_type = "quack",
+  metadata_path = "quack:server:9494/catalog",
+  data_path = "/data/lake"
+)
+```
+
+### Quack Security: Future Possibilities
+
+Quack is designed with a "bring your own security" philosophy. While datapond currently
+supports only token authentication, Quack itself supports custom authentication and
+authorization callbacks. Future datapond releases may support:
+| Feature | Description | Status |
+|---------|-------------|--------|
+| **Token auth** | Simple shared secret | Implemented |
+| **Environment variable** | `QUACK_TOKEN` fallback | Implemented |
+| **Custom headers** | JWT/Bearer tokens via reverse proxy | Future |
+| **Credential callback** | Dynamic token retrieval (e.g., from keyring) | Future |
+| **LDAP/AD integration** | Enterprise directory auth | Requires server-side setup |
+
+**Production deployment pattern:**
+
+For production, the recommended approach is to put Quack behind a reverse proxy
+(nginx, Caddy) that handles TLS termination and authentication:
+
+```
+Client ──► HTTPS ──► nginx ──► HTTP ──► Quack Server
+                      │
+                TLS + Auth headers
+                Rate limiting
+                Audit logging
+```
+
+This keeps Quack simple while leveraging battle-tested HTTP infrastructure for security.
+
+See [Securing Quack with a Reverse Proxy](https://duckdb.org/docs/current/quack/setup/reverse_proxy)
+for detailed setup instructions.
+
 ---
 
 ## Geospatial Data Considerations

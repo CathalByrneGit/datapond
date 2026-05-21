@@ -287,11 +287,20 @@ The [Quack protocol](https://duckdb.org/2026/05/12/quack-remote-protocol) enable
 db_connect(
   catalog_type = "quack",
   metadata_path = "quack:db-server.cso.ie:9494/catalog.ducklake",
+  data_path = "//CSO-NAS/DataLake/data",
+  quack_token = "my-secret-token"  
+)
+
+# Or use environment variable
+Sys.setenv(QUACK_TOKEN = "my-secret-token")
+db_connect(
+  catalog_type = "quack",
+  metadata_path = "quack:db-server.cso.ie:9494/catalog.ducklake",
   data_path = "//CSO-NAS/DataLake/data"
 )
 ```
 
-**Note:** Quack is currently in beta. The production-ready version is planned for DuckDB 2.0 (Fall 2026). Protocol and function names may change.
+**Note:** Quack is currently in beta (DuckDB 1.5.x). Production-ready version planned for DuckDB 2.0 (Fall 2026). See `vignette("catalog-backends")` for security options.
 
 ## Access Control
 
