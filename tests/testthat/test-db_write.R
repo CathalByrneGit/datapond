@@ -427,3 +427,402 @@ test_that("db_write can change partitioning on overwrite", {
   clean_db_env()
   unlink(temp_dir, recursive = TRUE)
 })
+
+# ==============================================================================
+# Tests for db_write() - col_types parameter
+# ==============================================================================
+
+test_that("db_write validates col_types parameter", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "lake_coltypes_val_")
+  dir.create(temp_dir)
+
+  db_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  df <- data.frame(id = 1:3, value = c(10.5, 20.5, 30.5))
+
+  # col_types must be named
+  expect_error(
+    db_write(df, table = "test", col_types = c("BIGINT", "DOUBLE")),
+    "must have names"
+  )
+
+  # col_types columns must exist in data
+  expect_error(
+    db_write(df, table = "test", col_types = list(nonexistent = "BIGINT")),
+    "not found in data"
+  )
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_write applies col_types correctly", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "lake_coltypes_apply_")
+  dir.create(temp_dir)
+
+  db_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  df <- data.frame(id = 1:3, value = c(10.5, 20.5, 30.5))
+
+  # Write with explicit column types
+  db_write(df, table = "test_table", col_types = list(id = "BIGINT", value = "DECIMAL(10,2)"))
+
+  # Verify table was created and data is readable
+  result <- db_read(table = "test_table") |> dplyr::collect()
+  expect_equal(nrow(result), 3)
+
+  # Check column types via SQL
+  con <- datapond:::.db_get_con()
+  schema_info <- DBI::dbGetQuery(con, "DESCRIBE test.main.test_table")
+
+  # id should be BIGINT
+  expect_true(grepl("BIGINT", schema_info$column_type[schema_info$column_name == "id"], ignore.case = TRUE))
+  # value should be DECIMAL
+  expect_true(grepl("DECIMAL", schema_info$column_type[schema_info$column_name == "value"], ignore.case = TRUE))
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_write accepts col_types as character vector", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "lake_coltypes_char_")
+  dir.create(temp_dir)
+
+  db_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  df <- data.frame(id = 1:3, name = c("a", "b", "c"))
+
+  # Use character vector shorthand
+  db_write(df, table = "test_table", col_types = c(id = "INTEGER"))
+
+  result <- db_read(table = "test_table") |> dplyr::collect()
+  expect_equal(nrow(result), 3)
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+# ==============================================================================
+# Tests for db_write() - bucket_by parameter
+# ==============================================================================
+
+test_that("db_write validates bucket_by parameter", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "lake_bucket_val_")
+  dir.create(temp_dir)
+
+  db_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  df <- data.frame(user_id = 1:5, value = c(10, 20, 30, 40, 50))
+
+  # bucket_by must be a list with column and buckets
+  expect_error(
+    db_write(df, table = "test", bucket_by = "user_id"),
+    "must be a list"
+  )
+
+  expect_error(
+    db_write(df, table = "test", bucket_by = list(column = "user_id")),
+    "must be a list with 'column' and 'buckets'"
+  )
+
+  # bucket_by column must exist
+  expect_error(
+    db_write(df, table = "test", bucket_by = list(column = "nonexistent", buckets = 8)),
+    "not found in data"
+  )
+
+  # buckets must be positive
+  expect_error(
+    db_write(df, table = "test", bucket_by = list(column = "user_id", buckets = 0)),
+    "positive integer"
+  )
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_write bucket_by cannot be used with append mode", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "lake_bucket_append_")
+  dir.create(temp_dir)
+
+  db_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  df <- data.frame(user_id = 1:3, value = c(10, 20, 30))
+
+  # Create table first
+  db_write(df, table = "test", mode = "overwrite")
+
+  # bucket_by not allowed with append
+  expect_error(
+    db_write(df, table = "test", mode = "append", bucket_by = list(column = "user_id", buckets = 8)),
+    "cannot be used with mode = 'append'"
+  )
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_write creates bucket-partitioned table", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "lake_bucket_create_")
+  dir.create(temp_dir)
+
+  db_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  df <- data.frame(
+    user_id = 1:10,
+    event = paste0("event_", 1:10),
+    value = runif(10)
+  )
+
+  # Create with bucket partitioning
+  db_write(df, table = "events", bucket_by = list(column = "user_id", buckets = 4))
+
+  # Verify data is readable
+  result <- db_read(table = "events") |> dplyr::collect()
+  expect_equal(nrow(result), 10)
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+# ==============================================================================
+# Tests for db_write() - sort_by parameter
+# ==============================================================================
+
+test_that("db_write validates sort_by parameter", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "lake_sortby_val_")
+  dir.create(temp_dir)
+
+  db_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  df <- data.frame(id = 1:5, date = as.Date("2024-01-01") + 0:4, value = runif(5))
+
+  # sort_by must be non-empty character vector
+  expect_error(
+    db_write(df, table = "test", sort_by = character(0)),
+    "must be a non-empty character vector"
+  )
+
+  # sort_by columns must exist
+  expect_error(
+    db_write(df, table = "test", sort_by = "nonexistent"),
+    "not found in data"
+  )
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_write sort_by cannot be used with append mode", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "lake_sortby_append_")
+  dir.create(temp_dir)
+
+  db_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  df <- data.frame(id = 1:3, date = as.Date("2024-01-01") + 0:2, value = runif(3))
+
+  # Create table first
+  db_write(df, table = "test", mode = "overwrite")
+
+  # sort_by not allowed with append
+  expect_error(
+    db_write(df, table = "test", mode = "append", sort_by = "date"),
+    "cannot be used with mode = 'append'"
+  )
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_write creates sorted/clustered table", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "lake_sortby_create_")
+  dir.create(temp_dir)
+
+  db_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  df <- data.frame(
+    id = 1:10,
+    sale_date = as.Date("2024-01-01") + 0:9,
+    region = rep(c("North", "South"), 5),
+    value = runif(10)
+  )
+
+  # Create with clustering
+  db_write(df, table = "sales", sort_by = c("sale_date", "region"))
+
+  # Verify data is readable
+  result <- db_read(table = "sales") |> dplyr::collect()
+  expect_equal(nrow(result), 10)
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+# ==============================================================================
+# Tests for db_write() - inline parameter
+# ==============================================================================
+
+test_that("db_write validates inline parameter", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "lake_inline_val_")
+  dir.create(temp_dir)
+
+  db_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  df <- data.frame(id = 1:3)
+
+  # Create table first
+  db_write(df, table = "test", mode = "overwrite")
+
+  # inline must be logical
+  expect_error(
+    db_write(df, table = "test", mode = "append", inline = "yes"),
+    "must be TRUE or FALSE"
+  )
+
+  expect_error(
+    db_write(df, table = "test", mode = "append", inline = c(TRUE, FALSE)),
+    "must be TRUE or FALSE"
+  )
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_write inline mode works for append", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "lake_inline_append_")
+  dir.create(temp_dir)
+
+  db_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  # Create initial table
+  df1 <- data.frame(id = 1:3, value = c(10, 20, 30))
+  db_write(df1, table = "events", mode = "overwrite")
+
+  # Append with inline=TRUE
+  df2 <- data.frame(id = 4:6, value = c(40, 50, 60))
+  db_write(df2, table = "events", mode = "append", inline = TRUE)
+
+  # Verify data is readable
+  result <- db_read(table = "events") |> dplyr::collect()
+  expect_equal(nrow(result), 6)
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+# ==============================================================================
+# Tests for db_write() - Combined parameters
+# ==============================================================================
+
+test_that("db_write combines hive partitioning and bucket partitioning", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "lake_combined_part_")
+  dir.create(temp_dir)
+
+  db_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  df <- data.frame(
+    user_id = rep(1:5, each = 2),
+    year = as.integer(rep(c(2023, 2024), 5)),
+    value = runif(10)
+  )
+
+  # Create with combined partitioning
+  db_write(df, table = "events",
+           partition_by = "year",
+           bucket_by = list(column = "user_id", buckets = 4))
+
+  # Verify data is readable
+  result <- db_read(table = "events") |> dplyr::collect()
+  expect_equal(nrow(result), 10)
+
+  # Verify hive partitioning is set
+  parts <- db_get_partitioning(table = "events")
+  expect_true("year" %in% parts)
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})

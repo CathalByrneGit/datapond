@@ -338,8 +338,18 @@ db_write(imports_data, schema = "trade", table = "imports")
 | `db_list_schemas()` | List schemas |
 | `db_tables()` | List tables in a schema |
 | `db_list_views()` | List views in a schema |
+| `db_list_macros()` | List macros in a schema |
 | `db_table_exists()` | Check if a table exists |
 | `db_create_schema()` | Create a new schema |
+
+### Views & Macros
+
+| Function | Description |
+|----|----|
+| `db_create_view()` | Create a SQL view stored in the catalog |
+| `db_drop_view()` | Drop a view |
+| `db_create_macro()` | Create a scalar or table macro |
+| `db_drop_macro()` | Drop a macro |
 
 ### Documentation & Search
 
@@ -347,6 +357,7 @@ db_write(imports_data, schema = "trade", table = "imports")
 |----|----|
 | `db_describe()` | Add description, owner, tags to a table |
 | `db_describe_column()` | Document a column (description, units, notes) |
+| `db_comment()` | Add SQL COMMENT to table or column (stored in catalog) |
 | `db_get_docs()` | Retrieve documentation for a table |
 | `db_dictionary()` | Generate full data dictionary |
 | `db_search()` | Search by name, description, owner, or tags |
@@ -392,6 +403,7 @@ db_write(imports_data, schema = "trade", table = "imports")
 | `db_file_stats()` | Get file counts and sizes to identify compaction candidates |
 | `db_cleanup_files()` | Remove orphaned files after vacuum or compact |
 | `db_query()` | Run arbitrary SQL |
+| `db_enable_logging()` | Enable DuckDB/DuckLake logging for debugging |
 
 ### Interactive Tools
 
