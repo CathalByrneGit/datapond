@@ -482,3 +482,530 @@ test_that("db_get_partitioning returns partition keys", {
   clean_db_env()
   unlink(temp_dir, recursive = TRUE)
 })
+
+
+# ==============================================================================
+# Tests for db_create_view() - DuckLake
+# ==============================================================================
+
+test_that("db_create_view errors when not connected", {
+  clean_db_env()
+
+  expect_error(db_create_view(view = "test", query = "SELECT 1"), "Not connected")
+})
+
+test_that("db_create_view validates inputs", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "view_validation_test_")
+  dir.create(temp_dir)
+
+  db_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  expect_error(db_create_view(view = "", query = "SELECT 1"), "non-empty")
+  expect_error(db_create_view(view = "test", query = ""), "non-empty")
+  expect_error(db_create_view(view = "test", query = NULL), "non-empty")
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_create_view creates a view", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "create_view_test_")
+  dir.create(temp_dir)
+
+  db_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  # Create a table first
+  db_write(data.frame(id = 1:3, active = c(TRUE, FALSE, TRUE)),
+           schema = "main", table = "users")
+
+  # Create view
+  expect_message(
+    db_create_view(view = "active_users",
+                   query = "SELECT * FROM test.main.users WHERE active = true"),
+    "Created view"
+  )
+
+  # Check view exists
+  views <- db_list_views()
+  expect_true("active_users" %in% views)
+
+  # Check view works
+  result <- DBI::dbGetQuery(datapond:::.db_get_con(),
+                            "SELECT * FROM test.main.active_users")
+  expect_equal(nrow(result), 2)
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_create_view replaces existing view", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "replace_view_test_")
+  dir.create(temp_dir)
+
+  db_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  # Create view
+  db_create_view(view = "my_view", query = "SELECT 1 AS value")
+
+  # Replace without flag should error
+  expect_error(db_create_view(view = "my_view", query = "SELECT 2 AS value"))
+
+  # Replace with flag should succeed
+  expect_message(
+    db_create_view(view = "my_view", query = "SELECT 2 AS value", replace = TRUE),
+    "Created view"
+  )
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+
+# ==============================================================================
+# Tests for db_drop_view() - DuckLake
+# ==============================================================================
+
+test_that("db_drop_view errors when not connected", {
+  clean_db_env()
+
+  expect_error(db_drop_view(view = "test"), "Not connected")
+})
+
+test_that("db_drop_view drops a view", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "drop_view_test_")
+  dir.create(temp_dir)
+
+  db_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  # Create and drop view
+  db_create_view(view = "temp_view", query = "SELECT 1")
+  expect_true("temp_view" %in% db_list_views())
+
+  expect_message(db_drop_view(view = "temp_view"), "Dropped view")
+  expect_false("temp_view" %in% db_list_views())
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_drop_view with if_exists handles missing view", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "drop_view_if_exists_test_")
+  dir.create(temp_dir)
+
+  db_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  # Without if_exists - should error
+  expect_error(db_drop_view(view = "nonexistent"))
+
+  # With if_exists - should succeed silently
+  expect_message(db_drop_view(view = "nonexistent", if_exists = TRUE), "Dropped view")
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+
+# ==============================================================================
+# Tests for db_create_macro() - DuckLake
+# ==============================================================================
+
+test_that("db_create_macro errors when not connected", {
+  clean_db_env()
+
+  expect_error(db_create_macro(name = "test", body = "1 + 1"), "Not connected")
+})
+
+test_that("db_create_macro validates inputs", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "macro_validation_test_")
+  dir.create(temp_dir)
+
+  db_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  expect_error(db_create_macro(name = "", body = "1"), "non-empty")
+  expect_error(db_create_macro(name = "test", body = ""), "non-empty")
+  expect_error(db_create_macro(name = "test", body = NULL), "non-empty")
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_create_macro creates scalar macro", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "scalar_macro_test_")
+  dir.create(temp_dir)
+
+  db_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  # Create scalar macro with parameters
+  expect_message(
+    db_create_macro(name = "add_vals", params = c("a", "b"), body = "a + b"),
+    "Created macro"
+  )
+
+  # Use the macro
+  result <- DBI::dbGetQuery(datapond:::.db_get_con(),
+                            "SELECT test.main.add_vals(10, 20) AS result")
+  expect_equal(result$result, 30)
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_create_macro creates table macro", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "table_macro_test_")
+  dir.create(temp_dir)
+
+  db_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  # Create a table first
+  db_write(data.frame(id = 1:5, value = c(10, 20, 30, 40, 50)),
+           schema = "main", table = "numbers")
+
+  # Create table macro
+  expect_message(
+    db_create_macro(
+      name = "big_numbers",
+      params = c("threshold"),
+      body = "SELECT * FROM test.main.numbers WHERE value > threshold",
+      table_macro = TRUE
+    ),
+    "Created macro"
+  )
+
+  # Use the table macro
+  result <- DBI::dbGetQuery(datapond:::.db_get_con(),
+                            "SELECT * FROM test.main.big_numbers(25)")
+  expect_equal(nrow(result), 3)
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_create_macro with typed parameters", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "typed_macro_test_")
+  dir.create(temp_dir)
+
+  db_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  # Create macro with typed parameters
+  expect_message(
+    db_create_macro(
+      name = "typed_add",
+      params = c(a = "INTEGER", b = "INTEGER"),
+      body = "a + b"
+    ),
+    "Created macro"
+  )
+
+  result <- DBI::dbGetQuery(datapond:::.db_get_con(),
+                            "SELECT test.main.typed_add(5, 3) AS result")
+  expect_equal(result$result, 8)
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+
+# ==============================================================================
+# Tests for db_list_macros() - DuckLake
+# ==============================================================================
+
+test_that("db_list_macros errors when not connected", {
+  clean_db_env()
+
+  expect_error(db_list_macros(), "Not connected")
+})
+
+test_that("db_list_macros returns macro names", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "list_macros_test_")
+  dir.create(temp_dir)
+
+  db_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  # Create some macros
+  db_create_macro(name = "macro_one", body = "1")
+  db_create_macro(name = "macro_two", body = "2")
+
+  macros <- db_list_macros()
+  expect_true("macro_one" %in% macros)
+  expect_true("macro_two" %in% macros)
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+
+# ==============================================================================
+# Tests for db_drop_macro() - DuckLake
+# ==============================================================================
+
+test_that("db_drop_macro errors when not connected", {
+  clean_db_env()
+
+  expect_error(db_drop_macro(name = "test"), "Not connected")
+})
+
+test_that("db_drop_macro drops a macro", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "drop_macro_test_")
+  dir.create(temp_dir)
+
+  db_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  # Create and drop macro
+  db_create_macro(name = "temp_macro", body = "42")
+  expect_true("temp_macro" %in% db_list_macros())
+
+  expect_message(db_drop_macro(name = "temp_macro"), "Dropped macro")
+  expect_false("temp_macro" %in% db_list_macros())
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_drop_macro with if_exists handles missing macro", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "drop_macro_if_exists_test_")
+  dir.create(temp_dir)
+
+  db_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  # Without if_exists - should error
+  expect_error(db_drop_macro(name = "nonexistent"))
+
+  # With if_exists - should succeed
+  expect_message(db_drop_macro(name = "nonexistent", if_exists = TRUE), "Dropped macro")
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+
+# ==============================================================================
+# Tests for db_comment() - DuckLake
+# ==============================================================================
+
+test_that("db_comment errors when not connected", {
+  clean_db_env()
+
+  expect_error(db_comment(table = "test", comment = "A comment"), "Not connected")
+})
+
+test_that("db_comment adds table comment", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "table_comment_test_")
+  dir.create(temp_dir)
+
+  db_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  # Create table
+  db_write(data.frame(id = 1:3), schema = "main", table = "commented_tbl")
+
+  # Add comment
+  expect_message(
+    db_comment(table = "commented_tbl", comment = "This is a test table"),
+    "Set comment on table"
+  )
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_comment adds column comment", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "column_comment_test_")
+  dir.create(temp_dir)
+
+  db_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  # Create table
+  db_write(data.frame(id = 1:3, value = c(10, 20, 30)),
+           schema = "main", table = "col_comment_tbl")
+
+  # Add column comment
+  expect_message(
+    db_comment(table = "col_comment_tbl", column = "value",
+               comment = "The numeric value"),
+    "Set comment on column"
+  )
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_comment removes comment with NULL", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "remove_comment_test_")
+  dir.create(temp_dir)
+
+  db_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  # Create table and add comment
+  db_write(data.frame(id = 1:3), schema = "main", table = "remove_comment_tbl")
+  db_comment(table = "remove_comment_tbl", comment = "Initial comment")
+
+  # Remove comment
+  expect_message(
+    db_comment(table = "remove_comment_tbl", comment = NULL),
+    "Set comment on table"
+  )
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+
+# ==============================================================================
+# Tests for db_enable_logging() - DuckLake
+# ==============================================================================
+
+test_that("db_enable_logging errors when not connected", {
+  clean_db_env()
+
+  expect_error(db_enable_logging(), "Not connected")
+})
+
+test_that("db_enable_logging enables and disables logging", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "logging_test_")
+  dir.create(temp_dir)
+
+  db_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  # Enable logging
+  expect_message(db_enable_logging(TRUE), "Logging enabled")
+
+  # Disable logging
+  expect_message(db_enable_logging(FALSE), "Logging disabled")
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_enable_logging accepts log_type argument", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "logging_type_test_")
+  dir.create(temp_dir)
+
+  db_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  expect_message(db_enable_logging(TRUE, log_type = "query"), "query")
+  expect_message(db_enable_logging(TRUE, log_type = "metadata"), "metadata")
+  expect_message(db_enable_logging(TRUE, log_type = "all"), "all")
+
+  db_enable_logging(FALSE)
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
