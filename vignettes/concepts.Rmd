@@ -385,7 +385,106 @@ db_write_arrow(arrow_tbl, table = "imports_copy")
 - Avoiding DuckDB compute overhead for simple transfers
 - Working with Arrow-native data pipelines
 
-### 12. Zero-Copy Transforms (Lazy Tables)
+### 12. Views and Macros
+
+DuckLake stores SQL views and macros in the catalog, supporting time travel - attach at a previous snapshot and you'll see the view/macro definitions that existed at that point.
+
+**Views:**
+
+```{r}
+# Create a view
+db_create_view(
+  view = "active_users",
+  query = "SELECT * FROM users WHERE active = true"
+)
+
+# Replace existing view
+db_create_view(
+  view = "active_users",
+  query = "SELECT * FROM users WHERE active = true AND verified = true",
+  replace = TRUE
+)
+
+# List views in a schema
+db_list_views()
+
+# Drop a view
+db_drop_view(view = "active_users")
+```
+
+**Macros:**
+
+Macros are reusable SQL expressions - either scalar (return a value) or table-valued (return a table):
+
+```{r}
+# Scalar macro
+db_create_macro(
+  name = "add_values",
+  params = c("a", "b"),
+  body = "a + b"
+)
+db_query("SELECT add_values(10, 20)")  # Returns 30
+
+# Table macro
+db_create_macro(
+  name = "filtered_sales",
+  params = c(min_value = "INTEGER"),
+  body = "SELECT * FROM sales WHERE value > min_value",
+  table_macro = TRUE
+)
+db_query("SELECT * FROM filtered_sales(100)")
+
+# Typed parameters for stricter control
+db_create_macro(
+  name = "typed_add",
+  params = c(a = "INTEGER", b = "INTEGER"),
+  body = "a + b"
+)
+
+# List and drop macros
+db_list_macros()
+db_drop_macro(name = "add_values")
+```
+
+### 13. SQL Comments
+
+Add SQL COMMENT to tables and columns (stored in catalog with time travel):
+```{r}
+# Comment on table
+db_comment(table = "users", comment = "Active user accounts")
+
+# Comment on column
+db_comment(table = "users", column = "email",
+           comment = "Primary email, must be unique")
+
+# Remove comment
+db_comment(table = "users", column = "email", comment = NULL)
+```
+
+This is distinct from `db_describe()` which stores richer metadata (owner, tags) in a separate metadata table.
+
+### 14. Logging and Debugging
+
+Enable DuckDB/DuckLake logging for troubleshooting:
+
+```{r}
+# Enable query logging
+db_enable_logging(TRUE)
+
+# Run operations...
+db_read(table = "users") |> head() |> collect()
+
+# View logs
+db_query("SELECT * FROM duckdb_logs() ORDER BY timestamp DESC LIMIT 20")
+
+# Disable logging
+db_enable_logging(FALSE)
+
+# Log types: "query" (SQL queries), "metadata" (DuckLake metadata ops), "all"
+db_enable_logging(TRUE, log_type = "all")
+```
+
+### 15. Zero-Copy Transforms (Lazy Tables)
 
 `db_write()` supports two approaches for writing data:
 
@@ -823,10 +922,12 @@ db_disconnect()
 |------|---------|
 | **Parquet** | Columnar file format for storing tabular data efficiently |
 | **DuckLake** | Metadata layer that adds versioning and transactions to Parquet files |
-| **Catalog** | Database storing DuckLake metadata (can be DuckDB, SQLite, or PostgreSQL) |
+| **Catalog** | Database storing DuckLake metadata (can be DuckDB, SQLite, PostgreSQL, or Quack) |
 | **Snapshot** | A point-in-time version of the data in DuckLake |
 | **Time travel** | Querying data as it existed at a past version or timestamp |
 | **Schema** | A namespace for organising related tables |
+| **View** | A stored SQL query that appears as a virtual table (supports time travel in DuckLake) |
+| **Macro** | A reusable SQL expression - scalar (returns value) or table-valued (returns rows) |
 | **Hive Partition** | Organising data by column values (e.g., year, month) into separate directories |
 | **Bucket Partition** | Distributing data into fixed buckets using hash function for high-cardinality columns |
 | **Clustering** | Keeping data sorted within files for faster range scans |
@@ -839,6 +940,8 @@ db_disconnect()
 | **Iceberg** | Open table format for large analytic tables, compatible with Spark/Trino/Presto |
 | **Arrow** | Apache Arrow columnar memory format for efficient data interchange |
 | **col_types** | Explicit column type specification for stricter schema control |
+| **Quack** | Experimental HTTP-based remote DuckDB protocol with multi-writer support |
+| **Zero-copy transform** | Using lazy dbplyr tables to transform data entirely in DuckDB without R memory |
 
 ---
 

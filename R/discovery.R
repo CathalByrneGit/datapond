@@ -630,7 +630,7 @@ db_drop_macro <- function(schema = "main", name, if_exists = FALSE) {
 #' @seealso [db_describe()] for higher-level documentation with tags and owner
 #' @export
 db_comment <- function(schema = "main", table, column = NULL, comment) {
- schema <- .db_validate_name(schema, "schema")
+  schema <- .db_validate_name(schema, "schema")
   table <- .db_validate_name(table, "table")
 
   con <- .db_get_con()

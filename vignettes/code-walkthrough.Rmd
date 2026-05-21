@@ -600,6 +600,57 @@ db_tables <- function(schema = "main") {
 - Uses standard `information_schema` views
 - Filters by catalog to avoid confusion with other attached databases
 
+### Views and Macros
+
+Views and macros are stored in the DuckLake catalog and support time travel:
+
+```{r}
+# Create a view - stored in catalog
+db_create_view(view = "active_users",
+               query = "SELECT * FROM users WHERE active = true")
+
+# Create a scalar macro
+db_create_macro(name = "add_vals", params = c("a", "b"), body = "a + b")
+
+# Create a table macro (returns a table, not a scalar)
+db_create_macro(name = "big_sales",
+                params = c(threshold = "INTEGER"),
+                body = "SELECT * FROM sales WHERE value > threshold",
+                table_macro = TRUE)
+
+# List and drop
+db_list_views()
+db_list_macros()
+db_drop_view(view = "active_users")
+db_drop_macro(name = "add_vals")
+```
+
+### SQL Comments
+
+Native SQL COMMENT stored in catalog (distinct from `db_describe()` metadata):
+
+```{r}
+# Table comment
+db_comment(table = "users", comment = "Active user accounts")
+
+# Column comment
+db_comment(table = "users", column = "email", comment = "Must be unique")
+
+# Remove comment
+db_comment(table = "users", column = "email", comment = NULL)
+```
+
+### Logging
+
+Enable DuckDB query logging for debugging:
+
+```{r}
+db_enable_logging(TRUE, log_type = "query")
+# ... run operations ...
+db_query("SELECT * FROM duckdb_logs()")
+db_enable_logging(FALSE)
+```
+
 ---
 
 ## `R/maintenance.R` - Admin Operations
