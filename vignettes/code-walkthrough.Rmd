@@ -249,10 +249,15 @@ db_connect <- function(duckdb_db = ":memory:",
 
 ### `db_write()` - DuckLake Tables
 
+`db_write()` supports two input types:
+
+1. **data.frame/tibble** - Data passes through R memory
+2. **Lazy dbplyr table** - Data stays entirely in DuckDB (zero-copy)
+
 ```{r}
 db_write <- function(data, schema = "main", table,
                      mode = c("overwrite", "append"),
-                     col_types = NULL,       # Explicit column types
+                     col_types = NULL,       # Explicit column types (data.frame only)
                      partition_by = NULL,    # Hive partitioning
                      bucket_by = NULL,       # Bucket partitioning
                      sort_by = NULL,         # Clustering
@@ -260,42 +265,41 @@ db_write <- function(data, schema = "main", table,
                      commit_author = NULL,
                      commit_message = NULL) {
 
-  # Build column definitions with explicit types where specified
-  cols <- vapply(data, .db_r_to_duckdb_type, character(1))
-  if (!is.null(col_types)) {
-    for (col_name in names(col_types)) {
-      cols[col_name] <- col_types[[col_name]]
+  # Detect if input is a lazy dbplyr table
+  is_lazy <- inherits(data, "tbl_lazy") || inherits(data, "tbl_sql")
+
+  if (is_lazy) {
+    # ===== LAZY TABLE PATH =====
+    # Extract SQL from the dbplyr query
+    select_sql <- dbplyr::sql_render(data)
+
+    # Execute directly in DuckDB - no R memory used
+    if (mode == "overwrite") {
+      DBI::dbExecute(con, glue("CREATE TABLE {qname} AS {select_sql}"))
+    } else {
+      DBI::dbExecute(con, glue("INSERT INTO {qname} {select_sql}"))
     }
+
+  } else {
+    # ===== DATA.FRAME PATH =====
+    # Register data temporarily in DuckDB
+    tmp <- .db_temp_name()
+    duckdb::duckdb_register(con, tmp, data)
+
+    # Build column definitions with explicit types
+    cols <- vapply(data, .db_r_to_duckdb_type, character(1))
+    if (!is.null(col_types)) {
+      for (col_name in names(col_types)) {
+        cols[col_name] <- col_types[[col_name]]
+      }
+    }
+
+    # Create table and insert from temp view
+    DBI::dbExecute(con, glue("CREATE TABLE {qname} ({col_defs})"))
+    DBI::dbExecute(con, glue("INSERT INTO {qname} SELECT * FROM {tmp}"))
   }
 
-  # Register data temporarily
-  tmp <- .db_temp_name()
-  duckdb::duckdb_register(con, tmp, data)
-
-  DBI::dbExecute(con, "BEGIN")
-
-  # Set commit metadata if provided
-  if (!is.null(commit_author) || !is.null(commit_message)) {
-    DBI::dbExecute(con, glue::glue(
-      "CALL ducklake_set_commit_message({.db_sql_quote(catalog)}, {author}, {msg})"
-    ))
-  }
-
-  # Create table with explicit column types
-  create_sql <- glue::glue("CREATE TABLE {qname} ({col_defs})")
-  DBI::dbExecute(con, create_sql)
-
-  # Set partitioning (hive + bucket)
-  # Set clustering (sort_by)
-  # Insert data (with optional inlining)
-
-  tryCatch({
-    DBI::dbExecute(con, sql)
-    DBI::dbExecute(con, "COMMIT")
-  }, error = function(e) {
-    DBI::dbExecute(con, "ROLLBACK")
-    stop(e$message)
-  })
+  # Both paths: apply partitioning, clustering, etc.
 }
 ```
 
@@ -303,9 +307,21 @@ db_write <- function(data, schema = "main", table,
 
 - Uses transactions (`BEGIN`/`COMMIT`) for atomicity
 - `ROLLBACK` on error ensures no partial changes
-- `col_types` allows explicit type specification (e.g., `DECIMAL(12,2)`, `BIGINT`)
-- `ducklake_set_commit_message(catalog, author, message)` records metadata in the snapshot
+- Lazy tables use `dbplyr::sql_render()` to extract SQL, then `CREATE TABLE AS SELECT`
+- `col_types` only applies to data.frame input (lazy tables get types from query)
 - Supports hive partitioning, bucket partitioning, clustering, and data inlining
+
+**Example: Zero-copy pipeline**
+
+```{r}
+# Data never leaves DuckDB - efficient for in-lake transforms
+db_read(table = "raw_events") |>
+  filter(year == 2024) |>
+  group_by(event_type) |>
+  summarise(count = n()) |>
+  db_write(table = "event_counts")
+# Message: Wrote data to cso.main.event_counts (from query)
+```
 
 ### `R/arrow.R` - Arrow Integration
 
