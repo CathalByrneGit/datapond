@@ -395,3 +395,56 @@ test_that(".db_get_con returns NULL for invalid connection", {
 
   clean_db_env()
 })
+
+# ==============================================================================
+# Tests for Quack catalog support (EXPERIMENTAL)
+# ==============================================================================
+
+test_that(".db_detect_catalog_type detects quack URI", {
+  detect <- datapond:::.db_detect_catalog_type
+
+  # Quack URIs
+ expect_equal(detect("quack:server:9494"), "quack")
+  expect_equal(detect("quack:server:9494/catalog.ducklake"), "quack")
+  expect_equal(detect("quack:localhost:9494"), "quack")
+  expect_equal(detect("QUACK:SERVER:9494"), "quack")  # case insensitive
+})
+
+test_that(".db_build_ducklake_dsn builds correct DSN for quack", {
+  build_dsn <- datapond:::.db_build_ducklake_dsn
+
+  # Quack backend - prepends ducklake: to the quack: URI
+  expect_equal(
+    build_dsn("quack", "quack:server:9494/catalog"),
+    "ducklake:quack:server:9494/catalog"
+  )
+  expect_equal(
+    build_dsn("quack", "quack:localhost:9494"),
+    "ducklake:quack:localhost:9494"
+  )
+})
+
+test_that("db_connect accepts quack as catalog_type", {
+  clean_db_env()
+
+  # Should not error on match.arg - quack is valid
+  # We can't actually connect without a server, but we can verify it's accepted
+  expect_error(
+    db_connect(catalog_type = "quack", metadata_path = "quack:fake:9494"),
+    "Failed to attach"  # Expected - no server running
+  )
+})
+
+test_that("db_connect warns about experimental quack support",
+ {
+  clean_db_env()
+
+  # Should warn about experimental status
+  expect_warning(
+    tryCatch(
+      db_connect(catalog_type = "quack", metadata_path = "quack:fake:9494"),
+      error = function(e) NULL
+    ),
+    "EXPERIMENTAL"
+  )
+})

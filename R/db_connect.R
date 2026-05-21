@@ -70,6 +70,11 @@
 .db_detect_catalog_type <- function(metadata_path) {
   path_lower <- tolower(metadata_path)
 
+  # Check for quack:// URI (DuckDB server via Quack protocol)
+  if (grepl("^quack:", path_lower)) {
+    return("quack")
+  }
+
   # Check for postgres connection string
   if (grepl("^postgres(ql)?://", path_lower)) {
     return("postgres")
@@ -90,10 +95,12 @@
 
 # internal: build the DuckLake connection string based on catalog type
 .db_build_ducklake_dsn <- function(catalog_type, metadata_path) {
-  switch(catalog_type,
+ switch(catalog_type,
     duckdb = paste0("ducklake:", metadata_path),
     sqlite = paste0("ducklake:sqlite:", metadata_path),
     postgres = paste0("ducklake:postgres:", metadata_path),
+    # For quack, metadata_path is already a quack: URI, prepend ducklake:
+    quack = paste0("ducklake:", metadata_path),
     stop("Unknown catalog_type: ", catalog_type, call. = FALSE)
   )
 }
@@ -111,6 +118,9 @@
   } else if (catalog_type == "postgres") {
     try(DBI::dbExecute(con, "INSTALL postgres"), silent = TRUE)
     DBI::dbExecute(con, "LOAD postgres")
+  } else if (catalog_type == "quack") {
+    try(DBI::dbExecute(con, "INSTALL quack"), silent = TRUE)
+    DBI::dbExecute(con, "LOAD quack")
   }
   # duckdb needs no extra extension
 
@@ -132,15 +142,24 @@
 #'     \item ".sqlite" or ".db" -> "sqlite"
 #'     \item ".ducklake" or ".duckdb" -> "duckdb"
 #'     \item "postgres://" connection string -> "postgres"
+#'     \item "quack://" URI -> "quack" (EXPERIMENTAL)
 #'   }
-#'   Can also be set explicitly to one of: "duckdb", "sqlite", "postgres".
+#'   Can also be set explicitly to one of: "duckdb", "sqlite", "postgres", "quack".
+#'
+#'   Note: "quack" uses the Quack Remote Protocol for client-server DuckDB with
+#'   multiple concurrent writers. This is EXPERIMENTAL (beta in DuckDB 1.5.x,
+#'   production-ready version planned for DuckDB 2.0 in Fall 2026).
 #' @param metadata_path Path or connection string for DuckLake metadata:
 #'   \itemize{
 #'     \item For "duckdb": file path (e.g. "metadata.ducklake")
 #'     \item For "sqlite": file path (e.g. "//CSO-NAS/DataLake/catalog.sqlite")
 #'     \item For "postgres": connection string (e.g. "dbname=ducklake_catalog host=localhost")
+#'     \item For "quack": URI (e.g. "quack:server:9494/catalog.ducklake")
 #'   }
 #' @param data_path Root storage path where DuckLake writes Parquet data files
+#' @param quack_token Authentication token for Quack server. If NULL (default),
+#'   falls back to the `QUACK_TOKEN` environment variable. Only used when
+#'   `catalog_type = "quack"`.
 #' @param snapshot_version Optional integer snapshot version to attach at
 #' @param snapshot_time Optional timestamp string to attach at (e.g. "2025-05-26 00:00:00")
 #' @param threads Number of DuckDB threads (NULL leaves default)
@@ -174,6 +193,23 @@
 #'   data_path = "//CSO-NAS/DataLake/data",
 #'   snapshot_version = 5
 #' )
+#'
+#' # EXPERIMENTAL: Quack remote protocol (multi-writer via DuckDB server)
+#' # Requires a DuckDB server running with Quack enabled
+#' db_connect(
+#'   catalog_type = "quack",
+#'   metadata_path = "quack:db-server.cso.ie:9494/catalog.ducklake",
+#'   data_path = "//CSO-NAS/DataLake/data",
+#'   quack_token = "my-secret-token"
+#' )
+#'
+#' # Or use environment variable
+#' Sys.setenv(QUACK_TOKEN = "my-secret-token")
+#' db_connect(
+#'   catalog_type = "quack",
+#'   metadata_path = "quack:db-server.cso.ie:9494/catalog.ducklake",
+#'   data_path = "//CSO-NAS/DataLake/data"
+#' )
 #' }
 #' @export
 db_connect <- function(duckdb_db = ":memory:",
@@ -181,6 +217,7 @@ db_connect <- function(duckdb_db = ":memory:",
                        catalog_type = NULL,
                        metadata_path = "metadata.ducklake",
                        data_path = "//CSO-NAS/DataLake",
+                       quack_token = NULL,
                        snapshot_version = NULL,
                        snapshot_time = NULL,
                        threads = NULL,
@@ -202,10 +239,22 @@ db_connect <- function(duckdb_db = ":memory:",
   }
 
   # Auto-detect catalog type from metadata_path if not specified
- if (is.null(catalog_type)) {
+  if (is.null(catalog_type)) {
     catalog_type <- .db_detect_catalog_type(metadata_path)
   } else {
-    catalog_type <- match.arg(catalog_type, c("duckdb", "sqlite", "postgres"))
+    catalog_type <- match.arg(catalog_type, c("duckdb", "sqlite", "postgres", "quack"))
+  }
+
+  # Warn about experimental Quack support
+ if (catalog_type == "quack") {
+    warning(
+      "Quack catalog backend is EXPERIMENTAL.\n",
+      "The Quack Remote Protocol is in beta (DuckDB 1.5.x). ",
+      "Protocol and function names may change.\n",
+      "Production-ready version planned for DuckDB 2.0 (Fall 2026).\n",
+      "See: https://duckdb.org/2026/05/12/quack-remote-protocol",
+      call. = FALSE, immediate. = TRUE
+    )
   }
 
   con <- DBI::dbConnect(duckdb::duckdb(), dbdir = duckdb_db)
@@ -231,6 +280,14 @@ db_connect <- function(duckdb_db = ":memory:",
 
   # Load DuckLake and any required backend extensions
   .db_load_catalog_extensions(con, catalog_type)
+
+  # Set Quack authentication token if provided
+  if (catalog_type == "quack") {
+    token <- quack_token %||% Sys.getenv("QUACK_TOKEN", unset = NA)
+    if (!is.null(token) && !is.na(token) && nzchar(token)) {
+      DBI::dbExecute(con, sprintf("SET quack_token = '%s'", gsub("'", "''", token)))
+    }
+  }
 
   # Build the DuckLake connection string
   ducklake_dsn <- .db_build_ducklake_dsn(catalog_type, metadata_path)
@@ -263,7 +320,8 @@ db_connect <- function(duckdb_db = ":memory:",
     hint <- switch(catalog_type,
       sqlite = "Ensure the sqlite extension is available and the metadata file path is accessible.",
       postgres = "Ensure PostgreSQL is running, the database exists, and the connection string is correct.",
-      duckdb = "Ensure the metadata file path is accessible."
+      duckdb = "Ensure the metadata file path is accessible.",
+      quack = "Ensure the Quack server is running and accessible. Check the quack_token parameter or QUACK_TOKEN env var."
     )
     stop("Failed to attach DuckLake catalog.\n", hint, "\n\nOriginal error: ", e$message, call. = FALSE)
   })
@@ -337,6 +395,7 @@ db_status <- function(verbose = TRUE) {
         duckdb = "(single client only)",
         sqlite = "(multi-read, single-write with retry)",
         postgres = "(full concurrent access)",
+        quack = "(multi-writer via Quack - EXPERIMENTAL)",
         ""
       )
       if (nzchar(concurrency_info)) {

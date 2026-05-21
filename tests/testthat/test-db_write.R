@@ -826,3 +826,138 @@ test_that("db_write combines hive partitioning and bucket partitioning", {
   clean_db_env()
   unlink(temp_dir, recursive = TRUE)
 })
+
+# ==============================================================================
+# Tests for db_write() - Lazy table (zero-copy) support
+# ==============================================================================
+
+test_that("db_write accepts lazy dbplyr table for overwrite", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "lake_lazy_overwrite_")
+  dir.create(temp_dir)
+
+  db_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  # Create source table
+  source_data <- data.frame(
+    id = 1:10,
+    value = c(10, 20, 30, 40, 50, 60, 70, 80, 90, 100),
+    category = rep(c("A", "B"), 5)
+  )
+  db_write(source_data, table = "source")
+
+  # Read as lazy table, transform, and write - no collect()
+  db_read(table = "source") |>
+    dplyr::filter(value > 30) |>
+    dplyr::mutate(value_doubled = value * 2) |>
+    db_write(table = "transformed")
+
+  # Verify the result
+  result <- db_read(table = "transformed") |> dplyr::collect()
+  expect_equal(nrow(result), 7)  # values > 30
+  expect_true("value_doubled" %in% names(result))
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_write accepts lazy dbplyr table for append", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "lake_lazy_append_")
+  dir.create(temp_dir)
+
+  db_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  # Create source and target tables
+  source_data <- data.frame(id = 1:5, value = c(10, 20, 30, 40, 50))
+  target_data <- data.frame(id = 100:102, value = c(100, 200, 300))
+
+  db_write(source_data, table = "source")
+  db_write(target_data, table = "target")
+
+  # Append from lazy query
+  db_read(table = "source") |>
+    dplyr::filter(value >= 30) |>
+    db_write(table = "target", mode = "append")
+
+  # Verify
+  result <- db_read(table = "target") |> dplyr::collect()
+  expect_equal(nrow(result), 6)  # 3 original + 3 appended
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_write with lazy table supports aggregations", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "lake_lazy_agg_")
+  dir.create(temp_dir)
+
+  db_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  # Create source table
+  source_data <- data.frame(
+    category = rep(c("A", "B", "C"), each = 4),
+    value = 1:12
+  )
+  db_write(source_data, table = "source")
+
+  # Aggregate and write
+  db_read(table = "source") |>
+    dplyr::group_by(category) |>
+    dplyr::summarise(total = sum(value, na.rm = TRUE), .groups = "drop") |>
+    db_write(table = "summary")
+
+  # Verify
+  result <- db_read(table = "summary") |> dplyr::collect()
+  expect_equal(nrow(result), 3)
+  expect_true("total" %in% names(result))
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_write with lazy table warns about col_types", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "lake_lazy_coltypes_")
+  dir.create(temp_dir)
+
+  db_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  # Create source table
+  db_write(data.frame(id = 1:3, value = c(1.1, 2.2, 3.3)), table = "source")
+
+  # Should warn that col_types is ignored for lazy tables
+  expect_warning(
+    db_read(table = "source") |>
+      db_write(table = "dest", col_types = list(id = "BIGINT")),
+    "col_types is ignored"
+  )
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
