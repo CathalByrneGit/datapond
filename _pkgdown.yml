@@ -9,3 +9,6 @@ articles:
       - concepts
       - catalog-backends
       - code-walkthrough
+  - title: Advanced
+    contents:
+      - quack-server
