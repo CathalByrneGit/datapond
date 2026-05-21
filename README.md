@@ -240,13 +240,14 @@ The browser provides a point-and-click interface with six tabs:
 ## Choosing a Catalog Backend
 
 DuckLake stores metadata (table definitions, snapshots, file tracking)
-in a **catalog database**. You can choose from three backends:
+in a **catalog database**. You can choose from four backends:
 
 | Backend | `catalog_type` | Concurrency | Best For |
 |----|----|----|----|
 | DuckDB | `"duckdb"` | Single client only | Personal/dev use |
 | **SQLite** | `"sqlite"` | Multi-read, single-write | **Shared network drives** |
 | PostgreSQL | `"postgres"` | Full concurrent access | Large teams, remote access |
+| Quack | `"quack"` | Multi-writer (EXPERIMENTAL) | Future: serverless multi-writer |
 
 ### Recommended: SQLite for Shared Drives
 
@@ -276,6 +277,21 @@ db_connect(
   data_path = "//CSO-NAS/DataLake/data"
 )
 ```
+
+### Quack Remote Protocol (EXPERIMENTAL)
+
+The [Quack protocol](https://duckdb.org/2026/05/12/quack-remote-protocol) enables client-server DuckDB with multiple concurrent writers. DuckLake now supports Quack as a catalog backend (DuckDB 1.5.3+).
+
+``` r
+# Connect to a DuckDB server running Quack
+db_connect(
+  catalog_type = "quack",
+  metadata_path = "quack:db-server.cso.ie:9494/catalog.ducklake",
+  data_path = "//CSO-NAS/DataLake/data"
+)
+```
+
+**Note:** Quack is currently in beta. The production-ready version is planned for DuckDB 2.0 (Fall 2026). Protocol and function names may change.
 
 ## Access Control
 

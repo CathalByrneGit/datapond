@@ -43,7 +43,8 @@ DuckLake separates **data** (Parquet files) from **metadata** (table definitions
 │    • DuckDB                                              │
 │    • SQLite                                              │
 │    • PostgreSQL                                          │
-│    • (Future: SQL Server, Quack)                         │
+│    • Quack (EXPERIMENTAL)                                │
+│    • (Future: SQL Server)                                │
 │                                                          │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -208,17 +209,18 @@ db_connect(
 
 ## Comparison Matrix
 
-| Feature | DuckDB | SQLite | PostgreSQL |
-|---------|--------|--------|------------|
-| **Setup complexity** | Trivial | Simple | Moderate |
-| **Infrastructure** | None | None | Server required |
-| **Concurrent readers** | 1 | Unlimited | Unlimited |
-| **Concurrent writers** | 1 | 1 (queued) | Unlimited |
-| **Network drive friendly** | No | Yes | N/A |
-| **Cloud managed option** | No | No | Yes |
-| **Metadata query speed** | Fastest | Fast | Network dependent |
-| **Backup strategy** | Copy file | Copy file | pg_dump / replication |
-| **Best team size** | 1 | 2-20 | 20+ |
+| Feature | DuckDB | SQLite | PostgreSQL | Quack |
+|---------|--------|--------|------------|-------|
+| **Setup complexity** | Trivial | Simple | Moderate | Moderate |
+| **Infrastructure** | None | None | Server required | DuckDB server |
+| **Concurrent readers** | 1 | Unlimited | Unlimited | Unlimited |
+| **Concurrent writers** | 1 | 1 (queued) | Unlimited | Unlimited |
+| **Network drive friendly** | No | Yes | N/A | N/A |
+| **Cloud managed option** | No | No | Yes | No |
+| **Metadata query speed** | Fastest | Fast | Network dependent | Fast |
+| **Backup strategy** | Copy file | Copy file | pg_dump / replication | DuckDB backup |
+| **Best team size** | 1 | 2-20 | 20+ | 2-50 |
+| **Status** | Stable | Stable | Stable | EXPERIMENTAL |
 
 ---
 
@@ -460,16 +462,17 @@ Until SQL Server support arrives:
 
 ---
 
-## Future: Quack Remote Protocol
-
+## Quack Remote Protocol (EXPERIMENTAL)
 ### What is Quack?
 
-[Quack](https://duckdb.org/2026/05/12/quack-remote-protocol) is DuckDB's new client-server protocol, released with DuckDB v1.5.2:
+[Quack](https://duckdb.org/2026/05/12/quack-remote-protocol) is DuckDB's client-server protocol, available since DuckDB v1.5.2:
 
 - **RPC protocol** for DuckDB-to-DuckDB communication
-- **HTTP-based** for network compatibility
+- **HTTP-based** for network compatibility (port 9494 by default)
 - **Native serialisation** of DuckDB's internal data vectors
 - **Multi-writer support** without locking
+
+As of DuckDB 1.5.3, DuckLake supports Quack as a catalog backend. datapond includes experimental support for this.
 
 ### How Quack Changes Everything
 
@@ -484,18 +487,19 @@ Before Quack (DuckDB catalog):                After Quack:
 └─────────────────────────────┘             └─────────────────────────────┘
 ```
 
-### DuckLake + Quack Integration
+### Using Quack with datapond
 
-DuckDB plans to integrate Quack into DuckLake, enabling:
+datapond supports Quack as an experimental catalog backend:
 
 ```{r}
-# Future: Remote DuckDB server as catalog
+# Connect to a DuckDB server running Quack
 db_connect(
   catalog_type = "quack",
-  metadata_path = "quack://duckdb-server.example.com:4242",
+  metadata_path = "quack:duckdb-server.example.com:9494/catalog.ducklake",
   data_path = "/data/lake"
 )
 ```
+You will see a warning about the experimental status. This is expected.
 
 **Benefits:**
 
@@ -506,11 +510,26 @@ db_connect(
 | **Simplified stack** | DuckDB for everything - no PostgreSQL needed |
 | **Edge deployment** | Run DuckDB server close to data |
 
-### Timeline
+### Running a Quack Server
 
-- **Now (v1.5.2)**: Quack available in `core_nightly`
-- **Fall 2026 (v2.0)**: Production-ready Quack release
-- **TBD**: DuckLake Quack catalog integration
+To use Quack, you need a DuckDB server:
+
+```bash
+# Start DuckDB with Quack server enabled
+duckdb -cmd "INSTALL quack; LOAD quack; CALL quack_start_server();"
+```
+
+The server listens on port 9494 by default. See the [Quack documentation](https://duckdb.org/docs/current/quack/setup/overview) for configuration options.
+
+### Status and Timeline
+
+| Version | Status |
+|---------|--------|
+| **DuckDB 1.5.2** | Quack beta available |
+| **DuckDB 1.5.3** | DuckLake + Quack integration |
+| **DuckDB 2.0 (Fall 2026)** | Production-ready Quack |
+
+**Warning:** The protocol, function names, and defaults may change before v2.0. Use in production at your own risk.
 
 ---
 
@@ -685,10 +704,10 @@ The data files (Parquet) remain unchanged - only the catalog backend changes.
 | **DuckDB** | Solo development | Single client |
 | **SQLite** | Small teams, network drives | Single writer |
 | **PostgreSQL** | Enterprise, high concurrency | Requires server |
+| **Quack** | DuckDB-native multi-writer | EXPERIMENTAL (stable in v2.0) |
 | **SQL Server** | Microsoft shops | Not yet supported |
-| **Quack** | Future DuckDB-native multi-writer | Coming in v2.0 |
 
-For most users starting out, **SQLite is the recommended default** - it's simple, requires no infrastructure, and handles typical team usage patterns well.
+For most users starting out, **SQLite is the recommended default** - it's simple, requires no infrastructure, and handles typical team usage patterns well. Once Quack reaches production status (DuckDB 2.0, Fall 2026), it may become the preferred option for teams wanting multi-writer without PostgreSQL infrastructure.
 
 ---
 
