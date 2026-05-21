@@ -937,33 +937,174 @@ raster_catalog |>
 
 ## Decision Guide
 
-### Quick Reference
+### Choosing the Right Backend for Your Environment
+
+Most organisations deploying DuckLake will run it **inside their corporate network** on
+existing infrastructure. This changes the calculus significantly from cloud deployments.
+
+#### Internal Network Reality
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Corporate Firewall                        │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │                  Internal Network                      │  │
+│  │                                                        │  │
+│  │  ┌──────────┐    ┌──────────┐    ┌────────────────┐   │  │
+│  │  │ Analysts │───►│ Catalog  │───►│ Network Share  │   │  │
+│  │  │ (R users)│    │ Database │    │ (Parquet data) │   │  │
+│  │  └──────────┘    └──────────┘    └────────────────┘   │  │
+│  │                                                        │  │
+│  │  Security: Windows ACLs / Active Directory             │  │
+│  │  Infrastructure: Existing file servers                 │  │
+│  └───────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**What you already have:**
+
+- Network file shares with folder-based permissions
+- IT team managing Windows/AD infrastructure
+- Firewall protecting from external threats
+- Users authenticated via domain credentials
+
+#### Key Questions
+
+Ask these questions to choose the right backend:
+
+**1. How many people will write data concurrently?**
+
+| Writers | Recommendation |
+|---------|----------------|
+| 1 (just you) | DuckDB - simplest possible |
+| 2-5 occasionally | SQLite - handles this fine |
+| 5-20 frequently | SQLite usually works, monitor for contention |
+| 20+ heavy writes | PostgreSQL or Quack |
+
+**2. Do you have IT support for running servers?**
+
+| IT Support | Recommendation |
+|------------|----------------|
+| No dedicated IT | SQLite (just files, no servers) |
+| IT can run PostgreSQL | PostgreSQL (if you need concurrency) |
+| IT can run custom services | Quack (when stable) |
+
+**3. What infrastructure already exists?**
+
+| Existing Infrastructure | Recommendation |
+|------------------------|----------------|
+| Network shares only | SQLite |
+| PostgreSQL already in use | PostgreSQL |
+| Strong Microsoft/Azure stack | SQLite now, SQL Server when supported |
+
+#### Decision Flowchart
 
 ```
 Are you the only user?
 ├─ Yes ──► DuckDB (simplest)
 └─ No
-   └─ Do you need concurrent writes?
-      ├─ No (occasional writes) ──► SQLite
-      └─ Yes (frequent writes)
-         └─ Do you have SQL Server and need it?
-            ├─ Yes ──► Wait for MSSQL support, use PostgreSQL interim
-            └─ No ──► PostgreSQL
+   │
+   How many concurrent writers?
+   ├─ 1-5 occasional ──► SQLite (no server needed)
+   │
+   ├─ 5-20 frequent
+   │  └─ Is SQLite causing write contention?
+   │     ├─ No ──► Stay with SQLite
+   │     └─ Yes ──► PostgreSQL
+   │
+   └─ 20+ heavy writes
+      └─ Can IT provision a database server?
+         ├─ Yes ──► PostgreSQL
+         └─ No ──► SQLite + accept queuing
+```
+
+#### Internal Network: SQLite is Usually Right
+
+For most internal analytics teams, **SQLite on a network share** is the best choice:
+
+```{r}
+db_connect(
+  catalog_type = "sqlite",
+  metadata_path = "//FILE-SERVER/DataLake/catalog.sqlite",
+  data_path = "//FILE-SERVER/DataLake/data"
+)
+```
+
+**Why SQLite wins internally:**
+
+| Factor | SQLite Advantage |
+|--------|------------------|
+| **Infrastructure** | Zero - just a file on existing share |
+| **Permissions** | Use existing Windows/NFS ACLs |
+| **IT overhead** | None - IT already manages file servers |
+| **Backup** | Included in existing file server backups |
+| **Concurrency** | Multi-read, single-write (usually enough) |
+| **Familiarity** | IT knows files; they may not know PostgreSQL |
+
+**When SQLite isn't enough:**
+
+- You're seeing actual write contention errors (not theoretical)
+- You need streaming/inlining at high throughput
+- Multiple automated jobs write simultaneously
+
+#### When to Consider Quack Internally
+
+Quack adds complexity. Only consider it if:
+
+1. **SQLite write contention is actually happening** (not just theoretically possible)
+2. **You need high-performance inlining** for streaming data
+3. **IT is willing to run and maintain** a DuckDB server process
+4. **You have a plan for token distribution** to authorized users
+
+**Internal Quack considerations:**
+
+| Consideration | Implication |
+|---------------|-------------|
+| **New server to manage** | IT must provision, monitor, update, restart on failure |
+| **Token management** | How do you securely distribute tokens to users? |
+| **HTTP on internal network** | Traffic readable without TLS (may or may not matter) |
+| **No Windows auth integration** | Tokens are separate from AD credentials |
+| **Backup strategy** | Need to back up DuckDB database on server |
+
+#### Recommended Starting Point
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Start Here: SQLite on Network Share                         │
+│                                                              │
+│  //FILE-SERVER/DataLake/                                     │
+│  ├── catalog.sqlite    ← Catalog (multi-reader)             │
+│  └── data/                                                   │
+│      ├── trade/        ← Team A: Read/Write ACL             │
+│      ├── labour/       ← Team B: Read/Write ACL             │
+│      └── shared/       ← Everyone: Read-only ACL            │
+│                                                              │
+│  • Zero infrastructure beyond existing file server           │
+│  • Familiar permissions model (IT already knows this)        │
+│  • Easy backup (part of normal file server backups)          │
+│  • Upgrade to PostgreSQL/Quack later if needed               │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ### Migration Path
 
-Start simple, scale up as needed:
+Start simple, scale up only when needed:
 
 ```
-Development     Team Pilot      Production       Enterprise
+Development     Team Pilot      Production       Scale-Out
     │               │               │                │
     ▼               ▼               ▼                ▼
- DuckDB ────► SQLite ────► PostgreSQL ────► PostgreSQL HA
-                                      └───► Quack (future)
+ DuckDB ────► SQLite ────► SQLite ────────► PostgreSQL
+ (local)     (network     (still           (if actually
+              share)       works!)          needed)
+                              │
+                              └────────────► Quack (v2.0+)
+                                            (if inlining
+                                             perf needed)
 ```
 
-The data files (Parquet) remain unchanged - only the catalog backend changes.
+**Key insight:** The data files (Parquet) remain unchanged. You can switch catalog
+backends without migrating data - just point to a new catalog database.
 
 ---
 
