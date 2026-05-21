@@ -58,17 +58,30 @@
 
 #' Write a DuckLake table (overwrite/append)
 #'
-#' @param data data.frame/tibble
+#' @description
+#' Writes data to a DuckLake table. Supports two input types:
+#'
+#' **data.frame/tibble**: Data is transferred from R to DuckDB. Use this when
+#' you have data in R memory (e.g., from CSV, API, or computation).
+#'
+#' **Lazy dbplyr table**: Data stays in DuckDB - no R memory used. Use this for
+
+#' transformations within the lake (e.g., cleaning, aggregating). The dplyr
+#' pipeline is converted to SQL and executed as `CREATE TABLE AS SELECT` or
+#' `INSERT INTO ... SELECT`.
+#'
+#' @param data A data.frame, tibble, or lazy dbplyr table (from `db_read()` or
+#'   `tbl()`). Lazy tables enable zero-copy transformations within DuckDB.
 #' @param schema Schema name (default "main")
 #' @param table Table name
 #' @param mode "overwrite" or "append"
 #' @param col_types Optional named list or character vector specifying column types.
+#'   Only applies to data.frame input (ignored for lazy tables).
 #'   Overrides automatic type inference for stricter schema control.
 #'   Format: `list(id = "BIGINT", value = "DECIMAL(10,2)")` or
 #'   `c(id = "BIGINT", value = "DECIMAL(10,2)")`.
 #'   Supported types: INTEGER, BIGINT, DOUBLE, DECIMAL(p,s), VARCHAR, BOOLEAN,
 #'   DATE, TIMESTAMP, INTERVAL, BLOB, GEOMETRY, etc.
-#'   Only columns specified are overridden; others use automatic inference.
 #' @param partition_by Optional character vector of column names to partition by.
 #'   Only valid for mode = "overwrite". On overwrite, if not specified, existing
 #'   partitioning is preserved.
@@ -86,6 +99,8 @@
 #' @return Invisibly returns the qualified table name
 #' @examples
 #' \dontrun{
+#' # ==== data.frame approach (data passes through R) ====
+#'
 #' # Basic overwrite
 #' db_write(my_data, table = "imports")
 #'
@@ -96,35 +111,40 @@
 #' db_write(my_data, schema = "trade", table = "imports",
 #'          partition_by = c("year", "month"))
 #'
-#' # With bucket partitioning for high-cardinality columns
-#' db_write(my_data, table = "events",
-#'          bucket_by = list(column = "user_id", buckets = 16))
-#'
-#' # Combined partitioning: hive + bucket
-#' db_write(my_data, table = "events",
-#'          partition_by = "year",
-#'          bucket_by = list(column = "user_id", buckets = 8))
-#'
-#' # With sorting/clustering for better query performance
-#' db_write(my_data, table = "sales",
-#'          sort_by = c("sale_date", "region"))
-#'
 #' # With explicit column types for stricter schema control
 #' db_write(my_data, table = "financials",
-#'          col_types = list(
-#'            id = "BIGINT",
-#'            amount = "DECIMAL(12,2)",
-#'            rate = "DOUBLE"
-#'          ))
+#'          col_types = list(id = "BIGINT", amount = "DECIMAL(12,2)"))
 #'
-#' # Using character vector shorthand
-#' db_write(my_data, table = "metrics",
-#'          col_types = c(id = "INTEGER", value = "DOUBLE"))
+#' # ==== Lazy table approach (zero-copy, stays in DuckDB) ====
+#'
+#' # Transform and write without collect() - no R memory used
+#' db_read(table = "raw_imports") |>
+#'   filter(year == 2024) |>
+#'   mutate(value_eur = value * exchange_rate) |>
+#'   group_by(country, month) |>
+#'   summarise(total = sum(value_eur), .groups = "drop") |>
+#'   db_write(schema = "clean", table = "monthly_summary")
+#'
+#' # Append transformed data
+#' db_read(table = "staging") |>
+#'   filter(!is.na(id)) |>
+#'   db_write(table = "production", mode = "append")
+#'
+#' # Join tables and write result
+#' orders <- db_read(table = "orders")
+#' products <- db_read(table = "products")
+#'
+#' orders |>
+#'   left_join(products, by = "product_id") |>
+#'   select(order_id, product_name, quantity, price) |>
+#'   db_write(table = "order_details")
+#'
+#' # ==== Other options ====
 #'
 #' # Streaming mode: inline small writes
 #' db_write(my_data, table = "events", mode = "append", inline = TRUE)
 #'
-#' # Append mode with commit info
+#' # With commit metadata
 #' db_write(my_data, table = "imports", mode = "append",
 #'          commit_author = "jsmith",
 #'          commit_message = "Added Q3 data")
@@ -146,19 +166,32 @@ db_write <- function(data,
 
   mode <- match.arg(mode)
 
-  if (!is.data.frame(data)) {
-    stop("data must be a data.frame / tibble.", call. = FALSE)
+  # Determine if data is a lazy dbplyr table or a data.frame
+ is_lazy <- inherits(data, "tbl_lazy") || inherits(data, "tbl_sql")
+
+  if (!is_lazy && !is.data.frame(data)) {
+    stop("data must be a data.frame, tibble, or lazy dbplyr table.", call. = FALSE)
   }
 
   schema <- .db_validate_name(schema, "schema")
   table  <- .db_validate_name(table, "table")
+
+  # For lazy tables, col_types is not supported (types come from the query)
+  if (is_lazy && !is.null(col_types)) {
+    warning("col_types is ignored for lazy tables - column types are determined by the query.",
+            call. = FALSE)
+    col_types <- NULL
+  }
+
+  # Get column names (works for both data.frame and lazy tables)
+  data_cols <- if (is_lazy) colnames(data) else names(data)
 
   # Validate partition_by
   if (!is.null(partition_by)) {
     if (!is.character(partition_by) || length(partition_by) == 0) {
       stop("partition_by must be a non-empty character vector.", call. = FALSE)
     }
-    missing_cols <- setdiff(partition_by, names(data))
+    missing_cols <- setdiff(partition_by, data_cols)
     if (length(missing_cols) > 0) {
       stop("partition_by columns not found in data: ",
            paste(missing_cols, collapse = ", "),
@@ -171,7 +204,7 @@ db_write <- function(data,
     if (!is.list(bucket_by) || is.null(bucket_by$column) || is.null(bucket_by$buckets)) {
       stop("bucket_by must be a list with 'column' and 'buckets' elements.", call. = FALSE)
     }
-    if (!bucket_by$column %in% names(data)) {
+    if (!bucket_by$column %in% data_cols) {
       stop("bucket_by column '", bucket_by$column, "' not found in data.", call. = FALSE)
     }
     if (!is.numeric(bucket_by$buckets) || bucket_by$buckets < 1) {
@@ -184,7 +217,7 @@ db_write <- function(data,
     if (!is.character(sort_by) || length(sort_by) == 0) {
       stop("sort_by must be a non-empty character vector.", call. = FALSE)
     }
-    missing_cols <- setdiff(sort_by, names(data))
+    missing_cols <- setdiff(sort_by, data_cols)
     if (length(missing_cols) > 0) {
       stop("sort_by columns not found in data: ",
            paste(missing_cols, collapse = ", "),
@@ -197,8 +230,8 @@ db_write <- function(data,
     stop("inline must be TRUE or FALSE.", call. = FALSE)
   }
 
-  # Validate and normalize col_types
-  if (!is.null(col_types)) {
+  # Validate and normalize col_types (only for data.frame input)
+  if (!is.null(col_types) && !is_lazy) {
     if (!is.list(col_types) && !is.character(col_types)) {
       stop("col_types must be a named list or named character vector.", call. = FALSE)
     }
@@ -210,7 +243,7 @@ db_write <- function(data,
       col_types <- as.list(col_types)
     }
     # Check that specified columns exist in data
-    unknown_cols <- setdiff(names(col_types), names(data))
+    unknown_cols <- setdiff(names(col_types), data_cols)
     if (length(unknown_cols) > 0) {
       stop("col_types specifies columns not found in data: ",
            paste(unknown_cols, collapse = ", "),
@@ -255,9 +288,28 @@ db_write <- function(data,
     }
   }
 
-  tmp <- .db_temp_name()
-  duckdb::duckdb_register(con, tmp, data)
-  on.exit(try(duckdb::duckdb_unregister(con, tmp), silent = TRUE), add = TRUE)
+  # Helper to set partitioning and clustering after table creation
+  .apply_table_options <- function() {
+    # Set partitioning if specified
+    partition_parts <- c()
+    if (!is.null(partition_by)) {
+      partition_parts <- c(partition_parts, partition_by)
+    }
+    if (!is.null(bucket_by)) {
+      bucket_clause <- paste0("bucket(", as.integer(bucket_by$buckets), ", ", bucket_by$column, ")")
+      partition_parts <- c(partition_parts, bucket_clause)
+    }
+    if (length(partition_parts) > 0) {
+      partition_clause <- paste(partition_parts, collapse = ", ")
+      DBI::dbExecute(con, glue::glue("ALTER TABLE {qname} SET PARTITIONED BY ({partition_clause})"))
+    }
+
+    # Set clustering/sorting if specified
+    if (!is.null(sort_by)) {
+      sort_clause <- paste(sort_by, collapse = ", ")
+      DBI::dbExecute(con, glue::glue("ALTER TABLE {qname} SET CLUSTERING ORDER BY ({sort_clause})"))
+    }
+  }
 
   DBI::dbExecute(con, "BEGIN")
 
@@ -271,59 +323,75 @@ db_write <- function(data,
   }
 
   tryCatch({
-    if (mode == "overwrite") {
-      # Drop existing table if present
-      if (table_exists) {
-        DBI::dbExecute(con, glue::glue("DROP TABLE {qname}"))
-      }
+    if (is_lazy) {
+      # ========== LAZY TABLE PATH ==========
+      # Extract SQL from the dbplyr query - stays entirely in DuckDB
+      select_sql <- dbplyr::sql_render(data)
 
-      # Build column definitions from data types
-      # Use explicit col_types where specified, otherwise infer from data
-      cols <- vapply(data, .db_r_to_duckdb_type, character(1))
-      if (!is.null(col_types)) {
-        for (col_name in names(col_types)) {
-          cols[col_name] <- col_types[[col_name]]
+      if (mode == "overwrite") {
+        # Drop existing table if present
+        if (table_exists) {
+          DBI::dbExecute(con, glue::glue("DROP TABLE {qname}"))
+        }
+
+        # Create table directly from query
+        DBI::dbExecute(con, glue::glue("CREATE TABLE {qname} AS {select_sql}"))
+
+        # Apply partitioning and clustering
+        .apply_table_options()
+
+      } else {
+        # Append mode
+        if (inline) {
+          DBI::dbExecute(con, glue::glue("INSERT INTO {qname} {select_sql} WITH (INLINE)"))
+        } else {
+          DBI::dbExecute(con, glue::glue("INSERT INTO {qname} {select_sql}"))
         }
       }
-      col_defs <- paste(
-        paste(names(cols), cols),
-        collapse = ", "
-      )
-
-      # Create table with explicit schema
-      create_sql <- glue::glue("CREATE TABLE {qname} ({col_defs})")
-      DBI::dbExecute(con, create_sql)
-
-      # Set partitioning if specified (must be done before inserting data)
-      # Build combined partition clause for hive + bucket partitioning
-      partition_parts <- c()
-      if (!is.null(partition_by)) {
-        partition_parts <- c(partition_parts, partition_by)
-      }
-      if (!is.null(bucket_by)) {
-        bucket_clause <- paste0("bucket(", as.integer(bucket_by$buckets), ", ", bucket_by$column, ")")
-        partition_parts <- c(partition_parts, bucket_clause)
-      }
-      if (length(partition_parts) > 0) {
-        partition_clause <- paste(partition_parts, collapse = ", ")
-        DBI::dbExecute(con, glue::glue("ALTER TABLE {qname} SET PARTITIONED BY ({partition_clause})"))
-      }
-
-      # Set clustering/sorting if specified
-      if (!is.null(sort_by)) {
-        sort_clause <- paste(sort_by, collapse = ", ")
-        DBI::dbExecute(con, glue::glue("ALTER TABLE {qname} SET CLUSTERING ORDER BY ({sort_clause})"))
-      }
-
-      # Insert data
-      DBI::dbExecute(con, glue::glue("INSERT INTO {qname} SELECT * FROM {tmp}"))
 
     } else {
-      # append mode - insert with optional inlining
-      if (inline) {
-        DBI::dbExecute(con, glue::glue("INSERT INTO {qname} SELECT * FROM {tmp} WITH (INLINE)"))
-      } else {
+      # ========== DATA.FRAME PATH ==========
+      # Register data.frame as temporary view
+      tmp <- .db_temp_name()
+      duckdb::duckdb_register(con, tmp, data)
+      on.exit(try(duckdb::duckdb_unregister(con, tmp), silent = TRUE), add = TRUE)
+
+      if (mode == "overwrite") {
+        # Drop existing table if present
+        if (table_exists) {
+          DBI::dbExecute(con, glue::glue("DROP TABLE {qname}"))
+        }
+
+        # Build column definitions from data types
+        # Use explicit col_types where specified, otherwise infer from data
+        cols <- vapply(data, .db_r_to_duckdb_type, character(1))
+        if (!is.null(col_types)) {
+          for (col_name in names(col_types)) {
+            cols[col_name] <- col_types[[col_name]]
+          }
+        }
+        col_defs <- paste(
+          paste(names(cols), cols),
+          collapse = ", "
+        )
+
+        # Create table with explicit schema
+        create_sql <- glue::glue("CREATE TABLE {qname} ({col_defs})")
+        DBI::dbExecute(con, create_sql)
+
+        # Apply partitioning and clustering
+        .apply_table_options()
+
+        # Insert data
         DBI::dbExecute(con, glue::glue("INSERT INTO {qname} SELECT * FROM {tmp}"))
+
+      } else {
+        # Append mode
+        if (inline) {
+          DBI::dbExecute(con, glue::glue("INSERT INTO {qname} SELECT * FROM {tmp} WITH (INLINE)"))
+        } else {
+          DBI::dbExecute(con, glue::glue("INSERT INTO {qname} SELECT * FROM {tmp}"))
+        }
       }
     }
 
@@ -334,7 +402,9 @@ db_write <- function(data,
     stop(e$message, call. = FALSE)
   })
 
-  message(ifelse(mode == "overwrite", "Wrote", "Appended"), " data to ", qname)
+  action <- ifelse(mode == "overwrite", "Wrote", "Appended")
+  source <- if (is_lazy) "(from query)" else "(from data.frame)"
+  message(action, " data to ", qname, " ", source)
 
   invisible(qname)
 }

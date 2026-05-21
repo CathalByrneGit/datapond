@@ -110,6 +110,15 @@ db_write(
   )
 )
 
+# Transform data without leaving DuckDB (zero-copy, no R memory)
+# Just pipe a lazy table from db_read() through dplyr and into db_write()
+db_read(table = "raw_imports") |>
+  filter(year == 2024, !is.na(value)) |>
+  mutate(value_eur = value * exchange_rate) |>
+  group_by(country, month) |>
+  summarise(total = sum(value_eur), .groups = "drop") |>
+  db_write(schema = "clean", table = "monthly_summary")
+
 # Arrow integration - read/write without DuckDB compute
 arrow_tbl <- db_read_arrow(table = "imports", as_data_frame = FALSE)
 db_write_arrow(arrow_tbl, table = "imports_copy")
@@ -339,8 +348,10 @@ db_write(imports_data, schema = "trade", table = "imports")
 
 | Function | Description |
 |----|----|
-| `db_write()` | Write table (overwrite/append, with partitioning, bucketing, sorting, inlining, explicit schema) |
+| `db_write()` | Write data.frame or lazy dplyr query (zero-copy transforms stay in DuckDB) |
 | `db_upsert()` | MERGE operation (update existing rows + insert new rows) |
+
+*Note: `db_write()` accepts both data.frames (data passes through R) and lazy dbplyr tables from `db_read()` (stays entirely in DuckDB, no R memory used). Use the lazy approach for in-lake transformations.*
 
 ### Arrow Integration
 
