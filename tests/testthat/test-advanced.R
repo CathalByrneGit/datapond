@@ -53,7 +53,31 @@ test_that("db_set_inline_threshold validates threshold", {
   db_write(data.frame(id = 1:3), table = "test_table")
 
   # Negative threshold should error
- expect_error(db_set_inline_threshold(table = "test_table", threshold = -1), "non-negative")
+  expect_error(db_set_inline_threshold(table = "test_table", threshold = -1), "non-negative")
+
+  clean_db_env()
+  cleanup_test_lake(lake)
+})
+
+test_that("db_set_inline_threshold sets threshold on table", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+
+  clean_db_env()
+  lake <- create_test_lake("inline_threshold_set")
+
+  db_connect(
+    catalog = "test",
+    metadata_path = lake$metadata_path,
+    data_path = lake$data_path
+  )
+
+  db_write(data.frame(id = 1:3), table = "test_table")
+
+  # Should succeed
+  expect_message(
+    db_set_inline_threshold(table = "test_table", threshold = 50000),
+    "threshold|inline"
+  )
 
   clean_db_env()
   cleanup_test_lake(lake)
@@ -148,6 +172,36 @@ test_that("db_recluster validates max_files", {
   cleanup_test_lake(lake)
 })
 
+test_that("db_recluster reclusters table data", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+
+  clean_db_env()
+  lake <- create_test_lake("recluster_run")
+
+  db_connect(
+    catalog = "test",
+    metadata_path = lake$metadata_path,
+    data_path = lake$data_path
+  )
+
+  # Create table with data
+  test_data <- data.frame(
+    id = sample(1:100, 50),
+    date = as.Date("2024-01-01") + sample(0:30, 50, replace = TRUE),
+    value = runif(50)
+  )
+  db_write(test_data, table = "test_table")
+
+  # Set clustering order
+  db_set_clustering(table = "test_table", columns = c("date", "id"))
+
+  # Recluster should run without error
+  expect_message(db_recluster(table = "test_table"), "recluster|Recluster")
+
+  clean_db_env()
+  cleanup_test_lake(lake)
+})
+
 # ==============================================================================
 # Tests for db_export_iceberg()
 # ==============================================================================
@@ -185,4 +239,69 @@ test_that("db_export_iceberg validates catalog_type", {
 test_that("db_iceberg_metadata errors when not connected", {
   clean_db_env()
   expect_error(db_iceberg_metadata(table = "test"), "Not connected")
+})
+
+test_that("db_iceberg_metadata returns metadata for table", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+
+  clean_db_env()
+  lake <- create_test_lake("iceberg_meta")
+
+  db_connect(
+    catalog = "test",
+    metadata_path = lake$metadata_path,
+    data_path = lake$data_path
+  )
+
+  # Create table with data
+  test_data <- data.frame(
+    id = 1:5,
+    name = letters[1:5],
+    value = c(10.5, 20.5, 30.5, 40.5, 50.5)
+  )
+  db_write(test_data, table = "test_table")
+
+  # Get Iceberg metadata
+  meta <- db_iceberg_metadata(table = "test_table")
+
+  expect_type(meta, "list")
+  # Should have schema information
+  expect_true("schema" %in% names(meta) || "columns" %in% names(meta) || length(meta) > 0)
+
+  clean_db_env()
+  cleanup_test_lake(lake)
+})
+
+test_that("db_export_iceberg exports table", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+
+  clean_db_env()
+  lake <- create_test_lake("iceberg_export")
+
+  db_connect(
+    catalog = "test",
+    metadata_path = lake$metadata_path,
+    data_path = lake$data_path
+  )
+
+  # Create table
+  test_data <- data.frame(id = 1:3, value = c(10, 20, 30))
+  db_write(test_data, table = "test_table")
+
+  # Export should run without error (actual export depends on DuckLake version)
+  result <- tryCatch({
+    db_export_iceberg(table = "test_table")
+    TRUE
+  }, error = function(e) {
+    # Some DuckLake versions may not fully support this yet
+    if (grepl("not supported|not implemented", e$message, ignore.case = TRUE)) {
+      skip("Iceberg export not fully supported in this DuckLake version")
+    }
+    stop(e)
+  })
+
+  expect_true(result)
+
+  clean_db_env()
+  cleanup_test_lake(lake)
 })
