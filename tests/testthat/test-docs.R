@@ -336,3 +336,133 @@ test_that("db_search_columns finds columns across tables", {
   clean_db_env()
   unlink(temp_dir, recursive = TRUE)
 })
+
+
+# ==============================================================================
+# Tests for db_lineage()
+# ==============================================================================
+
+test_that("db_lineage errors when not connected", {
+  clean_db_env()
+
+  expect_error(db_lineage(table = "test", sources = "raw.data"), "Not connected")
+})
+
+test_that("db_lineage records lineage for a table", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "lineage_test_")
+  dir.create(temp_dir)
+
+  db_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  # Create a table
+  db_write(data.frame(id = 1:3, value = c(10, 20, 30)),
+           schema = "main", table = "summary")
+
+  # Record lineage
+  expect_message(
+    db_lineage(
+      table = "summary",
+      sources = c("raw.transactions", "raw.products"),
+      transformation = "Aggregated by month"
+    ),
+    "Recorded lineage"
+  )
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_lineage errors for non-existent table", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "lineage_noexist_test_")
+  dir.create(temp_dir)
+
+  db_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  expect_error(
+    db_lineage(table = "nonexistent", sources = "raw.data"),
+    "not found"
+  )
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+
+# ==============================================================================
+# Tests for db_get_lineage()
+# ==============================================================================
+
+test_that("db_get_lineage errors when not connected", {
+  clean_db_env()
+
+  expect_error(db_get_lineage(table = "test"), "Not connected")
+})
+
+test_that("db_get_lineage returns NULL for table without lineage", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "get_lineage_null_test_")
+  dir.create(temp_dir)
+
+  db_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  db_write(data.frame(id = 1:3), schema = "main", table = "no_lineage")
+
+  result <- db_get_lineage(table = "no_lineage")
+  expect_null(result)
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_get_lineage retrieves recorded lineage", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "get_lineage_test_")
+  dir.create(temp_dir)
+
+  db_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  # Create table and record lineage
+  db_write(data.frame(id = 1:3), schema = "main", table = "with_lineage")
+
+  db_lineage(
+    table = "with_lineage",
+    sources = c("source_a", "source_b"),
+    transformation = "Joined and filtered"
+  )
+
+  # Retrieve lineage
+  result <- db_get_lineage(table = "with_lineage")
+
+  expect_type(result, "list")
+  expect_equal(result$sources, c("source_a", "source_b"))
+  expect_equal(result$transformation, "Joined and filtered")
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
