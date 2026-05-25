@@ -1,248 +1,99 @@
 # R/docs.R
 # Documentation and metadata functions for DuckLake tables
-# Uses DuckLake's native ducklake_metadata table for storage
+# Uses DuckLake's native COMMENT ON for storage (survives disconnect/reconnect)
 
 # ==============================================================================
-# Internal Helpers for DuckLake Metadata
+# Internal Helpers
 # ==============================================================================
-
-#' Get the DuckLake metadata schema name
+#' Parse JSON comment or return as-is if not JSON
 #' @noRd
-.db_metadata_schema <- function(catalog) {
- paste0("__ducklake_metadata_", catalog)
+.db_parse_comment <- function(comment_str) {
+  if (is.null(comment_str) || !nzchar(comment_str)) {
+    return(NULL)
+  }
+
+  # Try to parse as JSON
+  tryCatch({
+    parsed <- jsonlite::fromJSON(comment_str)
+    if (is.list(parsed)) {
+      return(parsed)
+    }
+    # If it parsed but isn't a list (e.g., just a string in quotes), return as-is
+    return(list(description = comment_str))
+  }, error = function(e) {
+    # Not JSON, treat as plain description
+    return(list(description = comment_str))
+  })
 }
 
-#' Get table_id from DuckLake metadata
+#' Get table comment from DuckDB catalog
 #' @noRd
-.db_get_table_id <- function(con, catalog, schema, table) {
-  metadata_schema <- .db_metadata_schema(catalog)
-
+.db_get_table_comment <- function(con, catalog, schema, table) {
   result <- tryCatch({
     DBI::dbGetQuery(con, glue::glue("
-      SELECT t.table_id
-      FROM {metadata_schema}.ducklake_table t
-      JOIN {metadata_schema}.ducklake_schema s ON t.schema_id = s.schema_id
-      WHERE s.schema_name = {.db_sql_quote(schema)}
-        AND t.table_name = {.db_sql_quote(table)}
-        AND t.end_snapshot IS NULL
+      SELECT comment
+      FROM duckdb_tables()
+      WHERE database_name = {.db_sql_quote(catalog)}
+        AND schema_name = {.db_sql_quote(schema)}
+        AND table_name = {.db_sql_quote(table)}
     "))
   }, error = function(e) data.frame())
 
-  if (nrow(result) == 0) return(NULL)
-  result$table_id[1]
-}
-
-#' Get column_id from DuckLake metadata
-#' @noRd
-.db_get_column_id <- function(con, catalog, schema, table, column) {
-  metadata_schema <- .db_metadata_schema(catalog)
-
-  result <- tryCatch({
-    DBI::dbGetQuery(con, glue::glue("
-      SELECT c.column_id
-      FROM {metadata_schema}.ducklake_column c
-      JOIN {metadata_schema}.ducklake_table t ON c.table_id = t.table_id
-      JOIN {metadata_schema}.ducklake_schema s ON t.schema_id = s.schema_id
-      WHERE s.schema_name = {.db_sql_quote(schema)}
-        AND t.table_name = {.db_sql_quote(table)}
-        AND c.column_name = {.db_sql_quote(column)}
-        AND t.end_snapshot IS NULL
-    "))
-  }, error = function(e) data.frame())
-
-  if (nrow(result) == 0) return(NULL)
-  result$column_id[1]
-}
-
-#' Set metadata in ducklake_metadata table
-#' @noRd
-.db_set_metadata <- function(con, catalog, key, value, scope, scope_id) {
-  metadata_schema <- .db_metadata_schema(catalog)
-
-  # Delete existing entry
-  DBI::dbExecute(con, glue::glue("
-    DELETE FROM {metadata_schema}.ducklake_metadata
-    WHERE key = {.db_sql_quote(key)}
-      AND scope = {.db_sql_quote(scope)}
-      AND scope_id = {scope_id}
-  "))
-
-  # Insert new value (only if not NULL/empty)
-  if (!is.null(value) && nzchar(value)) {
-    DBI::dbExecute(con, glue::glue("
-      INSERT INTO {metadata_schema}.ducklake_metadata (key, value, scope, scope_id)
-      VALUES ({.db_sql_quote(key)}, {.db_sql_quote(value)}, {.db_sql_quote(scope)}, {scope_id})
-    "))
+  if (nrow(result) == 0 || is.na(result$comment[1])) {
+    return(NULL)
   }
+  result$comment[1]
 }
 
-#' Get metadata from ducklake_metadata table
+#' Get column comment from DuckDB catalog
 #' @noRd
-.db_get_metadata <- function(con, catalog, key, scope, scope_id) {
-  metadata_schema <- .db_metadata_schema(catalog)
-
-  result <- tryCatch({
+.db_get_column_comment <- function(con, catalog, schema, table, column) {
+result <- tryCatch({
     DBI::dbGetQuery(con, glue::glue("
-      SELECT value
-      FROM {metadata_schema}.ducklake_metadata
-      WHERE key = {.db_sql_quote(key)}
-        AND scope = {.db_sql_quote(scope)}
-        AND scope_id = {scope_id}
+      SELECT comment
+      FROM duckdb_columns()
+      WHERE database_name = {.db_sql_quote(catalog)}
+        AND schema_name = {.db_sql_quote(schema)}
+        AND table_name = {.db_sql_quote(table)}
+        AND column_name = {.db_sql_quote(column)}
     "))
   }, error = function(e) data.frame())
 
-  if (nrow(result) == 0) return(NULL)
-  result$value[1]
+  if (nrow(result) == 0 || is.na(result$comment[1])) {
+    return(NULL)
+  }
+  result$comment[1]
 }
 
 
 # ==============================================================================
-# Core Documentation Functions
+# Documentation Functions
 # ==============================================================================
-
-#' Describe a table
-#'
-#' @description Add documentation metadata to a DuckLake table.
-#' Metadata includes description, owner, and tags.
-#'
-#' @param schema Schema name (default "main")
-#' @param table Table name
-#' @param description Free-text description of the table
-#' @param owner Owner name or team responsible for this data
-#' @param tags Character vector of tags for categorization
-#' @return Invisibly returns the metadata list
-#'
-#' @examples
-#' \dontrun{
-#' db_connect()
-#' db_describe(
-#'   table = "imports",
-#'   description = "Monthly import values by country and commodity code",
-#'   owner = "Trade Section",
-#'   tags = c("trade", "monthly", "official")
-#' )
-#' }
-#' @export
-db_describe <- function(schema = "main", table,
-                        description = NULL, owner = NULL, tags = NULL) {
-
-  con <- .db_get_con()
-  if (is.null(con)) {
-    stop("Not connected. Use db_connect() first.", call. = FALSE)
-  }
-
-  if (missing(table)) {
-    stop("table is required", call. = FALSE)
-  }
-
-  schema <- .db_validate_name(schema, "schema")
-  table <- .db_validate_name(table, "table")
-  catalog <- .db_get("catalog")
-
-  qname <- paste(catalog, schema, table, sep = ".")
-
-  # Get table_id from DuckLake metadata
-  table_id <- .db_get_table_id(con, catalog, schema, table)
-  if (is.null(table_id)) {
-    stop("Table '", qname, "' not found in DuckLake catalog.", call. = FALSE)
-  }
-
-  # Store metadata in DuckLake's ducklake_metadata table
-  # Using scope='table' and scope_id=table_id
-  if (!is.null(description)) {
-    .db_set_metadata(con, catalog, "description", description, "table", table_id)
-  }
-  if (!is.null(owner)) {
-    .db_set_metadata(con, catalog, "owner", owner, "table", table_id)
-  }
-  if (!is.null(tags)) {
-    tags_str <- paste(tags, collapse = ",")
-    .db_set_metadata(con, catalog, "tags", tags_str, "table", table_id)
-  }
-
-  message("Updated metadata for ", qname)
-
-  invisible(list(
-    schema = schema, table = table,
-    description = description, owner = owner, tags = tags
-  ))
-}
-
-
-#' Describe a column
-#'
-#' @description Add documentation to a specific column in a table.
-#'
-#' @param schema Schema name (default "main")
-#' @param table Table name
-#' @param column Column name to document
-#' @param description Description of what the column contains
-#' @param units Units of measurement (optional)
-#' @param notes Additional notes (optional)
-#' @return Invisibly returns the column metadata
-#'
-#' @examples
-#' \dontrun{
-#' db_connect()
-#' db_describe_column(
-#'   table = "imports",
-#'   column = "value",
-#'   description = "Import value in thousands of EUR",
-#'   units = "EUR thousands"
-#' )
-#' }
-#' @export
-db_describe_column <- function(schema = "main", table, column,
-                               description = NULL, units = NULL, notes = NULL) {
-
-  con <- .db_get_con()
-  if (is.null(con)) {
-    stop("Not connected. Use db_connect() first.", call. = FALSE)
-  }
-
-  schema <- .db_validate_name(schema, "schema")
-  table <- .db_validate_name(table, "table")
-  column <- .db_validate_name(column, "column", strict = FALSE)
-  catalog <- .db_get("catalog")
-
-  qname <- paste(catalog, schema, table, column, sep = ".")
-
-  # Get column_id from DuckLake metadata
-  column_id <- .db_get_column_id(con, catalog, schema, table, column)
-  if (is.null(column_id)) {
-    stop("Column '", qname, "' not found in DuckLake catalog.", call. = FALSE)
-  }
-
-  # Store metadata in DuckLake's ducklake_metadata table
-  # Using scope='column' and scope_id=column_id
-  if (!is.null(description)) {
-    .db_set_metadata(con, catalog, "description", description, "column", column_id)
-  }
-  if (!is.null(units)) {
-    .db_set_metadata(con, catalog, "units", units, "column", column_id)
-  }
-  if (!is.null(notes)) {
-    .db_set_metadata(con, catalog, "notes", notes, "column", column_id)
-  }
-
-  message("Updated column metadata for ", catalog, ".", schema, ".", table, ".", column)
-  invisible(list(column = column, description = description, units = units, notes = notes))
-}
-
 
 #' Get documentation for a table
 #'
-#' @description Retrieve documentation metadata for a table.
+#' @description Retrieve documentation metadata for a table and its columns.
+#'   Metadata is stored using native SQL COMMENT ON statements.
 #'
 #' @param schema Schema name (default "main")
 #' @param table Table name
-#' @return A list containing description, owner, tags, and column documentation
+#' @return A list containing description, owner, tags, lineage, and column documentation
 #'
 #' @examples
 #' \dontrun{
 #' db_connect()
+#'
+#' # First, add documentation
+#' db_comment(table = "imports", comment = list(
+#'   description = "Monthly import values",
+#'   owner = "Trade Section",
+#'   tags = c("trade", "monthly")
+#' ))
+#'
+#' # Then retrieve it
 #' db_get_docs(table = "imports")
 #' }
+#' @seealso [db_comment()] to add documentation
 #' @export
 db_get_docs <- function(schema = "main", table) {
 
@@ -254,10 +105,6 @@ db_get_docs <- function(schema = "main", table) {
   schema <- .db_validate_name(schema, "schema")
   table <- .db_validate_name(table, "table")
   catalog <- .db_get("catalog")
-  metadata_schema <- .db_metadata_schema(catalog)
-
-  # Get table_id
-  table_id <- .db_get_table_id(con, catalog, schema, table)
 
   # Build result with defaults
   result <- list(
@@ -266,44 +113,50 @@ db_get_docs <- function(schema = "main", table) {
     description = NULL,
     owner = NULL,
     tags = character(0),
+    lineage = NULL,
     columns = list()
   )
 
-  # Get table-level metadata from ducklake_metadata
-  if (!is.null(table_id)) {
-    result$description <- .db_get_metadata(con, catalog, "description", "table", table_id)
-    result$owner <- .db_get_metadata(con, catalog, "owner", "table", table_id)
-
-    tags_str <- .db_get_metadata(con, catalog, "tags", "table", table_id)
-    if (!is.null(tags_str) && nzchar(tags_str)) {
-      result$tags <- strsplit(tags_str, ",")[[1]]
+  # Get table comment and parse
+  table_comment <- .db_get_table_comment(con, catalog, schema, table)
+  if (!is.null(table_comment)) {
+    parsed <- .db_parse_comment(table_comment)
+    if (!is.null(parsed)) {
+      result$description <- parsed$description
+      result$owner <- parsed$owner
+      if (!is.null(parsed$tags)) {
+        result$tags <- if (is.character(parsed$tags)) parsed$tags else as.character(parsed$tags)
+      }
+      # Lineage info
+      if (!is.null(parsed$lineage_sources) || !is.null(parsed$lineage_transformation)) {
+        result$lineage <- list(
+          sources = parsed$lineage_sources,
+          transformation = parsed$lineage_transformation
+        )
+      }
     }
+  }
 
-    # Get column-level metadata
-    # First get all columns for this table
-    cols <- tryCatch({
-      DBI::dbGetQuery(con, glue::glue("
-        SELECT c.column_id, c.column_name
-        FROM {metadata_schema}.ducklake_column c
-        WHERE c.table_id = {table_id}
-      "))
-    }, error = function(e) data.frame())
+  # Get column comments
+  cols <- tryCatch({
+    DBI::dbGetQuery(con, glue::glue("
+      SELECT column_name, comment
+      FROM duckdb_columns()
+      WHERE database_name = {.db_sql_quote(catalog)}
+        AND schema_name = {.db_sql_quote(schema)}
+        AND table_name = {.db_sql_quote(table)}
+    "))
+  }, error = function(e) data.frame())
 
-    if (nrow(cols) > 0) {
-      for (i in seq_len(nrow(cols))) {
-        col_id <- cols$column_id[i]
-        col_name <- cols$column_name[i]
+  if (nrow(cols) > 0) {
+    for (i in seq_len(nrow(cols))) {
+      col_name <- cols$column_name[i]
+      col_comment <- cols$comment[i]
 
-        col_desc <- .db_get_metadata(con, catalog, "description", "column", col_id)
-        col_units <- .db_get_metadata(con, catalog, "units", "column", col_id)
-        col_notes <- .db_get_metadata(con, catalog, "notes", "column", col_id)
-
-        if (!is.null(col_desc) || !is.null(col_units) || !is.null(col_notes)) {
-          result$columns[[col_name]] <- list(
-            description = col_desc,
-            units = col_units,
-            notes = col_notes
-          )
+      if (!is.na(col_comment) && nzchar(col_comment)) {
+        parsed <- .db_parse_comment(col_comment)
+        if (!is.null(parsed)) {
+          result$columns[[col_name]] <- parsed
         }
       }
     }
@@ -384,7 +237,6 @@ db_dictionary <- function(schema = NULL, include_columns = TRUE) {
   for (i in seq_len(nrow(tables))) {
     tbl_schema <- tables$table_schema[i]
     tbl_name <- tables$table_name[i]
-    qname <- paste0(catalog, ".", tbl_schema, ".", tbl_name)
 
     # Get docs
     docs <- tryCatch(
@@ -475,10 +327,11 @@ db_dictionary <- function(schema = NULL, include_columns = TRUE) {
 #' Record data lineage
 #'
 #' @description Records the source(s) of a table for data lineage tracking.
+#'   Lineage is stored in the table's comment as JSON metadata.
 #'
 #' @param schema Schema name (default "main")
 #' @param table Table name
-#' @param sources Character vector of source descriptions
+#' @param sources Character vector of source table names or descriptions
 #' @param transformation Description of how data was transformed
 #' @return Invisibly returns TRUE
 #'
@@ -492,6 +345,7 @@ db_dictionary <- function(schema = NULL, include_columns = TRUE) {
 #'   transformation = "Aggregated by month and product category"
 #' )
 #' }
+#' @seealso [db_get_lineage()] to retrieve lineage
 #' @export
 db_lineage <- function(schema = "main", table, sources, transformation = NULL) {
 
@@ -506,21 +360,29 @@ db_lineage <- function(schema = "main", table, sources, transformation = NULL) {
 
   qname <- paste(catalog, schema, table, sep = ".")
 
-  # Get table_id from DuckLake metadata
-  table_id <- .db_get_table_id(con, catalog, schema, table)
-  if (is.null(table_id)) {
-    stop("Table '", qname, "' not found in DuckLake catalog.", call. = FALSE)
+  # Check table exists
+  if (!.db_table_exists(con, catalog, schema, table)) {
+    stop("Table '", qname, "' not found.", call. = FALSE)
   }
 
-  # Store lineage in DuckLake's ducklake_metadata table
-  sources_str <- paste(sources, collapse = "; ")
-  .db_set_metadata(con, catalog, "lineage_sources", sources_str, "table", table_id)
+  # Get existing table comment/metadata
+  existing_comment <- .db_get_table_comment(con, catalog, schema, table)
+  existing_meta <- if (!is.null(existing_comment)) {
+    .db_parse_comment(existing_comment)
+  } else {
+    list()
+  }
 
+  # Update with lineage info
+  existing_meta$lineage_sources <- sources
   if (!is.null(transformation)) {
-    .db_set_metadata(con, catalog, "lineage_transformation", transformation, "table", table_id)
+    existing_meta$lineage_transformation <- transformation
   }
 
-  message("Recorded lineage for ", catalog, ".", schema, ".", table)
+  # Save back using db_comment
+  db_comment(schema = schema, table = table, comment = existing_meta)
+
+  message("Recorded lineage for ", qname)
   invisible(TRUE)
 }
 
@@ -532,6 +394,7 @@ db_lineage <- function(schema = "main", table, sources, transformation = NULL) {
 #' @param schema Schema name (default "main")
 #' @param table Table name
 #' @return A list with sources and transformation, or NULL if not recorded
+#' @seealso [db_lineage()] to record lineage
 #' @export
 db_get_lineage <- function(schema = "main", table) {
 
@@ -544,19 +407,16 @@ db_get_lineage <- function(schema = "main", table) {
   table <- .db_validate_name(table, "table")
   catalog <- .db_get("catalog")
 
-  # Get table_id
-  table_id <- .db_get_table_id(con, catalog, schema, table)
-  if (is.null(table_id)) return(NULL)
+  # Get table comment
+  table_comment <- .db_get_table_comment(con, catalog, schema, table)
+  if (is.null(table_comment)) return(NULL)
 
-  # Get lineage from ducklake_metadata
-  sources_str <- .db_get_metadata(con, catalog, "lineage_sources", "table", table_id)
-  if (is.null(sources_str)) return(NULL)
-
-  transformation <- .db_get_metadata(con, catalog, "lineage_transformation", "table", table_id)
+  parsed <- .db_parse_comment(table_comment)
+  if (is.null(parsed$lineage_sources)) return(NULL)
 
   list(
-    sources = strsplit(sources_str, "; ")[[1]],
-    transformation = transformation
+    sources = parsed$lineage_sources,
+    transformation = parsed$lineage_transformation
   )
 }
 

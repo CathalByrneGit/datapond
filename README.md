@@ -175,20 +175,24 @@ db_connect(
   data_path = "//CSO-NAS/DataLake/data"
 )
 
-# Document your tables
-db_describe(
+# Document your tables with structured metadata (stored as JSON in native comments)
+db_comment(
   table = "imports",
-  description = "Monthly import values by country and commodity code",
-  owner = "Trade Section",
-  tags = c("trade", "monthly", "official")
+  comment = list(
+    description = "Monthly import values by country and commodity code",
+    owner = "Trade Section",
+    tags = c("trade", "monthly", "official")
+  )
 )
 
 # Document individual columns
-db_describe_column(
+db_comment(
   table = "imports",
   column = "value",
-  description = "Import value in thousands",
-  units = "EUR (thousands)"
+  comment = list(
+    description = "Import value in thousands",
+    units = "EUR (thousands)"
+  )
 )
 
 # Search for tables
@@ -391,9 +395,7 @@ db_write(imports_data, schema = "trade", table = "imports")
 
 | Function | Description |
 |----|----|
-| `db_describe()` | Add description, owner, tags to a table |
-| `db_describe_column()` | Document a column (description, units, notes) |
-| `db_comment()` | Add SQL COMMENT to table or column (stored in catalog) |
+| `db_comment()` | Add metadata to table/column (list for structured, string for simple) |
 | `db_get_docs()` | Retrieve documentation for a table |
 | `db_dictionary()` | Generate full data dictionary |
 | `db_search()` | Search by name, description, owner, or tags |

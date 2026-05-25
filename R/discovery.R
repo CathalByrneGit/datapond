@@ -601,33 +601,51 @@ db_drop_macro <- function(schema = "main", name, if_exists = FALSE) {
 # Comments (SQL COMMENT ON)
 # ==============================================================================
 
-#' Add SQL comment to table or column
+#' Add comment/metadata to table or column
 #'
-#' @description Adds a SQL COMMENT to a table or column using DuckLake's native
-#'   COMMENT ON statement. Comments are stored in the DuckLake metadata and
-#'   support time travel. This is distinct from the higher-level documentation
-#'   provided by [db_describe()].
+#' @description Adds metadata to a table or column using DuckLake's native
+#'   COMMENT ON statement. Comments are stored in the DuckLake catalog and
+#'   support time travel.
+#'
+#'   The comment can be a simple string or a list with structured metadata.
+#'   Lists are automatically converted to JSON for storage.
 #'
 #' @param schema Schema name (default "main")
 #' @param table Table name
 #' @param column Optional column name. If NULL, comment is added to the table.
-#' @param comment The comment text. Use NULL to remove comment.
+#' @param comment The comment - either a string or a list. Lists are converted
+#'   to JSON. Use NULL to remove comment.
+#'
+#'   For tables, common list fields: `description`, `owner`, `tags`, `lineage_sources`,
+#'   `lineage_transformation`.
+#'
+#'   For columns, common list fields: `description`, `units`, `notes`.
+#'
 #' @return Invisibly returns TRUE on success
 #' @examples
 #' \dontrun{
 #' db_connect(...)
 #'
-#' # Comment on table
+#' # Simple string comment
 #' db_comment(table = "users", comment = "Active user accounts")
 #'
-#' # Comment on column
-#' db_comment(table = "users", column = "email",
-#'            comment = "Primary email, must be unique")
+#' # Structured table metadata (stored as JSON)
+#' db_comment(table = "imports", comment = list(
+#'   description = "Monthly import values by country",
+#'   owner = "Trade Section",
+#'   tags = c("trade", "monthly", "official")
+#' ))
+#'
+#' # Structured column metadata
+#' db_comment(table = "imports", column = "value", comment = list(
+#'   description = "Import value",
+#'   units = "EUR (thousands)"
+#' ))
 #'
 #' # Remove comment
-#' db_comment(table = "users", column = "email", comment = NULL)
+#' db_comment(table = "users", comment = NULL)
 #' }
-#' @seealso [db_describe()] for higher-level documentation with tags and owner
+#' @seealso [db_get_docs()] to retrieve documentation
 #' @export
 db_comment <- function(schema = "main", table, column = NULL, comment) {
   schema <- .db_validate_name(schema, "schema")
@@ -645,12 +663,23 @@ db_comment <- function(schema = "main", table, column = NULL, comment) {
 
   qname <- paste0(catalog, ".", schema, ".", table)
 
+  # Convert list to JSON string
+  if (is.list(comment)) {
+    # Remove NULL values from the list
+    comment <- comment[!sapply(comment, is.null)]
+    if (length(comment) == 0) {
+      comment <- NULL
+    } else {
+      comment <- jsonlite::toJSON(comment, auto_unbox = TRUE)
+    }
+  }
+
   if (is.null(column)) {
     # Table comment
     if (is.null(comment)) {
       sql <- glue::glue("COMMENT ON TABLE {qname} IS NULL")
     } else {
-      sql <- glue::glue("COMMENT ON TABLE {qname} IS {.db_sql_quote(comment)}")
+      sql <- glue::glue("COMMENT ON TABLE {qname} IS {.db_sql_quote(as.character(comment))}")
     }
     DBI::dbExecute(con, sql)
     message("Set comment on table ", qname)
@@ -660,7 +689,7 @@ db_comment <- function(schema = "main", table, column = NULL, comment) {
     if (is.null(comment)) {
       sql <- glue::glue("COMMENT ON COLUMN {qname}.{column} IS NULL")
     } else {
-      sql <- glue::glue("COMMENT ON COLUMN {qname}.{column} IS {.db_sql_quote(comment)}")
+      sql <- glue::glue("COMMENT ON COLUMN {qname}.{column} IS {.db_sql_quote(as.character(comment))}")
     }
     DBI::dbExecute(con, sql)
     message("Set comment on column ", qname, ".", column)
