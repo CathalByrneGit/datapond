@@ -1,39 +1,14 @@
 # tests/testthat/test-docs.R
 
 # ==============================================================================
-# Tests for db_describe() - Connection Check
+# Tests for db_comment() with structured metadata
 # ==============================================================================
 
-test_that("db_describe errors when not connected", {
-  clean_db_env()
-
-  expect_error(db_describe(table = "test"), "Not connected")
-})
-
-# ==============================================================================
-# Tests for db_describe() - DuckLake mode
-# ==============================================================================
-
-test_that("db_describe requires table in DuckLake mode", {
+test_that("db_comment stores and retrieves table metadata", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
   clean_db_env()
 
-  temp_dir <- tempdir()
-  db_connect(
-    metadata_path = file.path(temp_dir, "test_docs.ducklake"),
-    data_path = temp_dir
-  )
-
-  expect_error(db_describe(description = "Test"), "table is required")
-
-  clean_db_env()
-})
-
-test_that("db_describe works in DuckLake mode", {
-  skip_if_not(ducklake_available(), "DuckLake extension not available")
-  clean_db_env()
-
-  temp_dir <- tempfile(pattern = "docs_lake_test_")
+  temp_dir <- tempfile(pattern = "comment_table_test_")
   dir.create(temp_dir)
 
   db_connect(
@@ -42,17 +17,20 @@ test_that("db_describe works in DuckLake mode", {
     data_path = temp_dir
   )
 
-  con <- datapond:::.db_get_con()
-  DBI::dbExecute(con, "CREATE TABLE test.main.products (id INTEGER)")
+  # Create table
+  db_write(data.frame(id = 1:3), schema = "main", table = "products")
 
+  # Add structured metadata
   expect_message(
-    db_describe(
+    db_comment(
       table = "products",
-      description = "Product catalog",
-      owner = "Sales Team",
-      tags = c("products", "reference")
+      comment = list(
+        description = "Product catalog",
+        owner = "Sales Team",
+        tags = c("products", "reference")
+      )
     ),
-    "Updated metadata"
+    "Set comment"
   )
 
   # Retrieve and check
@@ -65,15 +43,11 @@ test_that("db_describe works in DuckLake mode", {
   unlink(temp_dir, recursive = TRUE)
 })
 
-# ==============================================================================
-# Tests for db_describe_column()
-# ==============================================================================
-
-test_that("db_describe_column works in DuckLake mode", {
+test_that("db_comment stores and retrieves column metadata", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
   clean_db_env()
 
-  temp_dir <- tempfile(pattern = "col_lake_test_")
+  temp_dir <- tempfile(pattern = "comment_col_test_")
   dir.create(temp_dir)
 
   db_connect(
@@ -82,14 +56,18 @@ test_that("db_describe_column works in DuckLake mode", {
     data_path = temp_dir
   )
 
-  con <- datapond:::.db_get_con()
-  DBI::dbExecute(con, "CREATE TABLE test.main.products (id INTEGER, price DOUBLE)")
+  # Create table
+  db_write(data.frame(id = 1:3, price = c(10.5, 20.5, 30.5)),
+           schema = "main", table = "products")
 
-  db_describe_column(
+  # Add column metadata
+  db_comment(
     table = "products",
     column = "price",
-    description = "Product price",
-    units = "EUR"
+    comment = list(
+      description = "Product price",
+      units = "EUR"
+    )
   )
 
   meta <- db_get_docs(table = "products")
@@ -99,6 +77,70 @@ test_that("db_describe_column works in DuckLake mode", {
   clean_db_env()
   unlink(temp_dir, recursive = TRUE)
 })
+
+test_that("db_comment works with simple string", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "comment_string_test_")
+  dir.create(temp_dir)
+
+  db_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  db_write(data.frame(id = 1:3), schema = "main", table = "simple")
+
+  # Simple string comment
+  db_comment(table = "simple", comment = "Just a plain comment")
+
+  meta <- db_get_docs(table = "simple")
+  expect_equal(meta$description, "Just a plain comment")
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_comment metadata survives disconnect/reconnect", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "comment_persist_test_")
+  dir.create(temp_dir)
+
+  # First connection - add metadata
+  db_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  db_write(data.frame(id = 1:3), schema = "main", table = "persist_test")
+
+  db_comment(table = "persist_test", comment = list(
+    description = "Should persist",
+    owner = "Test Owner"
+  ))
+
+  db_disconnect()
+
+  # Second connection - verify metadata persists
+  db_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  meta <- db_get_docs(table = "persist_test")
+  expect_equal(meta$description, "Should persist")
+  expect_equal(meta$owner, "Test Owner")
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
 
 # ==============================================================================
 # Tests for db_get_docs()
@@ -117,10 +159,9 @@ test_that("db_get_docs returns empty metadata for undocumented table", {
     data_path = temp_dir
   )
 
-  con <- datapond:::.db_get_con()
-  DBI::dbExecute(con, "CREATE TABLE test.main.products (id INTEGER)")
+  db_write(data.frame(id = 1:3), schema = "main", table = "no_docs")
 
-  meta <- db_get_docs(table = "products")
+  meta <- db_get_docs(table = "no_docs")
 
   expect_null(meta$description)
   expect_null(meta$owner)
@@ -130,6 +171,7 @@ test_that("db_get_docs returns empty metadata for undocumented table", {
   clean_db_env()
   unlink(temp_dir, recursive = TRUE)
 })
+
 
 # ==============================================================================
 # Tests for db_dictionary()
@@ -157,7 +199,7 @@ test_that("db_dictionary returns empty data.frame when no tables", {
   unlink(temp_dir, recursive = TRUE)
 })
 
-test_that("db_dictionary works in DuckLake mode", {
+test_that("db_dictionary works with documented tables", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
   clean_db_env()
 
@@ -170,11 +212,12 @@ test_that("db_dictionary works in DuckLake mode", {
     data_path = temp_dir
   )
 
-  con <- datapond:::.db_get_con()
-  DBI::dbExecute(con, "CREATE TABLE test.main.products (id INTEGER, name VARCHAR)")
-  DBI::dbExecute(con, "CREATE TABLE test.main.orders (id INTEGER, total DOUBLE)")
+  db_write(data.frame(id = 1:3, name = letters[1:3]),
+           schema = "main", table = "products")
+  db_write(data.frame(id = 1:3, total = c(100, 200, 300)),
+           schema = "main", table = "orders")
 
-  db_describe(table = "products", description = "Product list")
+  db_comment(table = "products", comment = list(description = "Product list"))
 
   dict <- db_dictionary(include_columns = FALSE)
 
@@ -190,7 +233,7 @@ test_that("db_dictionary includes column details when requested", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
   clean_db_env()
 
-  temp_dir <- tempfile(pattern = "dict_cols_lake_test_")
+  temp_dir <- tempfile(pattern = "dict_cols_test_")
   dir.create(temp_dir)
 
   db_connect(
@@ -199,11 +242,12 @@ test_that("db_dictionary includes column details when requested", {
     data_path = temp_dir
   )
 
-  con <- datapond:::.db_get_con()
-  DBI::dbExecute(con, "CREATE TABLE test.main.products (id INTEGER, name VARCHAR, price DOUBLE)")
+  db_write(data.frame(id = 1:3, name = letters[1:3], price = c(10.5, 20.5, 30.5)),
+           schema = "main", table = "products")
 
   # Document a column
-  db_describe_column(table = "products", column = "price", description = "Price in EUR")
+  db_comment(table = "products", column = "price",
+             comment = list(description = "Price in EUR"))
 
   dict <- db_dictionary(include_columns = TRUE)
 
@@ -216,6 +260,7 @@ test_that("db_dictionary includes column details when requested", {
   clean_db_env()
   unlink(temp_dir, recursive = TRUE)
 })
+
 
 # ==============================================================================
 # Tests for db_search()
@@ -234,10 +279,9 @@ test_that("db_search finds tables by name", {
     data_path = temp_dir
   )
 
-  con <- datapond:::.db_get_con()
-  DBI::dbExecute(con, "CREATE TABLE test.main.imports (id INTEGER)")
-  DBI::dbExecute(con, "CREATE TABLE test.main.exports (id INTEGER)")
-  DBI::dbExecute(con, "CREATE TABLE test.main.products (id INTEGER)")
+  db_write(data.frame(id = 1), schema = "main", table = "imports")
+  db_write(data.frame(id = 1), schema = "main", table = "exports")
+  db_write(data.frame(id = 1), schema = "main", table = "products")
 
   results <- db_search("port")
 
@@ -261,12 +305,11 @@ test_that("db_search finds tables by description", {
     data_path = temp_dir
   )
 
-  con <- datapond:::.db_get_con()
-  DBI::dbExecute(con, "CREATE TABLE test.main.table1 (id INTEGER)")
-  DBI::dbExecute(con, "CREATE TABLE test.main.table2 (id INTEGER)")
+  db_write(data.frame(id = 1), schema = "main", table = "table1")
+  db_write(data.frame(id = 1), schema = "main", table = "table2")
 
-  db_describe(table = "table1", description = "Contains trade data")
-  db_describe(table = "table2", description = "Contains labour data")
+  db_comment(table = "table1", comment = list(description = "Contains trade data"))
+  db_comment(table = "table2", comment = list(description = "Contains labour data"))
 
   results <- db_search("trade", field = "description")
 
@@ -290,12 +333,11 @@ test_that("db_search finds tables by tags", {
     data_path = temp_dir
   )
 
-  con <- datapond:::.db_get_con()
-  DBI::dbExecute(con, "CREATE TABLE test.main.table1 (id INTEGER)")
-  DBI::dbExecute(con, "CREATE TABLE test.main.table2 (id INTEGER)")
+  db_write(data.frame(id = 1), schema = "main", table = "table1")
+  db_write(data.frame(id = 1), schema = "main", table = "table2")
 
-  db_describe(table = "table1", tags = c("official", "monthly"))
-  db_describe(table = "table2", tags = c("draft", "annual"))
+  db_comment(table = "table1", comment = list(tags = c("official", "monthly")))
+  db_comment(table = "table2", comment = list(tags = c("draft", "annual")))
 
   results <- db_search("official", field = "tags")
 
@@ -305,6 +347,7 @@ test_that("db_search finds tables by tags", {
   clean_db_env()
   unlink(temp_dir, recursive = TRUE)
 })
+
 
 # ==============================================================================
 # Tests for db_search_columns()
@@ -323,9 +366,10 @@ test_that("db_search_columns finds columns across tables", {
     data_path = temp_dir
   )
 
-  con <- datapond:::.db_get_con()
-  DBI::dbExecute(con, "CREATE TABLE test.main.table1 (id INTEGER, country_code VARCHAR)")
-  DBI::dbExecute(con, "CREATE TABLE test.main.table2 (id INTEGER, region_code VARCHAR)")
+  db_write(data.frame(id = 1, country_code = "IE"),
+           schema = "main", table = "table1")
+  db_write(data.frame(id = 1, region_code = "EU"),
+           schema = "main", table = "table2")
 
   results <- db_search_columns("code")
 
@@ -361,11 +405,9 @@ test_that("db_lineage records lineage for a table", {
     data_path = temp_dir
   )
 
-  # Create a table
   db_write(data.frame(id = 1:3, value = c(10, 20, 30)),
            schema = "main", table = "summary")
 
-  # Record lineage
   expect_message(
     db_lineage(
       table = "summary",
@@ -396,6 +438,40 @@ test_that("db_lineage errors for non-existent table", {
     db_lineage(table = "nonexistent", sources = "raw.data"),
     "not found"
   )
+
+  clean_db_env()
+  unlink(temp_dir, recursive = TRUE)
+})
+
+test_that("db_lineage preserves existing table metadata", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  temp_dir <- tempfile(pattern = "lineage_preserve_test_")
+  dir.create(temp_dir)
+
+  db_connect(
+    catalog = "test",
+    metadata_path = file.path(temp_dir, "catalog.ducklake"),
+    data_path = temp_dir
+  )
+
+  db_write(data.frame(id = 1:3), schema = "main", table = "with_meta")
+
+  # Add description first
+  db_comment(table = "with_meta", comment = list(
+    description = "Test table",
+    owner = "Test Owner"
+  ))
+
+  # Add lineage
+  db_lineage(table = "with_meta", sources = c("source1", "source2"))
+
+  # Check both are preserved
+  meta <- db_get_docs(table = "with_meta")
+  expect_equal(meta$description, "Test table")
+  expect_equal(meta$owner, "Test Owner")
+  expect_equal(meta$lineage$sources, c("source1", "source2"))
 
   clean_db_env()
   unlink(temp_dir, recursive = TRUE)
@@ -447,7 +523,6 @@ test_that("db_get_lineage retrieves recorded lineage", {
     data_path = temp_dir
   )
 
-  # Create table and record lineage
   db_write(data.frame(id = 1:3), schema = "main", table = "with_lineage")
 
   db_lineage(
@@ -456,7 +531,6 @@ test_that("db_get_lineage retrieves recorded lineage", {
     transformation = "Joined and filtered"
   )
 
-  # Retrieve lineage
   result <- db_get_lineage(table = "with_lineage")
 
   expect_type(result, "list")

@@ -421,27 +421,66 @@ db_upsert <- function(data, schema = "main", table, by,
 
 ### Metadata Storage
 
-Documentation metadata is stored in a `_metadata` schema within the DuckLake catalog:
+Documentation metadata is stored using DuckLake's **native COMMENT ON** with JSON for structured data. This approach:
+
+- Survives disconnect/reconnect (unlike custom metadata tables)
+- Supports time travel (comments are versioned with snapshots)
+- Is stored in the DuckLake catalog alongside table definitions
 
 ```{r}
-.db_ensure_metadata_table <- function(con, catalog) {
-  DBI::dbExecute(con, "CREATE SCHEMA IF NOT EXISTS {catalog}._metadata")
-  DBI::dbExecute(con, "CREATE TABLE IF NOT EXISTS {catalog}._metadata.table_docs (...)")
-  DBI::dbExecute(con, "CREATE TABLE IF NOT EXISTS {catalog}._metadata.column_docs (...)")
+# Internal helper to parse JSON comment
+.db_parse_comment <- function(comment_str) {
+  if (is.null(comment_str) || !nzchar(comment_str)) return(NULL)
+
+  tryCatch({
+    parsed <- jsonlite::fromJSON(comment_str)
+    if (is.list(parsed)) return(parsed)
+    list(description = comment_str)  # Plain string
+  }, error = function(e) {
+    list(description = comment_str)  # Not JSON, treat as description
+  })
+}
+
+# Get table comment from DuckDB catalog
+.db_get_table_comment <- function(con, catalog, schema, table) {
+  result <- DBI::dbGetQuery(con, glue::glue("
+    SELECT comment FROM duckdb_tables()
+    WHERE database_name = ... AND schema_name = ... AND table_name = ...
+  "))
+  if (nrow(result) == 0 || is.na(result$comment[1])) return(NULL)
+  result$comment[1]
 }
 ```
 
-### `db_describe()` - Document a Table
+### `db_get_docs()` - Retrieve Documentation
 
 ```{r}
-db_describe <- function(schema = "main", table = NULL,
-                        description = NULL, owner = NULL, tags = NULL) {
+db_get_docs <- function(schema = "main", table) {
+  # Read table comment from duckdb_tables()
+  table_comment <- .db_get_table_comment(con, catalog, schema, table)
+  parsed <- .db_parse_comment(table_comment)
 
-  # Upsert into _metadata.table_docs
-  .db_ensure_metadata_table(con, catalog)
+  # Build result with defaults
 
-  DBI::dbExecute(con, "DELETE FROM ... WHERE schema = ... AND table = ...")
-  DBI::dbExecute(con, "INSERT INTO ... VALUES (...)")
+  result <- list(
+    schema = schema, table = table,
+    description = parsed$description,
+    owner = parsed$owner,
+    tags = parsed$tags %||% character(0),
+    lineage = if (!is.null(parsed$lineage_sources)) list(
+      sources = parsed$lineage_sources,
+      transformation = parsed$lineage_transformation
+    ),
+    columns = list()  # Populated from duckdb_columns()
+  )
+
+  # Get column comments
+  cols <- DBI::dbGetQuery(con, "SELECT column_name, comment FROM duckdb_columns() ...")
+  for (col in cols with comments) {
+    result$columns[[col_name]] <- .db_parse_comment(col_comment)
+  }
+
+  result
 }
 ```
 
@@ -449,12 +488,12 @@ db_describe <- function(schema = "main", table = NULL,
 
 ```{r}
 db_dictionary <- function(schema = NULL, include_columns = TRUE) {
-
-  # Query information_schema and _metadata tables
+  # Query information_schema for tables
   tables <- DBI::dbGetQuery(con, "SELECT * FROM information_schema.tables ...")
 
   for (tbl in tables) {
-    meta <- db_get_docs(schema = ..., table = ...)
+    # Get docs from native comments via db_get_docs()
+    docs <- db_get_docs(schema = ..., table = ...)
     cols <- DBI::dbGetQuery(con, "SELECT * FROM information_schema.columns ...")
   }
 
@@ -483,23 +522,29 @@ db_search <- function(pattern, field = c("all", "name", "description", "owner", 
 
 ### `db_lineage()` - Record Data Lineage
 
+Lineage is stored in the table's native COMMENT as JSON alongside other metadata:
+
 ```{r}
 db_lineage <- function(schema = "main", table, sources, transformation = NULL) {
-  # Ensure lineage table exists
-  DBI::dbExecute(con, "CREATE TABLE IF NOT EXISTS {catalog}._metadata.lineage (...)")
+  # Get existing table comment/metadata
+  existing_comment <- .db_get_table_comment(con, catalog, schema, table)
+  existing_meta <- .db_parse_comment(existing_comment) %||% list()
 
-  # Upsert lineage record
-  sources_str <- paste(sources, collapse = "; ")
-  DBI::dbExecute(con, "DELETE FROM ... WHERE schema = ... AND table = ...")
-  DBI::dbExecute(con, "INSERT INTO ... VALUES (...)")
+  # Add lineage info (preserves existing description, owner, tags)
+  existing_meta$lineage_sources <- sources
+  existing_meta$lineage_transformation <- transformation
+
+  # Save back using db_comment
+  db_comment(schema = schema, table = table, comment = existing_meta)
 }
 ```
 
 **Key points:**
 
-- Lineage is stored in `_metadata.lineage` table alongside documentation
-- Sources are joined with `;` separator for storage, split on retrieval
-- `db_get_lineage()` retrieves and parses the stored information
+- All metadata stored in native COMMENT ON (survives disconnect/reconnect)
+- JSON format allows structured data (description, owner, tags, lineage)
+- `db_get_lineage()` extracts lineage from the parsed comment JSON
+- Lineage is merged with existing metadata, not overwritten
 
 ---
 
@@ -625,20 +670,32 @@ db_drop_view(view = "active_users")
 db_drop_macro(name = "add_vals")
 ```
 
-### SQL Comments
+### Documentation with db_comment()
 
-Native SQL COMMENT stored in catalog (distinct from `db_describe()` metadata):
+`db_comment()` accepts either a **list** (stored as JSON) or a **string** (stored as-is):
 
 ```{r}
-# Table comment
+# Structured metadata (stored as JSON)
+db_comment(table = "users", comment = list(
+  description = "Active user accounts",
+  owner = "Admin Team",
+  tags = c("users", "reference")
+))
+
+# Simple string comment
 db_comment(table = "users", comment = "Active user accounts")
 
-# Column comment
-db_comment(table = "users", column = "email", comment = "Must be unique")
+# Column documentation
+db_comment(table = "users", column = "email", comment = list(
+  description = "Primary email",
+  units = NULL
+))
 
 # Remove comment
 db_comment(table = "users", column = "email", comment = NULL)
 ```
+
+The list format is automatically converted to JSON via `jsonlite::toJSON()`. When retrieved via `db_get_docs()`, JSON is parsed back to a list.
 
 ### Logging
 
@@ -1002,7 +1059,7 @@ Try answering these questions:
 4. What's the difference between `update_cols = NULL` and `update_cols = character(0)` in `db_upsert()`?
 5. Why would you choose SQLite over DuckDB as a catalog backend?
 6. How does `db_preview_upsert()` know how many rows will be updated vs inserted?
-7. Where is documentation metadata stored?
+7. Where is documentation metadata stored? (Hint: native COMMENT ON with JSON)
 
 ---
 

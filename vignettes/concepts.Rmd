@@ -446,22 +446,33 @@ db_list_macros()
 db_drop_macro(name = "add_values")
 ```
 
-### 13. SQL Comments
+### 13. Data Documentation
 
-Add SQL COMMENT to tables and columns (stored in catalog with time travel):
+Add structured metadata to tables and columns using native SQL COMMENT (stored in catalog with time travel, persists across disconnect/reconnect):
+
 ```{r}
-# Comment on table
-db_comment(table = "users", comment = "Active user accounts")
+# Document a table with structured metadata (stored as JSON)
+db_comment(table = "users", comment = list(
+  description = "Active user accounts",
+  owner = "Admin Team",
+  tags = c("users", "reference")
+))
 
-# Comment on column
-db_comment(table = "users", column = "email",
-           comment = "Primary email, must be unique")
+# Document a column
+db_comment(table = "users", column = "email", comment = list(
+  description = "Primary email address",
+  units = NULL,  # optional
+  notes = "Must be unique"
+))
+
+# Simple string comment also works
+db_comment(table = "users", comment = "Active user accounts")
 
 # Remove comment
 db_comment(table = "users", column = "email", comment = NULL)
 ```
 
-This is distinct from `db_describe()` which stores richer metadata (owner, tags) in a separate metadata table.
+Metadata is stored as JSON in DuckLake's native COMMENT ON, which survives disconnect/reconnect and supports time travel.
 
 ### 14. Logging and Debugging
 
@@ -593,27 +604,33 @@ Good data governance requires documentation. `datapond` provides built-in tools 
 
 ### Documenting Tables
 
+Documentation is stored using DuckLake's native COMMENT ON with JSON for structured metadata. This survives disconnect/reconnect and supports time travel.
+
 ```{r}
-# Add metadata to a table
-db_describe(
+# Add metadata to a table (structured as list, stored as JSON)
+db_comment(
   table = "imports",
-  description = "Monthly import values by country and HS commodity code",
-  owner = "Trade Section",
-  tags = c("trade", "monthly", "official")
+  comment = list(
+    description = "Monthly import values by country and HS commodity code",
+    owner = "Trade Section",
+    tags = c("trade", "monthly", "official")
+  )
 )
 
 # Document individual columns
-db_describe_column(
+db_comment(
   table = "imports",
   column = "value",
-  description = "Import value",
-  units = "EUR (thousands)"
+  comment = list(
+    description = "Import value",
+    units = "EUR (thousands)"
+  )
 )
 
-db_describe_column(
+db_comment(
   table = "imports",
   column = "country_code",
-  description = "ISO 3166-1 alpha-2 country code"
+  comment = list(description = "ISO 3166-1 alpha-2 country code")
 )
 ```
 
@@ -681,7 +698,7 @@ db_get_lineage(table = "monthly_summary")
 #> [1] "2025-03-10 14:30:00"
 ```
 
-Lineage information is stored in the `_metadata.lineage` table within your DuckLake catalog.
+Lineage information is stored in the table's native COMMENT as JSON alongside other metadata.
 
 ---
 
@@ -871,11 +888,13 @@ db_write(
 )
 
 # Document for discovery
-db_describe(
+db_comment(
   schema = "trade",
   table = "imports",
-  description = "Monthly import values by country and HS code",
-  owner = "Trade Section"
+  comment = list(
+    description = "Monthly import values by country and HS code",
+    owner = "Trade Section"
+  )
 )
 
 db_disconnect()
