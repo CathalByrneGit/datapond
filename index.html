@@ -225,20 +225,24 @@
 <span>  data_path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/data"</span></span>
 <span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Document your tables</span></span>
-<span><span class="fu"><a href="reference/db_describe.html">db_describe</a></span><span class="op">(</span></span>
+<span><span class="co"># Document your tables with structured metadata (stored as JSON in native comments)</span></span>
+<span><span class="fu">db_comment</span><span class="op">(</span></span>
 <span>  table <span class="op">=</span> <span class="st">"imports"</span>,</span>
-<span>  description <span class="op">=</span> <span class="st">"Monthly import values by country and commodity code"</span>,</span>
-<span>  owner <span class="op">=</span> <span class="st">"Trade Section"</span>,</span>
-<span>  tags <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"trade"</span>, <span class="st">"monthly"</span>, <span class="st">"official"</span><span class="op">)</span></span>
+<span>  comment <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>    description <span class="op">=</span> <span class="st">"Monthly import values by country and commodity code"</span>,</span>
+<span>    owner <span class="op">=</span> <span class="st">"Trade Section"</span>,</span>
+<span>    tags <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"trade"</span>, <span class="st">"monthly"</span>, <span class="st">"official"</span><span class="op">)</span></span>
+<span>  <span class="op">)</span></span>
 <span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Document individual columns</span></span>
-<span><span class="fu"><a href="reference/db_describe_column.html">db_describe_column</a></span><span class="op">(</span></span>
+<span><span class="fu">db_comment</span><span class="op">(</span></span>
 <span>  table <span class="op">=</span> <span class="st">"imports"</span>,</span>
 <span>  column <span class="op">=</span> <span class="st">"value"</span>,</span>
-<span>  description <span class="op">=</span> <span class="st">"Import value in thousands"</span>,</span>
-<span>  units <span class="op">=</span> <span class="st">"EUR (thousands)"</span></span>
+<span>  comment <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>    description <span class="op">=</span> <span class="st">"Import value in thousands"</span>,</span>
+<span>    units <span class="op">=</span> <span class="st">"EUR (thousands)"</span></span>
+<span>  <span class="op">)</span></span>
 <span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Search for tables</span></span>
@@ -609,16 +613,8 @@
 </tr></thead>
 <tbody>
 <tr>
-<td><code><a href="reference/db_describe.html">db_describe()</a></code></td>
-<td>Add description, owner, tags to a table</td>
-</tr>
-<tr>
-<td><code><a href="reference/db_describe_column.html">db_describe_column()</a></code></td>
-<td>Document a column (description, units, notes)</td>
-</tr>
-<tr>
 <td><code>db_comment()</code></td>
-<td>Add SQL COMMENT to table or column (stored in catalog)</td>
+<td>Add metadata to table/column (list for structured, string for simple)</td>
 </tr>
 <tr>
 <td><code><a href="reference/db_get_docs.html">db_get_docs()</a></code></td>
