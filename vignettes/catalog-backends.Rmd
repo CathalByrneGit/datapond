@@ -662,11 +662,13 @@ raster_catalog <- data.frame(
 db_write(raster_catalog, table = "raster_catalog", mode = "overwrite")
 
 # Document the catalog
-db_describe(
+db_comment(
   table = "raster_catalog",
-  description = "Metadata catalog for raster files stored externally",
-  owner = "GIS Team",
-  tags = c("geospatial", "raster", "metadata-only")
+  comment = list(
+    description = "Metadata catalog for raster files stored externally",
+    owner = "GIS Team",
+    tags = c("geospatial", "raster", "metadata-only")
+  )
 )
 ```
 

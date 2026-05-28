@@ -303,16 +303,17 @@ Clustering improves performance for:
 Data inlining solves the "small file problem" for streaming/frequent writes by staging data in the catalog database instead of creating new parquet files:
 
 ```{r}
-# Stream small batches with inlining
+# DuckLake automatically inlines small writes (< threshold rows)
+# Stream small batches - they'll be inlined automatically
 for (batch in batches) {
-  db_write(batch, table = "events", mode = "append", inline = TRUE)
+  db_write(batch, table = "events", mode = "append")
 }
 
 # Flush inlined data to parquet when ready
 db_flush_inlined(table = "events")
 
-# Configure auto-flush threshold (rows before automatic flush)
-db_set_inline_threshold(table = "events", threshold = 50000)
+# Configure the auto-inline threshold (default is 10 rows)
+db_set_inline_threshold(table = "events", threshold = 1000)
 ```
 
 **When to use inlining:**
