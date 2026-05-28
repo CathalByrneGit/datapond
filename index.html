@@ -145,9 +145,10 @@
 <span>  sort_by <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"sale_date"</span>, <span class="st">"region"</span><span class="op">)</span></span>
 <span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Streaming: inline small writes to avoid many small files</span></span>
-<span><span class="fu">db_write</span><span class="op">(</span><span class="va">batch</span>, table <span class="op">=</span> <span class="st">"events"</span>, mode <span class="op">=</span> <span class="st">"append"</span>, inline <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="co"># Then flush when ready</span></span>
+<span><span class="co"># Streaming: DuckLake auto-inlines small writes (&lt; threshold rows)</span></span>
+<span><span class="co"># Adjust threshold per table if needed</span></span>
+<span><span class="fu">db_set_inline_threshold</span><span class="op">(</span>table <span class="op">=</span> <span class="st">"events"</span>, threshold <span class="op">=</span> <span class="fl">1000</span><span class="op">)</span></span>
+<span><span class="co"># Flush when ready</span></span>
 <span><span class="fu">db_flush_inlined</span><span class="op">(</span>table <span class="op">=</span> <span class="st">"events"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Explicit column types for stricter schema control</span></span>
@@ -700,7 +701,7 @@
 </table>
 </div>
 <div class="section level3">
-<h3 id="iceberg-export">Iceberg Export<a class="anchor" aria-label="anchor" href="#iceberg-export"></a>
+<h3 id="iceberg-export-experimental">Iceberg Export (Experimental)<a class="anchor" aria-label="anchor" href="#iceberg-export-experimental"></a>
 </h3>
 <table class="table">
 <colgroup>
@@ -722,6 +723,7 @@
 </tr>
 </tbody>
 </table>
+<p><em>Note: Iceberg functions require DuckLake features that may not be available in all versions.</em></p>
 </div>
 <div class="section level3">
 <h3 id="metadata--maintenance">Metadata &amp; Maintenance<a class="anchor" aria-label="anchor" href="#metadata--maintenance"></a>
@@ -820,12 +822,25 @@
 <code><a href="articles/concepts.html">vignette("concepts")</a></code> - Background on DuckLake, catalog backends, and access control</li>
 <li>
 <code><a href="articles/code-walkthrough.html">vignette("code-walkthrough")</a></code> - Detailed explanation of how the package works</li>
+<li>
+<a href="https://ducklake.select/docs/stable/" class="external-link">DuckLake Documentation</a> - Official DuckLake docs</li>
 </ul>
 </div>
 <div class="section level2">
 <h2 id="contributing">Contributing<a class="anchor" aria-label="anchor" href="#contributing"></a>
 </h2>
 <p>Found a bug or have a feature request? Please open an issue on GitHub.</p>
+<div class="section level3">
+<h3 id="development">Development<a class="anchor" aria-label="anchor" href="#development"></a>
+</h3>
+<p>After modifying roxygen2 comments in R files, regenerate documentation:</p>
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu">devtools</span><span class="fu">::</span><span class="fu">document</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="fu">devtools</span><span class="fu">::</span><span class="fu">check</span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
+<p>Run tests:</p>
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu">devtools</span><span class="fu">::</span><span class="fu">test</span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
+</div>
 </div>
 </div>
   </main><aside class="col-md-3"><div class="links">

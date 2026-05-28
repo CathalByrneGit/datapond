@@ -1091,11 +1091,13 @@ files external:</p>
 <span><span class="fu">db_write</span><span class="op">(</span><span class="va">raster_catalog</span>, table <span class="op">=</span> <span class="st">"raster_catalog"</span>, mode <span class="op">=</span> <span class="st">"overwrite"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Document the catalog</span></span>
-<span><span class="fu"><a href="../reference/db_describe.html">db_describe</a></span><span class="op">(</span></span>
+<span><span class="fu">db_comment</span><span class="op">(</span></span>
 <span>  table <span class="op">=</span> <span class="st">"raster_catalog"</span>,</span>
-<span>  description <span class="op">=</span> <span class="st">"Metadata catalog for raster files stored externally"</span>,</span>
-<span>  owner <span class="op">=</span> <span class="st">"GIS Team"</span>,</span>
-<span>  tags <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"geospatial"</span>, <span class="st">"raster"</span>, <span class="st">"metadata-only"</span><span class="op">)</span></span>
+<span>  comment <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>    description <span class="op">=</span> <span class="st">"Metadata catalog for raster files stored externally"</span>,</span>
+<span>    owner <span class="op">=</span> <span class="st">"GIS Team"</span>,</span>
+<span>    tags <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"geospatial"</span>, <span class="st">"raster"</span>, <span class="st">"metadata-only"</span><span class="op">)</span></span>
+<span>  <span class="op">)</span></span>
 <span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level3">

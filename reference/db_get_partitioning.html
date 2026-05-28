@@ -72,7 +72,7 @@ or NULL if the table is not partitioned.</p>
     <div class="section level2">
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
     <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="kw">if</span> <span class="op">(</span><span class="cn">FALSE</span><span class="op">)</span> <span class="op">{</span> <span class="co"># \dontrun{</span></span></span>
-<span class="r-in"><span><span class="fu"><a href="db_lake_connect.html">db_lake_connect</a></span><span class="op">(</span><span class="va">...</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="fu">db_lake_connect</span><span class="op">(</span><span class="va">...</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="fu"><a href="db_set_partitioning.html">db_set_partitioning</a></span><span class="op">(</span><span class="st">"trade"</span>, <span class="st">"imports"</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"year"</span>, <span class="st">"month"</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="fu">db_get_partitioning</span><span class="op">(</span><span class="st">"trade"</span>, <span class="st">"imports"</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="co">#&gt; [1] "year" "month"</span></span></span>

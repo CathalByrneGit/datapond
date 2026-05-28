@@ -91,9 +91,10 @@ db_write(
   sort_by = c("sale_date", "region")
 )
 
-# Streaming: inline small writes to avoid many small files
-db_write(batch, table = "events", mode = "append", inline = TRUE)
-# Then flush when ready
+# Streaming: DuckLake auto-inlines small writes (< threshold rows)
+# Adjust threshold per table if needed
+db_set_inline_threshold(table = "events", threshold = 1000)
+# Flush when ready
 db_flush_inlined(table = "events")
 
 # Explicit column types for stricter schema control
@@ -436,12 +437,15 @@ memory used). Use the lazy approach for in-lake transformations.*
 | `db_flush_inlined()` | Write inlined data to parquet files |
 | `db_set_inline_threshold()` | Configure auto-flush threshold for inlined data |
 
-### Iceberg Export
+### Iceberg Export (Experimental)
 
 | Function | Description |
 |----|----|
 | `db_export_iceberg()` | Export table to Iceberg format for Spark/Trino/Presto |
 | `db_iceberg_metadata()` | Get Iceberg-compatible metadata for a table |
+
+*Note: Iceberg functions require DuckLake features that may not be
+available in all versions.*
 
 ### Metadata & Maintenance
 
@@ -473,7 +477,26 @@ memory used). Use the lazy approach for in-lake transformations.*
   Background on DuckLake, catalog backends, and access control
 - [`vignette("code-walkthrough")`](https://cathalbyrnegit.github.io/datapond/articles/code-walkthrough.md) -
   Detailed explanation of how the package works
+- [DuckLake Documentation](https://ducklake.select/docs/stable/) -
+  Official DuckLake docs
 
 ## Contributing
 
 Found a bug or have a feature request? Please open an issue on GitHub.
+
+### Development
+
+After modifying roxygen2 comments in R files, regenerate documentation:
+
+``` r
+
+devtools::document()
+devtools::check()
+```
+
+Run tests:
+
+``` r
+
+devtools::test()
+```
