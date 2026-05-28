@@ -91,9 +91,9 @@
 #' @param sort_by Optional character vector of column names to sort/cluster by.
 #'   Improves query performance for range scans and filters on these columns.
 #'   Only valid for mode = "overwrite".
-#' @param inline If TRUE, stages small writes in the catalog database instead of
-#'   creating new parquet files. Useful for streaming/frequent small updates.
-#'   Use `db_flush_inlined()` to write inlined data to parquet files.
+#' @param inline Deprecated. DuckLake automatically inlines small writes based on
+#'   the `data_inlining_row_limit` threshold (default 10 rows). Use
+#'   [db_set_inline_threshold()] to adjust the threshold for a table.
 #' @param commit_author Optional author for DuckLake commit metadata
 #' @param commit_message Optional message for DuckLake commit metadata
 #' @return Invisibly returns the qualified table name
@@ -141,8 +141,9 @@
 #'
 #' # ==== Other options ====
 #'
-#' # Streaming mode: inline small writes
-#' db_write(my_data, table = "events", mode = "append", inline = TRUE)
+#' # DuckLake automatically inlines small writes (< threshold rows)
+#' # Use db_set_inline_threshold() to adjust the threshold
+#' db_write(batch, table = "events", mode = "append")
 #'
 #' # With commit metadata
 #' db_write(my_data, table = "imports", mode = "append",
@@ -225,9 +226,11 @@ db_write <- function(data,
     }
   }
 
-  # Validate inline
-  if (!is.logical(inline) || length(inline) != 1) {
-    stop("inline must be TRUE or FALSE.", call. = FALSE)
+  # inline parameter is deprecated - DuckLake auto-inlines based on threshold
+  if (isTRUE(inline)) {
+    message("Note: 'inline' parameter is deprecated. DuckLake automatically inlines ",
+            "small writes based on data_inlining_row_limit threshold (default 10 rows). ",
+            "Use db_set_inline_threshold() to adjust.")
   }
 
   # Validate and normalize col_types (only for data.frame input)
@@ -276,7 +279,7 @@ db_write <- function(data,
       stop("bucket_by cannot be used with mode = 'append'.", call. = FALSE)
     }
     if (!is.null(sort_by)) {
-      stop("sort_by cannot be used with mode = 'append'. Use db_set_clustering() to change clustering.", call. = FALSE)
+      stop("sort_by cannot be used with mode = 'append'. Use db_set_clustering() to change sort order.", call. = FALSE)
     }
   }
 
@@ -307,7 +310,7 @@ db_write <- function(data,
     # Set clustering/sorting if specified
     if (!is.null(sort_by)) {
       sort_clause <- paste(sort_by, collapse = ", ")
-      DBI::dbExecute(con, glue::glue("ALTER TABLE {qname} SET CLUSTERING ORDER BY ({sort_clause})"))
+      DBI::dbExecute(con, glue::glue("ALTER TABLE {qname} SET SORTED BY ({sort_clause})"))
     }
   }
 
@@ -341,12 +344,8 @@ db_write <- function(data,
         .apply_table_options()
 
       } else {
-        # Append mode
-        if (inline) {
-          DBI::dbExecute(con, glue::glue("INSERT INTO {qname} {select_sql} WITH (INLINE)"))
-        } else {
-          DBI::dbExecute(con, glue::glue("INSERT INTO {qname} {select_sql}"))
-        }
+        # Append mode (inlining is automatic based on row count threshold)
+        DBI::dbExecute(con, glue::glue("INSERT INTO {qname} {select_sql}"))
       }
 
     } else {
@@ -386,12 +385,8 @@ db_write <- function(data,
         DBI::dbExecute(con, glue::glue("INSERT INTO {qname} SELECT * FROM {tmp}"))
 
       } else {
-        # Append mode
-        if (inline) {
-          DBI::dbExecute(con, glue::glue("INSERT INTO {qname} SELECT * FROM {tmp} WITH (INLINE)"))
-        } else {
-          DBI::dbExecute(con, glue::glue("INSERT INTO {qname} SELECT * FROM {tmp}"))
-        }
+        # Append mode (inlining is automatic based on row count threshold)
+        DBI::dbExecute(con, glue::glue("INSERT INTO {qname} SELECT * FROM {tmp}"))
       }
     }
 
