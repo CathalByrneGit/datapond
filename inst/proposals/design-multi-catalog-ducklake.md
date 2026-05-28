@@ -20,7 +20,7 @@ For organisations requiring section-level data isolation, the single-catalog mod
 ### Multi-Catalog with Master Discovery
 
 ```
-//CSO-NAS/DataLake/
+/data/lake/
 ├── _master/
 │   └── discovery.sqlite          ← Master discovery catalog (everyone: read)
 │
@@ -124,8 +124,8 @@ CREATE TABLE snapshots_summary (
 # Register a section with the master catalog
 db_register_section(
   section = "trade",
-  catalog_path = "//CSO-NAS/DataLake/trade/catalog.sqlite",
-  data_path = "//CSO-NAS/DataLake/trade/data",
+  catalog_path = "/data/lake/trade/catalog.sqlite",
+  data_path = "/data/lake/trade/data",
   description = "Trade statistics section",
   owner = "Trade Team"
 )
@@ -133,9 +133,9 @@ db_register_section(
 # List registered sections
 db_list_registered_sections()
 #>   section_name                           catalog_path            owner
-#> 1        trade  //CSO-NAS/DataLake/trade/catalog.sqlite       Trade Team
-#> 2       labour //CSO-NAS/DataLake/labour/catalog.sqlite      Labour Team
-#> 3       shared //CSO-NAS/DataLake/shared/catalog.sqlite         Everyone
+#> 1        trade  /data/lake/trade/catalog.sqlite       Trade Team
+#> 2       labour /data/lake/labour/catalog.sqlite      Labour Team
+#> 3       shared /data/lake/shared/catalog.sqlite         Everyone
 ```
 
 ### Section Connection
@@ -144,15 +144,15 @@ db_list_registered_sections()
 # Connect to a specific section
 db_lake_connect_section(
   section = "trade",
-  master_path = "//CSO-NAS/DataLake/_master/discovery.sqlite"
+  master_path = "/data/lake/_master/discovery.sqlite"
 )
 # Automatically reads catalog_path and data_path from master
 
 # Or connect directly without master
 db_lake_connect(
   catalog_type = "sqlite",
-  metadata_path = "//CSO-NAS/DataLake/trade/catalog.sqlite",
-  data_path = "//CSO-NAS/DataLake/trade/data"
+  metadata_path = "/data/lake/trade/catalog.sqlite",
+  data_path = "/data/lake/trade/data"
 )
 
 # Check current section
@@ -381,8 +381,8 @@ Just use separate catalogs without centralised discovery.
 ```r
 db_lake_connect(
   catalog_type = "sqlite",
-  metadata_path = "//CSO-NAS/DataLake/trade/catalog.sqlite",
-  data_path = "//CSO-NAS/DataLake/trade/data"
+  metadata_path = "/data/lake/trade/catalog.sqlite",
+  data_path = "/data/lake/trade/data"
 )
 ```
 
@@ -455,12 +455,12 @@ db_lake_connect(
 library(datapond)
 
 # Admin: Set up sections (one-time)
-db_setup_master("//CSO-NAS/DataLake/_master/discovery.sqlite")
+db_setup_master("/data/lake/_master/discovery.sqlite")
 
 db_register_section(
   section = "trade",
-  catalog_path = "//CSO-NAS/DataLake/trade/catalog.sqlite",
-  data_path = "//CSO-NAS/DataLake/trade/data",
+  catalog_path = "/data/lake/trade/catalog.sqlite",
+  data_path = "/data/lake/trade/data",
   owner = "Trade Team"
 )
 

@@ -21,7 +21,7 @@ A key design goal of datapond is integration with existing IT security infrastru
 In Hive mode, the data structure maps directly to the folder structure:
 
 ```
-//CSO-NAS/DataLake/
+/data/lake/
 ├── Trade/                          ← Section folder (ACL controlled)
 │   ├── Imports/                    ← Dataset folder
 │   │   ├── year=2024/month=01/
@@ -49,7 +49,7 @@ In Hive mode, the data structure maps directly to the folder structure:
 
 ### Security Outcome
 
-If a user lacks permission to `//CSO-NAS/DataLake/Trade/`:
+If a user lacks permission to `/data/lake/Trade/`:
 - They **cannot** list datasets in Trade (folder listing fails)
 - They **cannot** read Trade data (DuckDB cannot access parquet files)
 - They **cannot** see Trade documentation (cannot read `_metadata.json`)
@@ -66,7 +66,7 @@ If a user lacks permission to `//CSO-NAS/DataLake/Trade/`:
 DuckLake separates metadata (catalog) from data (parquet files):
 
 ```
-//CSO-NAS/DataLake/
+/data/lake/
 ├── catalog.sqlite              ← Single shared metadata file
 └── data/                       ← Single data folder
     ├── 550e8400-e29b-41d4-a716-446655440000.parquet
