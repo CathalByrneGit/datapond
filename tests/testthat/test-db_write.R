@@ -692,7 +692,7 @@ test_that("db_write sort_by cannot be used with append mode", {
 
 test_that("db_write creates sorted/clustered table", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
-  skip("SET SORTED BY may not be available in all DuckLake versions")
+  skip_if_ducklake_below("1.0.0")
   clean_db_env()
 
   temp_dir <- tempfile(pattern = "lake_sortby_create_")

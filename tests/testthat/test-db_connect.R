@@ -455,29 +455,21 @@ test_that("db_connect warns about experimental quack support",
 
 test_that("db_connect accepts encrypted parameter", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
+  skip_if_ducklake_below("1.0.0")
   clean_db_env()
 
   lake <- create_test_lake("encrypted_test")
 
   # Should connect successfully with encrypted = TRUE
-  # Note: encrypted mode requires compatible DuckLake version
-  result <- tryCatch({
-    db_connect(
-      catalog = "test",
-      metadata_path = lake$metadata_path,
-      data_path = lake$data_path,
-      encrypted = TRUE
-    )
-    TRUE
-  }, error = function(e) {
-    # If DuckLake doesn't support encryption yet, skip
-    if (grepl("ENCRYPTED|not supported|unknown option", e$message, ignore.case = TRUE)) {
-      skip("Encryption not supported in this DuckLake version")
-    }
-    stop(e)
-  })
+  db_connect(
+    catalog = "test",
+    metadata_path = lake$metadata_path,
+    data_path = lake$data_path,
+    encrypted = TRUE
+  )
 
-  expect_true(result)
+  status <- db_status(verbose = FALSE)
+  expect_true(status$encrypted)
 
   clean_db_env()
   cleanup_test_lake(lake)
@@ -506,7 +498,7 @@ test_that("db_status shows encrypted status", {
 
 test_that("db_status shows encrypted = TRUE when enabled", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
-  skip("Encryption may not be available in all DuckLake versions")
+  skip_if_ducklake_below("1.0.0")
   clean_db_env()
 
   lake <- create_test_lake("encrypted_status_true")

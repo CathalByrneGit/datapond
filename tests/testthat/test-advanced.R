@@ -9,6 +9,7 @@ test_that("db_flush_inlined errors when not connected", {
   clean_db_env()
   expect_error(db_flush_inlined(), "Not connected")
 })
+
 test_that("db_flush_inlined works with no inlined data", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
 
@@ -23,6 +24,33 @@ test_that("db_flush_inlined works with no inlined data", {
 
   # Should not error even with no inlined data
   expect_message(db_flush_inlined(), "inlined|No inlined")
+
+  clean_db_env()
+  cleanup_test_lake(lake)
+})
+
+test_that("db_flush_inlined flushes inlined data to parquet", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  skip_if_ducklake_below("1.0.0")
+
+  clean_db_env()
+  lake <- create_test_lake("flush_data")
+
+  db_connect(
+    catalog = "test",
+    metadata_path = lake$metadata_path,
+    data_path = lake$data_path
+  )
+
+  # Write small data (will be auto-inlined)
+  db_write(data.frame(id = 1:5, value = c(10, 20, 30, 40, 50)), table = "test_table")
+
+  # Flush should complete without error
+  expect_message(db_flush_inlined(), "inlined|flushed|No inlined")
+
+  # Data should still be readable
+  result <- db_read(table = "test_table") |> dplyr::collect()
+  expect_equal(nrow(result), 5)
 
   clean_db_env()
   cleanup_test_lake(lake)
@@ -61,7 +89,7 @@ test_that("db_set_inline_threshold validates threshold", {
 
 test_that("db_set_inline_threshold sets threshold on table", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
-  skip("ALTER TABLE SET (data_inlining_row_limit) not yet supported in DuckLake")
+  skip_if_ducklake_below("1.0.0")
 
   clean_db_env()
   lake <- create_test_lake("inline_threshold_set")
@@ -74,11 +102,18 @@ test_that("db_set_inline_threshold sets threshold on table", {
 
   db_write(data.frame(id = 1:3), table = "test_table")
 
-  # Should succeed
-  expect_message(
-    db_set_inline_threshold(table = "test_table", threshold = 50000),
-    "threshold|inline"
-  )
+  # Should succeed (or provide informative message if not supported)
+  result <- tryCatch({
+    db_set_inline_threshold(table = "test_table", threshold = 50000)
+    TRUE
+  }, error = function(e) {
+    if (grepl("not supported|syntax error", e$message, ignore.case = TRUE)) {
+      testthat::skip("ALTER TABLE SET data_inlining_row_limit not supported in this version")
+    }
+    stop(e)
+  })
+
+  expect_true(result)
 
   clean_db_env()
   cleanup_test_lake(lake)
@@ -95,7 +130,7 @@ test_that("db_set_clustering errors when not connected", {
 
 test_that("db_set_clustering sets clustering on table", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
-  skip("SET SORTED BY may not be available in all DuckLake versions")
+  skip_if_ducklake_below("1.0.0")
 
   clean_db_env()
   lake <- create_test_lake("clustering_set")
@@ -115,7 +150,7 @@ test_that("db_set_clustering sets clustering on table", {
   db_write(test_data, table = "test_table")
 
   # Set clustering
-  expect_message(db_set_clustering(table = "test_table", columns = c("date", "id")), "clustering")
+  expect_message(db_set_clustering(table = "test_table", columns = c("date", "id")), "clustering|sorted")
 
   clean_db_env()
   cleanup_test_lake(lake)
@@ -123,7 +158,7 @@ test_that("db_set_clustering sets clustering on table", {
 
 test_that("db_set_clustering removes clustering with NULL columns", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
-  skip("SET SORTED BY may not be available in all DuckLake versions")
+  skip_if_ducklake_below("1.0.0")
 
   clean_db_env()
   lake <- create_test_lake("clustering_remove")
@@ -139,7 +174,7 @@ test_that("db_set_clustering removes clustering with NULL columns", {
 
   # Set then remove clustering
   db_set_clustering(table = "test_table", columns = "id")
-  expect_message(db_set_clustering(table = "test_table", columns = NULL), "Removed|clustering")
+  expect_message(db_set_clustering(table = "test_table", columns = NULL), "Removed|clustering|sorted")
 
   clean_db_env()
   cleanup_test_lake(lake)
@@ -177,7 +212,7 @@ test_that("db_recluster validates max_files", {
 
 test_that("db_recluster reclusters table data", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
-  skip("ducklake_recluster function not yet available in DuckLake")
+  skip_if_ducklake_below("1.0.0")
 
   clean_db_env()
   lake <- create_test_lake("recluster_run")
@@ -196,7 +231,7 @@ test_that("db_recluster reclusters table data", {
   )
   db_write(test_data, table = "test_table")
 
-  # Set clustering order
+  # Set clustering order first
   db_set_clustering(table = "test_table", columns = c("date", "id"))
 
   # Recluster should run without error
@@ -236,6 +271,32 @@ test_that("db_export_iceberg validates catalog_type", {
   cleanup_test_lake(lake)
 })
 
+test_that("db_export_iceberg exports table", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  skip_if_ducklake_below("1.0.0")
+
+  clean_db_env()
+  lake <- create_test_lake("iceberg_export")
+
+  db_connect(
+    catalog = "test",
+    metadata_path = lake$metadata_path,
+    data_path = lake$data_path
+  )
+
+  # Create table
+  test_data <- data.frame(id = 1:3, value = c(10, 20, 30))
+  db_write(test_data, table = "test_table")
+
+  # Export should run without error
+  result <- db_export_iceberg(table = "test_table")
+
+  expect_type(result, "character")
+
+  clean_db_env()
+  cleanup_test_lake(lake)
+})
+
 # ==============================================================================
 # Tests for db_iceberg_metadata()
 # ==============================================================================
@@ -247,7 +308,7 @@ test_that("db_iceberg_metadata errors when not connected", {
 
 test_that("db_iceberg_metadata returns metadata for table", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
-  skip("Iceberg metadata function not yet available in DuckLake")
+  skip_if_ducklake_below("1.0.0")
 
   clean_db_env()
   lake <- create_test_lake("iceberg_meta")
@@ -272,41 +333,6 @@ test_that("db_iceberg_metadata returns metadata for table", {
   expect_type(meta, "list")
   # Should have schema information
   expect_true("schema" %in% names(meta) || "columns" %in% names(meta) || length(meta) > 0)
-
-  clean_db_env()
-  cleanup_test_lake(lake)
-})
-
-test_that("db_export_iceberg exports table", {
-  skip_if_not(ducklake_available(), "DuckLake extension not available")
-  skip("Iceberg export function not yet available in DuckLake")
-
-  clean_db_env()
-  lake <- create_test_lake("iceberg_export")
-
-  db_connect(
-    catalog = "test",
-    metadata_path = lake$metadata_path,
-    data_path = lake$data_path
-  )
-
-  # Create table
-  test_data <- data.frame(id = 1:3, value = c(10, 20, 30))
-  db_write(test_data, table = "test_table")
-
-  # Export should run without error (actual export depends on DuckLake version)
-  result <- tryCatch({
-    db_export_iceberg(table = "test_table")
-    TRUE
-  }, error = function(e) {
-    # Some DuckLake versions may not fully support this yet
-    if (grepl("not supported|not implemented", e$message, ignore.case = TRUE)) {
-      skip("Iceberg export not fully supported in this DuckLake version")
-    }
-    stop(e)
-  })
-
-  expect_true(result)
 
   clean_db_env()
   cleanup_test_lake(lake)

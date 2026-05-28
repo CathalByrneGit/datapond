@@ -456,8 +456,6 @@ db_write(imports_data, schema = "trade", table = "imports")
 | `db_export_iceberg()` | Export table to Iceberg format for Spark/Trino/Presto |
 | `db_iceberg_metadata()` | Get Iceberg-compatible metadata for a table |
 
-*Note: Iceberg functions require DuckLake features that may not be available in all versions.*
-
 ### Metadata & Maintenance
 
 | Function | Description |
@@ -468,6 +466,8 @@ db_write(imports_data, schema = "trade", table = "imports")
 | `db_view_cols()` | Get column names for a view |
 | `db_diff()` | Compare two snapshots (set-based) |
 | `db_changes()` | Get row-level changes via Data Change Feed |
+| `db_insertions()` | Get only inserted rows between snapshots |
+| `db_deletions()` | Get only deleted rows between snapshots |
 | `db_rollback()` | Restore table to a previous version |
 | `db_vacuum()` | Clean up old snapshots and unreferenced files |
 | `db_compact()` | Merge small Parquet files for better performance |

@@ -2,6 +2,14 @@
 # Shared setup for all tests
 
 # ==============================================================================
+# Version Requirements
+# ==============================================================================
+
+# Minimum required versions for full functionality
+MIN_DUCKLAKE_VERSION <- "1.0.0"
+MIN_DUCKDB_VERSION <- "1.5.2"
+
+# ==============================================================================
 # Test Helpers
 # ==============================================================================
 
@@ -22,6 +30,7 @@ clean_db_env <- function() {
   # Clear all state
   rm(list = ls(envir = env), envir = env)
 
+
   invisible(TRUE)
 }
 
@@ -34,6 +43,46 @@ ducklake_available <- function() {
     DBI::dbExecute(con, "LOAD ducklake")
     TRUE
   }, error = function(e) FALSE)
+}
+
+#' Get the installed DuckLake extension version
+ducklake_version <- function() {
+  tryCatch({
+    con <- DBI::dbConnect(duckdb::duckdb(), ":memory:")
+    on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+    DBI::dbExecute(con, "INSTALL ducklake")
+    DBI::dbExecute(con, "LOAD ducklake")
+    result <- DBI::dbGetQuery(con,
+      "SELECT extension_version FROM duckdb_extensions() WHERE extension_name = 'ducklake'"
+    )
+    if (nrow(result) > 0) result$extension_version[1] else NA_character_
+  }, error = function(e) NA_character_)
+}
+
+#' Get the installed DuckDB version
+duckdb_version <- function() {
+  tryCatch({
+    con <- DBI::dbConnect(duckdb::duckdb(), ":memory:")
+    on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+    result <- DBI::dbGetQuery(con, "SELECT version() AS v")
+    # Extract version number (e.g., "v1.5.2" -> "1.5.2")
+    gsub("^v", "", result$v[1])
+  }, error = function(e) NA_character_)
+}
+
+#' Check if DuckLake version meets minimum requirement
+ducklake_version_ok <- function(min_version = MIN_DUCKLAKE_VERSION) {
+  ver <- ducklake_version()
+  if (is.na(ver)) return(FALSE)
+  utils::compareVersion(ver, min_version) >= 0
+}
+
+#' Skip test if DuckLake version is below minimum
+skip_if_ducklake_below <- function(min_version) {
+  ver <- ducklake_version()
+  if (is.na(ver) || utils::compareVersion(ver, min_version) < 0) {
+    testthat::skip(paste0("Requires DuckLake >= ", min_version, " (have: ", ver, ")"))
+  }
 }
 
 #' Create a temporary directory for test data
