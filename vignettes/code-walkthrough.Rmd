@@ -818,22 +818,25 @@ db_compact <- function(schema = "main", table = NULL, max_files = NULL) {
 
 ```{r}
 db_file_stats <- function(schema = NULL, table = NULL) {
-  # Get list of tables from catalog
-  tables <- get_catalog_tables(catalog, schema, table)
+  # Query DuckLake metadata tables directly
+  # Tables are in __ducklake_metadata_{catalog} schema
+  meta_schema <- glue::glue("__ducklake_metadata_{catalog}")
 
-  # For each table, query file stats using ducklake_list_files
-  results <- lapply(tables, function(tbl) {
-    files_sql <- glue::glue("
-      SELECT COUNT(*) AS file_count,
-             COALESCE(SUM(row_count), 0) AS total_rows,
-             COALESCE(SUM(file_size_bytes), 0) AS total_bytes
-      FROM ducklake_list_files({catalog}, {tbl$name}, schema => {tbl$schema})
-      WHERE data_file IS NOT NULL
-    ")
-    DBI::dbGetQuery(con, files_sql)
-  })
+  sql <- glue::glue("
+    SELECT
+      s.schema_name, t.table_name,
+      COUNT(f.data_file_id) AS file_count,
+      COALESCE(SUM(f.record_count), 0) AS total_rows,
+      COALESCE(SUM(f.file_size_bytes), 0) AS total_bytes
+    FROM {meta_schema}.ducklake_table t
+    JOIN {meta_schema}.ducklake_schema s ON t.schema_id = s.schema_id
+    LEFT JOIN {meta_schema}.ducklake_data_file f
+      ON t.table_id = f.table_id AND f.end_snapshot IS NULL
+    WHERE t.end_snapshot IS NULL AND s.end_snapshot IS NULL
+    GROUP BY s.schema_name, t.table_name
+  ")
+  info <- DBI::dbGetQuery(con, sql)
 
-  info <- do.call(rbind, results)
   info$avg_file_bytes <- ifelse(info$file_count > 0, info$total_bytes / info$file_count, 0)
   info$avg_rows_per_file <- ifelse(info$file_count > 0, info$total_rows / info$file_count, 0)
   info
@@ -842,7 +845,8 @@ db_file_stats <- function(schema = NULL, table = NULL) {
 
 **Key points:**
 
-- Uses DuckLake's `ducklake_list_files()` function (the documented API)
+- Queries DuckLake metadata tables directly (`ducklake_table`, `ducklake_schema`, `ducklake_data_file`)
+- Filters by `end_snapshot IS NULL` to get only current (not deleted) data
 - High file count with small average size indicates compaction needed
 - Useful for monitoring and maintenance scheduling
 
