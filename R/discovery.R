@@ -149,17 +149,17 @@ db_table_exists <- function(schema = "main", table) {
 #' @return Invisibly returns the schema name
 #' @examples
 #' \dontrun{
-#' db_connect(data_path = "//CSO-NAS/DataLake")
+#' db_connect(data_path = "/data/lake")
 #'
 #' db_create_schema("trade")
 #' db_create_schema("labour")
 #'
 #' # Data will be organized as:
-#' # //CSO-NAS/DataLake/trade/imports/ducklake-xxx.parquet
-#' # //CSO-NAS/DataLake/trade/exports/ducklake-xxx.parquet
-#' # //CSO-NAS/DataLake/labour/employment/ducklake-xxx.parquet
+#' # /data/lake/trade/imports/ducklake-xxx.parquet
+#' # /data/lake/trade/exports/ducklake-xxx.parquet
+#' # /data/lake/labour/employment/ducklake-xxx.parquet
 #'
-#' # Set folder ACLs on //CSO-NAS/DataLake/trade/ to control access
+#' # Set folder ACLs on /data/lake/trade/ to control access
 #' }
 #' @export
 db_create_schema <- function(schema) {

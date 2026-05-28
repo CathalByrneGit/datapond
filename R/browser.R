@@ -60,7 +60,7 @@ run_example <- function(name = NULL) {
 #' # Connect first
 #' db_connect(
 #'   metadata_path = "catalog.ducklake",
-#'   data_path = "//CSO-NAS/DataLake"
+#'   data_path = "/data/lake"
 #' )
 #'
 #' # Launch browser

@@ -30,7 +30,7 @@ In Hive mode, data security works perfectly via folder permissions. However, thi
 ### Catalog Folder Structure
 
 ```
-//CSO-NAS/DataLake/
+/data/lake/
 ├── _catalog/                           ← Shared catalog folder (everyone has read access)
 │   ├── Trade/
 │   │   ├── Imports.json                ← Copy of metadata (public)
@@ -193,7 +193,7 @@ This ensures the public catalog stays current without manual intervention.
 
 ### Permissions Model
 ```
-//CSO-NAS/DataLake/
+/data/lake/
 ├── _catalog/          ← Everyone: Read-only
 ├── Trade/             ← Trade team: Read-write
 ├── Labour/            ← Labour team: Read-write
@@ -245,7 +245,7 @@ When metadata is published, additional fields are added:
 ### Making Existing Datasets Public
 
 ```r
-db_connect("//CSO-NAS/DataLake")
+db_connect("/data/lake")
 
 # Option 1: One at a time
 db_set_public("Trade", "Imports")

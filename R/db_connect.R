@@ -152,7 +152,7 @@
 #' @param metadata_path Path or connection string for DuckLake metadata:
 #'   \itemize{
 #'     \item For "duckdb": file path (e.g. "metadata.ducklake")
-#'     \item For "sqlite": file path (e.g. "//CSO-NAS/DataLake/catalog.sqlite")
+#'     \item For "sqlite": file path (e.g. "/data/lake/catalog.sqlite")
 #'     \item For "postgres": connection string (e.g. "dbname=ducklake_catalog host=localhost")
 #'     \item For "quack": URI (e.g. "quack:server:9494/catalog.ducklake")
 #'   }
@@ -176,26 +176,26 @@
 #' # DuckDB catalog (single user, simplest setup)
 #' db_connect(
 #'   metadata_path = "metadata.ducklake",
-#'   data_path = "//CSO-NAS/DataLake"
+#'   data_path = "/data/lake"
 #' )
 #'
 #' # SQLite catalog (auto-detected from .sqlite extension)
 #' db_connect(
-#'   metadata_path = "//CSO-NAS/DataLake/catalog.sqlite",
-#'   data_path = "//CSO-NAS/DataLake/data"
+#'   metadata_path = "/data/lake/catalog.sqlite",
+#'   data_path = "/data/lake/data"
 #' )
 #'
 #' # PostgreSQL catalog (multi-user lakehouse, remote clients)
 #' db_connect(
 #'   catalog_type = "postgres",
 #'   metadata_path = "dbname=ducklake_catalog host=db.cso.ie user=analyst",
-#'   data_path = "//CSO-NAS/DataLake/data"
+#'   data_path = "/data/lake/data"
 #' )
 #'
 #' # Time travel - connect to a specific snapshot
 #' db_connect(
 #'   metadata_path = "catalog.sqlite",
-#'   data_path = "//CSO-NAS/DataLake/data",
+#'   data_path = "/data/lake/data",
 #'   snapshot_version = 5
 #' )
 #'
@@ -204,7 +204,7 @@
 #' db_connect(
 #'   catalog_type = "quack",
 #'   metadata_path = "quack:db-server.cso.ie:9494/catalog.ducklake",
-#'   data_path = "//CSO-NAS/DataLake/data",
+#'   data_path = "/data/lake/data",
 #'   quack_token = "my-secret-token"
 #' )
 #'
@@ -213,7 +213,7 @@
 #' db_connect(
 #'   catalog_type = "quack",
 #'   metadata_path = "quack:db-server.cso.ie:9494/catalog.ducklake",
-#'   data_path = "//CSO-NAS/DataLake/data"
+#'   data_path = "/data/lake/data"
 #' )
 #'
 #' # Encrypted mode - zero-trust data hosting
@@ -229,7 +229,7 @@ db_connect <- function(duckdb_db = ":memory:",
                        catalog = "cso",
                        catalog_type = NULL,
                        metadata_path = "metadata.ducklake",
-                       data_path = "//CSO-NAS/DataLake",
+                       data_path = "/data/lake",
                        quack_token = NULL,
                        snapshot_version = NULL,
                        snapshot_time = NULL,
@@ -396,7 +396,7 @@ db_status <- function(verbose = TRUE) {
 
   if (verbose) {
     cat("\n")
-    cat("-- CSO Data Lake Connection Status ", strrep("-", 30), "\n", sep = "")
+    cat("-- Data Lake Connection Status ", strrep("-", 30), "\n", sep = "")
     cat("\n")
 
     if (connected) {
@@ -450,7 +450,7 @@ db_status <- function(verbose = TRUE) {
 }
 
 
-#' Disconnect from the CSO Data Lake
+#' Disconnect from the Data Lake
 #' @return Invisibly returns TRUE if disconnected, FALSE if was not connected.
 #' @examples
 #' \dontrun{

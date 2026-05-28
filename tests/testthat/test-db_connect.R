@@ -159,8 +159,8 @@ test_that(".db_build_ducklake_dsn builds correct DSN for each catalog type", {
     "ducklake:sqlite:catalog.sqlite"
   )
   expect_equal(
-    build_dsn("sqlite", "//CSO-NAS/DataLake/catalog.sqlite"),
-    "ducklake:sqlite://CSO-NAS/DataLake/catalog.sqlite"
+    build_dsn("sqlite", "/data/lake/catalog.sqlite"),
+    "ducklake:sqlite:/data/lake/catalog.sqlite"
   )
 
   # PostgreSQL backend
