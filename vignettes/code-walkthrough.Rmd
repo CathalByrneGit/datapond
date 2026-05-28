@@ -33,7 +33,9 @@ datapond/
 │   ├── upsert.R         # MERGE operations
 │   ├── metadata.R       # Snapshot/catalog queries
 │   ├── discovery.R      # List/exists functions
-│   ├── maintenance.R    # Vacuum, rollback, diff
+│   ├── maintenance.R    # Vacuum, rollback, diff, compaction
+│   ├── advanced.R       # Clustering, inlining, Iceberg export
+│   ├── arrow.R          # Arrow integration (read/write)
 │   ├── docs.R           # Documentation & data dictionary
 │   ├── preview.R        # Write preview functions
 │   ├── browser.R        # Shiny browser launcher
@@ -42,6 +44,7 @@ datapond/
 │   └── zzz.R            # Package load/unload hooks
 └── vignettes/
     ├── concepts.Rmd     # Conceptual background
+    ├── catalog-backends.Rmd  # Catalog backend options
     └── code-walkthrough.Rmd  # This file
 ```
 
@@ -89,6 +92,25 @@ dplyr::tbl(con, dplyr::sql(query))
 - Large datasets aren't loaded into memory until needed
 - DuckDB can optimise the full query (filters, joins, aggregations)
 - Users call `collect()` when they're ready to bring data into R
+
+### 4. DuckLake SQL Parameter Syntax
+
+DuckLake uses two different syntaxes for named parameters depending on the function:
+
+**`=>` for DuckLake extension functions:**
+```{r}
+# Functions like ducklake_merge_adjacent_files, ducklake_list_files, etc.
+CALL ducklake_merge_adjacent_files('catalog', 'table', schema => 'main')
+FROM ducklake_list_files('catalog', 'table', schema => 'main')
+```
+
+**`:=` for catalog-level set_option calls:**
+```{r}
+# Setting options like data_inlining_row_limit
+CALL catalog.set_option('data_inlining_row_limit', 100, table_name := 'events')
+```
+
+This distinction matters because using the wrong syntax will cause SQL errors. The package handles this internally, but it's important to understand when reading the generated SQL.
 
 ---
 
@@ -869,12 +891,87 @@ db_cleanup_files <- function(dry_run = TRUE) {
 - Orphaned files are created by `db_vacuum()` and `db_compact()`
 - `dry_run = TRUE` by default for safety
 - Reclaims disk space by removing unreferenced Parquet files
+
+---
+
+## `R/advanced.R` - Advanced Features
+
+This file contains advanced DuckLake features: clustering, inlining, and Iceberg export.
+
+### `db_set_clustering()` - Configure Sort Order
+
+```{r}
+db_set_clustering <- function(schema = "main", table, columns) {
+  qname <- paste0(catalog, ".", schema, ".", table)
+
+  if (is.null(columns) || length(columns) == 0) {
+    sql <- glue::glue("ALTER TABLE {qname} RESET SORTED BY")
+  } else {
+    sort_clause <- paste(columns, collapse = ", ")
+    sql <- glue::glue("ALTER TABLE {qname} SET SORTED BY ({sort_clause})")
+  }
+
+  DBI::dbExecute(con, sql)
+}
 ```
 
 **Key points:**
 
-- Uses SQL `EXCEPT` for set difference operations
-- With `key_cols`, can distinguish "modified" from "added/removed"
+- Uses DuckLake's `ALTER TABLE ... SET SORTED BY` to configure sort order
+- Clustering improves performance for range scans on sorted columns
+- Only affects new data - use `db_recluster()` for existing data
+
+### `db_recluster()` - Re-sort Existing Data
+
+```{r}
+db_recluster <- function(schema = "main", table, max_files = NULL) {
+  # DuckLake sorts data during compaction based on SET SORTED BY order
+  # Use ducklake_merge_adjacent_files to compact and re-sort
+  args <- c(.db_sql_quote(catalog), .db_sql_quote(table))
+  named_args <- c(glue::glue("schema => {.db_sql_quote(schema)}"))
+
+  if (!is.null(max_files)) {
+    named_args <- c(named_args, glue::glue("max_compacted_files => {as.integer(max_files)}"))
+  }
+
+  all_args <- c(args, named_args)
+  sql <- glue::glue("CALL ducklake_merge_adjacent_files({paste(all_args, collapse = ', ')})")
+
+  DBI::dbExecute(con, sql)
+}
+```
+
+**Key points:**
+
+- Uses `ducklake_merge_adjacent_files()` to compact and re-sort data
+- DuckLake automatically applies the table's sort order during compaction
+- Note the `=>` syntax for named parameters (standard for DuckLake functions)
+
+### `db_set_inline_threshold()` - Configure Data Inlining
+
+```{r}
+db_set_inline_threshold <- function(schema = "main", table = NULL, threshold = 10) {
+  # Build set_option call using := syntax for named parameters
+  args <- c("'data_inlining_row_limit'", as.integer(threshold))
+
+  if (!is.null(table)) {
+    args <- c(args, glue::glue("table_name := {.db_sql_quote(table)}"))
+  }
+  if (!is.null(schema)) {
+    args <- c(args, glue::glue("schema := {.db_sql_quote(schema)}"))
+  }
+
+  sql <- glue::glue("CALL {catalog}.set_option({paste(args, collapse = ', ')})")
+  DBI::dbExecute(con, sql)
+}
+```
+
+**Key points:**
+
+- Uses catalog's `set_option()` procedure to configure inlining threshold
+- Note the `:=` syntax for named parameters (specific to set_option)
+- Inlining stores small writes in the catalog instead of creating parquet files
+- Flush with `db_flush_inlined()` when ready to write to parquet
 
 ---
 
