@@ -133,13 +133,13 @@ db_set_inline_threshold <- function(schema = "main", table = NULL, threshold = 1
 
   if (!is.null(table)) {
     table <- .db_validate_name(table, "table")
-    args <- c(args, glue::glue("table_name => {.db_sql_quote(table)}"))
+    args <- c(args, glue::glue("table_name := {.db_sql_quote(table)}"))
     scope_desc <- paste0("for table ", table)
   }
 
   if (!is.null(schema)) {
     schema <- .db_validate_name(schema, "schema")
-    args <- c(args, glue::glue("schema_name => {.db_sql_quote(schema)}"))
+    args <- c(args, glue::glue("schema := {.db_sql_quote(schema)}"))
     if (is.null(table)) {
       scope_desc <- paste0("for schema ", schema)
     } else {
@@ -211,7 +211,7 @@ db_set_clustering <- function(schema = "main", table, columns) {
     sort_clause <- paste(columns, collapse = ", ")
     sql <- glue::glue("ALTER TABLE {qname} SET SORTED BY ({sort_clause})")
     DBI::dbExecute(con, sql)
-    message("Set sort order for ", qname, ": ", sort_clause)
+    message("Set sorted order for ", qname, ": ", sort_clause)
   }
 
   invisible(qname)
@@ -265,7 +265,7 @@ db_recluster <- function(schema = "main", table, max_files = NULL) {
   # Use ducklake_merge_adjacent_files to compact and re-sort
   args <- c(.db_sql_quote(catalog), .db_sql_quote(table))
 
-  named_args <- c(glue::glue("schema_name => {.db_sql_quote(schema)}"))
+  named_args <- c(glue::glue("schema => {.db_sql_quote(schema)}"))
   if (!is.null(max_files)) {
     if (!is.numeric(max_files) || max_files < 1) {
       stop("max_files must be a positive integer.", call. = FALSE)
@@ -340,7 +340,7 @@ db_export_iceberg <- function(schema = "main",
   qname <- paste0(catalog, ".", schema, ".", table)
 
   args <- c(.db_sql_quote(catalog), .db_sql_quote(table))
-  named_args <- c(glue::glue("schema_name => {.db_sql_quote(schema)}"))
+  named_args <- c(glue::glue("schema => {.db_sql_quote(schema)}"))
 
   if (!is.null(path)) {
     named_args <- c(named_args, glue::glue("path => {.db_sql_quote(path)}"))
@@ -413,7 +413,7 @@ db_iceberg_metadata <- function(schema = "main", table) {
 
   qname <- paste0(catalog, ".", schema, ".", table)
 
-  sql <- glue::glue("FROM ducklake_iceberg_metadata({.db_sql_quote(catalog)}, {.db_sql_quote(table)}, schema_name => {.db_sql_quote(schema)})")
+  sql <- glue::glue("FROM ducklake_iceberg_metadata({.db_sql_quote(catalog)}, {.db_sql_quote(table)}, schema => {.db_sql_quote(schema)})")
 
   result <- tryCatch({
     DBI::dbGetQuery(con, sql)

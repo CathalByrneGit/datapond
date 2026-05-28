@@ -780,9 +780,9 @@ db_changes <- function(schema = "main",
 
   # Get current version if to_version not specified
   if (is.null(to_version)) {
-    snapshots <- db_snapshots(schema = schema, table = table)
+    snapshots <- db_snapshots()
     if (nrow(snapshots) == 0) {
-      stop("No snapshots found for table ", schema, ".", table, call. = FALSE)
+      stop("No snapshots found in catalog.", call. = FALSE)
     }
     to_version <- max(snapshots$snapshot_id, na.rm = TRUE)
   } else {
@@ -875,7 +875,7 @@ db_insertions <- function(schema = "main",
 
   from_version <- as.integer(from_version)
   to_version <- if (is.null(to_version)) {
-    snapshots <- db_snapshots(schema = schema, table = table)
+    snapshots <- db_snapshots()
     max(snapshots$snapshot_id, na.rm = TRUE)
   } else {
     as.integer(to_version)
@@ -930,7 +930,7 @@ db_deletions <- function(schema = "main",
 
   from_version <- as.integer(from_version)
   to_version <- if (is.null(to_version)) {
-    snapshots <- db_snapshots(schema = schema, table = table)
+    snapshots <- db_snapshots()
     max(snapshots$snapshot_id, na.rm = TRUE)
   } else {
     as.integer(to_version)
