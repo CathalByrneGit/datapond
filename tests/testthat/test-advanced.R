@@ -102,18 +102,11 @@ test_that("db_set_inline_threshold sets threshold on table", {
 
   db_write(data.frame(id = 1:3), table = "test_table")
 
-  # Should succeed (or provide informative message if not supported)
-  result <- tryCatch({
-    db_set_inline_threshold(table = "test_table", threshold = 50000)
-    TRUE
-  }, error = function(e) {
-    if (grepl("not supported|syntax error", e$message, ignore.case = TRUE)) {
-      testthat::skip("ALTER TABLE SET data_inlining_row_limit not supported in this version")
-    }
-    stop(e)
-  })
-
-  expect_true(result)
+  # Should succeed using CALL catalog.set_option()
+  expect_message(
+    db_set_inline_threshold(table = "test_table", threshold = 50),
+    "Set inline threshold"
+  )
 
   clean_db_env()
   cleanup_test_lake(lake)

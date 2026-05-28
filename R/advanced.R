@@ -7,29 +7,31 @@
 
 #' Flush inlined data to parquet files
 #'
-#' @description Writes data that was staged in the catalog database (via
-#' `db_write(..., inline = TRUE)`) to parquet files. This is useful after
-#' accumulating many small writes to consolidate them into proper data files.
+#' @description Writes inlined data (small inserts/deletes stored in the catalog)
+#' to parquet files. DuckLake automatically inlines writes with fewer rows than
+#' `data_inlining_row_limit` (default 10). Use this function to consolidate
+#' inlined data into proper parquet files.
 #'
 #' @param schema Schema name (default "main"). Use NULL for all schemas.
 #' @param table Table name. Use NULL for all tables in the schema.
-#' @return Invisibly returns TRUE on success
+#' @return Invisibly returns a data.frame with schema_name, table_name, rows_flushed
 #' @examples
 #' \dontrun{
 #' db_connect()
 #'
-#' # Stream data with inlining
-#' for (batch in batches) {
-#'   db_write(batch, table = "events", mode = "append", inline = TRUE)
-#' }
+#' # Small writes are automatically inlined
+#' db_write(small_batch, table = "events", mode = "append")  # < 10 rows
 #'
-#' # Flush inlined data to parquet
+#' # Flush inlined data for a specific table
 #' db_flush_inlined(table = "events")
 #'
+#' # Flush all inlined data in a schema
+#' db_flush_inlined(schema = "raw", table = NULL)
+#'
 #' # Flush all inlined data in catalog
-#' db_flush_inlined()
+#' db_flush_inlined(schema = NULL, table = NULL)
 #' }
-#' @seealso [db_write()] with `inline = TRUE`, [db_set_inline_threshold()]
+#' @seealso [db_set_inline_threshold()] to configure inlining threshold
 #' @export
 db_flush_inlined <- function(schema = "main", table = NULL) {
   con <- .db_get_con()
@@ -54,50 +56,59 @@ db_flush_inlined <- function(schema = "main", table = NULL) {
     args <- c(args, glue::glue("schema_name => {.db_sql_quote(schema)}"))
   }
 
-  sql <- glue::glue("CALL ducklake_flush_inlined_data({paste(args, collapse = ', ')})")
+  sql <- glue::glue("SELECT * FROM ducklake_flush_inlined_data({paste(args, collapse = ', ')})")
 
-  tryCatch({
-    DBI::dbExecute(con, sql)
-    message("Flushed inlined data to parquet files.")
+  result <- tryCatch({
+    DBI::dbGetQuery(con, sql)
   }, error = function(e) {
     if (grepl("no inlined data", e$message, ignore.case = TRUE)) {
       message("No inlined data to flush.")
-    } else {
-      stop("Flush failed: ", e$message, call. = FALSE)
+      return(data.frame(schema_name = character(), table_name = character(), rows_flushed = integer()))
     }
+    stop("Flush failed: ", e$message, call. = FALSE)
   })
 
-  invisible(TRUE)
+  if (nrow(result) > 0) {
+    total_rows <- sum(result$rows_flushed, na.rm = TRUE)
+    message("Flushed ", total_rows, " rows from ", nrow(result), " table(s) to parquet files.")
+  } else {
+    message("No inlined data to flush.")
+  }
+
+  invisible(result)
 }
 
 
-#' Set the inline threshold for a table
+#' Set the inline threshold for a table, schema, or globally
 #'
-#' @description Configures the row count threshold at which DuckLake automatically
-#' flushes inlined data to parquet files. When the number of inlined rows exceeds
-#' this threshold, they are automatically written to a parquet file.
+#' @description Configures the row count threshold below which DuckLake automatically
+#' inlines small writes to the catalog instead of writing parquet files.
+#' The setting is persisted in DuckLake metadata.
 #'
-#' @param schema Schema name (default "main")
-#' @param table Table name
-#' @param threshold Number of rows to accumulate before auto-flushing.
-#'   Use 0 to disable inlining entirely. Default is typically 10000.
-#' @return Invisibly returns the qualified table name
+#' @param schema Schema name (default "main"). Use NULL for global setting.
+#' @param table Table name. Use NULL for schema-level or global setting.
+#' @param threshold Number of rows threshold for inlining. Writes with fewer
+#'   rows than this are inlined. Use 0 to disable inlining. Default is 10.
+#' @return Invisibly returns TRUE on success
 #' @examples
 #' \dontrun{
 #' db_connect()
 #'
-#' # Set threshold to 50000 rows before auto-flush
-#' db_set_inline_threshold(table = "events", threshold = 50000)
+#' # Set threshold for a specific table
+#' db_set_inline_threshold(table = "events", threshold = 50)
 #'
-#' # Disable inlining (all writes go directly to parquet)
+#' # Set threshold for entire schema
+#' db_set_inline_threshold(schema = "raw", table = NULL, threshold = 100)
+#'
+#' # Set global threshold
+#' db_set_inline_threshold(schema = NULL, table = NULL, threshold = 20)
+#'
+#' # Disable inlining for a table (all writes go directly to parquet)
 #' db_set_inline_threshold(table = "events", threshold = 0)
 #' }
-#' @seealso [db_write()] with `inline = TRUE`, [db_flush_inlined()]
+#' @seealso [db_flush_inlined()] to manually flush inlined data
 #' @export
-db_set_inline_threshold <- function(schema = "main", table, threshold = 10000) {
-  schema <- .db_validate_name(schema, "schema")
-  table  <- .db_validate_name(table, "table")
-
+db_set_inline_threshold <- function(schema = "main", table = NULL, threshold = 10) {
   if (!is.numeric(threshold) || threshold < 0) {
     stop("threshold must be a non-negative number.", call. = FALSE)
   }
@@ -112,12 +123,34 @@ db_set_inline_threshold <- function(schema = "main", table, threshold = 10000) {
     stop("No DuckLake catalog configured. Use db_connect() first.", call. = FALSE)
   }
 
-  qname <- paste0(catalog, ".", schema, ".", table)
+  # Build set_option call: CALL catalog.set_option('data_inlining_row_limit', N, ...)
+  args <- c(
+    "'data_inlining_row_limit'",
+    as.integer(threshold)
+  )
 
-  sql <- glue::glue("ALTER TABLE {qname} SET (data_inlining_row_limit = {as.integer(threshold)})")
+  scope_desc <- "globally"
+
+  if (!is.null(table)) {
+    table <- .db_validate_name(table, "table")
+    args <- c(args, glue::glue("table_name => {.db_sql_quote(table)}"))
+    scope_desc <- paste0("for table ", table)
+  }
+
+  if (!is.null(schema)) {
+    schema <- .db_validate_name(schema, "schema")
+    args <- c(args, glue::glue("schema_name => {.db_sql_quote(schema)}"))
+    if (is.null(table)) {
+      scope_desc <- paste0("for schema ", schema)
+    } else {
+      scope_desc <- paste0("for ", schema, ".", table)
+    }
+  }
+
+  sql <- glue::glue("CALL {catalog}.set_option({paste(args, collapse = ', ')})")
   DBI::dbExecute(con, sql)
 
-  message("Set inline threshold for ", qname, " to ", threshold, " rows.")
+  message("Set inline threshold to ", threshold, " rows ", scope_desc, ".")
   invisible(qname)
 }
 
