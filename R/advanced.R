@@ -58,25 +58,25 @@ db_flush_inlined <- function(schema = "main", table = NULL) {
 
   sql <- glue::glue("SELECT * FROM ducklake_flush_inlined_data({paste(args, collapse = ', ')})")
 
-  result <- tryCatch({
-    res <- DBI::dbGetQuery(con, sql)
-    if (is.null(res) || !is.data.frame(res) || nrow(res) == 0) {
-      message("No inlined data to flush.")
-    } else {
-      rows_col <- if ("rows_flushed" %in% names(res)) res$rows_flushed else 0
-      total_rows <- sum(rows_col, na.rm = TRUE)
-      if (total_rows > 0) {
-        message("Flushed ", total_rows, " rows from ", nrow(res), " table(s) to parquet files.")
-      } else {
-        message("No inlined data to flush.")
-      }
+  result <- tryCatch(
+    DBI::dbGetQuery(con, sql),
+    error = function(e) {
+      data.frame(schema_name = character(), table_name = character(), rows_flushed = integer())
     }
-    res
-  }, error = function(e) {
-    # Emit message for any error condition
+  )
+
+  # Always emit a message after the SQL operation
+ if (is.null(result) || !is.data.frame(result) || nrow(result) == 0) {
     message("No inlined data to flush.")
-    data.frame(schema_name = character(), table_name = character(), rows_flushed = integer())
-  })
+  } else {
+    rows_col <- if ("rows_flushed" %in% names(result)) result$rows_flushed else 0
+    total_rows <- sum(rows_col, na.rm = TRUE)
+    if (total_rows > 0) {
+      message("Flushed ", total_rows, " rows from ", nrow(result), " table(s) to parquet files.")
+    } else {
+      message("No inlined data to flush.")
+    }
+  }
 
   invisible(result)
 }

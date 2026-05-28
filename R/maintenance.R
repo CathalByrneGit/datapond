@@ -773,7 +773,7 @@ db_changes <- function(schema = "main",
     stop("No DuckLake catalog configured. Use db_connect() first.", call. = FALSE)
   }
 
-  from_version <- as.integer(from_version)
+  from_version <- suppressWarnings(as.integer(from_version))
   if (is.na(from_version) || from_version < 0) {
     stop("from_version must be a non-negative integer.", call. = FALSE)
   }
@@ -786,7 +786,7 @@ db_changes <- function(schema = "main",
     }
     to_version <- max(snapshots$snapshot_id, na.rm = TRUE)
   } else {
-    to_version <- as.integer(to_version)
+    to_version <- suppressWarnings(as.integer(to_version))
     if (is.na(to_version) || to_version < from_version) {
       stop("to_version must be >= from_version.", call. = FALSE)
     }
