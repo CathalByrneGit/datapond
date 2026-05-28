@@ -1,23 +1,19 @@
 # Generate a data dictionary
 
-Creates a data dictionary summarizing all datasets/tables with their
+Creates a data dictionary summarizing all tables with their
 documentation, schemas, and column information.
 
 ## Usage
 
 ``` r
-db_dictionary(section = NULL, schema = NULL, include_columns = TRUE)
+db_dictionary(schema = NULL, include_columns = TRUE)
 ```
 
 ## Arguments
 
-- section:
-
-  Limit to specific section (hive mode, optional)
-
 - schema:
 
-  Limit to specific schema (DuckLake mode, optional)
+  Limit to specific schema (optional)
 
 - include_columns:
 

@@ -50,7 +50,7 @@ Invisibly returns the qualified table name
 
 ``` r
 if (FALSE) { # \dontrun{
-db_lake_connect()
+db_connect()
 
 # Rollback to a specific version
 db_rollback(table = "products", version = 5)

@@ -1,40 +1,48 @@
-# Get documentation for a dataset or table
+# Get documentation for a table
 
-Retrieve documentation metadata for a dataset or table.
+Retrieve documentation metadata for a table and its columns. Metadata is
+stored using native SQL COMMENT ON statements.
 
 ## Usage
 
 ``` r
-db_get_docs(section = NULL, dataset = NULL, schema = "main", table = NULL)
+db_get_docs(schema = "main", table)
 ```
 
 ## Arguments
 
-- section:
-
-  Section name (hive mode only)
-
-- dataset:
-
-  Dataset name (hive mode only)
-
 - schema:
 
-  Schema name (DuckLake mode, default "main")
+  Schema name (default "main")
 
 - table:
 
-  Table name (DuckLake mode only)
+  Table name
 
 ## Value
 
-A list containing description, owner, tags, and column documentation
+A list containing description, owner, tags, lineage, and column
+documentation
+
+## See also
+
+[`db_comment()`](https://cathalbyrnegit.github.io/datapond/reference/db_comment.md)
+to add documentation
 
 ## Examples
 
 ``` r
 if (FALSE) { # \dontrun{
 db_connect()
-db_get_docs("Trade", "Imports")
+
+# First, add documentation
+db_comment(table = "imports", comment = list(
+  description = "Monthly import values",
+  owner = "Trade Section",
+  tags = c("trade", "monthly")
+))
+
+# Then retrieve it
+db_get_docs(table = "imports")
 } # }
 ```

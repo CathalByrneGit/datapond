@@ -1,22 +1,26 @@
-# Search for columns
+# Search for columns by name
 
-Search for columns by name across all datasets/tables.
+Find tables that contain columns matching a pattern.
 
 ## Usage
 
 ``` r
-db_search_columns(pattern)
+db_search_columns(pattern, schema = NULL)
 ```
 
 ## Arguments
 
 - pattern:
 
-  Column name pattern (case-insensitive, matches partial strings)
+  Column name pattern (case-insensitive)
+
+- schema:
+
+  Optional schema to limit search
 
 ## Value
 
-A data.frame of matching columns with their table/dataset info
+A data.frame with schema, table, column_name, and column_type
 
 ## Examples
 
@@ -24,10 +28,10 @@ A data.frame of matching columns with their table/dataset info
 if (FALSE) { # \dontrun{
 db_connect()
 
-# Find all columns containing "country"
+# Find all columns with "country" in the name
 db_search_columns("country")
 
-# Find all ID columns
+# Find ID columns
 db_search_columns("_id")
 } # }
 ```

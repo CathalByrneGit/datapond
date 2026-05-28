@@ -26,7 +26,7 @@ Logical TRUE if exists, FALSE otherwise
 
 ``` r
 if (FALSE) { # \dontrun{
-db_lake_connect()
+db_connect()
 db_table_exists(table = "imports")
 # [1] TRUE
 } # }

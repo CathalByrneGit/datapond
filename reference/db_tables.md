@@ -22,7 +22,7 @@ Character vector of table names
 
 ``` r
 if (FALSE) { # \dontrun{
-db_lake_connect()
+db_connect()
 db_tables()
 # [1] "imports" "exports" "products"
 

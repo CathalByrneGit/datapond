@@ -36,7 +36,7 @@ A data.frame summarising what was (or would be) cleaned up
 
 ``` r
 if (FALSE) { # \dontrun{
-db_lake_connect()
+db_connect()
 
 # See what would be cleaned up (dry run)
 db_vacuum(older_than = "30 days")

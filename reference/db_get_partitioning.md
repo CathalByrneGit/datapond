@@ -28,7 +28,7 @@ partitioned
 
 ``` r
 if (FALSE) { # \dontrun{
-db_lake_connect(...)
+db_connect(...)
 db_set_partitioning("trade", "imports", c("year", "month"))
 db_get_partitioning("trade", "imports")
 #> [1] "year" "month"

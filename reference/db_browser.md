@@ -1,7 +1,7 @@
 # Browse the data lake interactively
 
-Launches a Shiny app to browse datasets, view metadata, search for data,
-and preview tables.
+Launches a Shiny app to browse tables, view metadata, search for data,
+and preview data.
 
 ## Usage
 
@@ -34,13 +34,12 @@ Other shiny:
 ``` r
 if (FALSE) { # \dontrun{
 # Connect first
-db_connect(path = "//CSO-NAS/DataLake")
+db_connect(
+  metadata_path = "catalog.ducklake",
+  data_path = "//CSO-NAS/DataLake"
+)
 
 # Launch browser
-db_browser()
-
-# Or with DuckLake
-db_lake_connect(...)
 db_browser()
 } # }
 ```

@@ -1,7 +1,10 @@
 # Compare a table between two snapshots
 
-Shows the differences in a table between two snapshot versions or
-timestamps. Returns added, removed, and (optionally) changed rows.
+Shows the differences in a table between two snapshot versions db_diff()
+is set-based (EXCEPT), so duplicates don't count as "added". Your append
+produced 10 duplicate rows + 2 genuinely new distinct rows, so it
+reports 2 added. or timestamps. Returns added, removed, and (optionally)
+changed rows.
 
 ## Usage
 
@@ -64,7 +67,7 @@ A list with components: `added`, `removed`, and (if key_cols provided)
 
 ``` r
 if (FALSE) { # \dontrun{
-db_lake_connect()
+db_connect()
 
 # Compare versions 3 and 5
 diff <- db_diff(table = "products", from_version = 3, to_version = 5)

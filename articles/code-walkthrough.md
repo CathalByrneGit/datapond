@@ -19,7 +19,9 @@ it’s designed that way.
     │   ├── upsert.R         # MERGE operations
     │   ├── metadata.R       # Snapshot/catalog queries
     │   ├── discovery.R      # List/exists functions
-    │   ├── maintenance.R    # Vacuum, rollback, diff
+    │   ├── maintenance.R    # Vacuum, rollback, diff, compaction
+    │   ├── advanced.R       # Clustering, inlining, Iceberg export
+    │   ├── arrow.R          # Arrow integration (read/write)
     │   ├── docs.R           # Documentation & data dictionary
     │   ├── preview.R        # Write preview functions
     │   ├── browser.R        # Shiny browser launcher
@@ -28,6 +30,7 @@ it’s designed that way.
     │   └── zzz.R            # Package load/unload hooks
     └── vignettes/
         ├── concepts.Rmd     # Conceptual background
+        ├── catalog-backends.Rmd  # Catalog backend options
         └── code-walkthrough.Rmd  # This file
 
 ------------------------------------------------------------------------
@@ -83,6 +86,30 @@ dplyr::tbl(con, dplyr::sql(query))
 - Large datasets aren’t loaded into memory until needed
 - DuckDB can optimise the full query (filters, joins, aggregations)
 - Users call `collect()` when they’re ready to bring data into R
+
+### 4. DuckLake SQL Parameter Syntax
+
+DuckLake uses two different syntaxes for named parameters depending on
+the function:
+
+**`=>` for DuckLake extension functions:**
+
+``` r
+# Functions like ducklake_merge_adjacent_files, ducklake_list_files, etc.
+CALL ducklake_merge_adjacent_files('catalog', 'table', schema => 'main')
+FROM ducklake_list_files('catalog', 'table', schema => 'main')
+```
+
+**`:=` for catalog-level set_option calls:**
+
+``` r
+# Setting options like data_inlining_row_limit
+CALL catalog.set_option('data_inlining_row_limit', 100, table_name := 'events')
+```
+
+This distinction matters because using the wrong syntax will cause SQL
+errors. The package handles this internally, but it’s important to
+understand when reading the generated SQL.
 
 ------------------------------------------------------------------------
 
@@ -251,7 +278,8 @@ db_connect <- function(duckdb_db = ":memory:",
 
 ### `db_write()` - DuckLake Tables
 
-`db_write()` supports two input types:
+[`db_write()`](https://cathalbyrnegit.github.io/datapond/reference/db_write.md)
+supports two input types:
 
 1.  **data.frame/tibble** - Data passes through R memory
 2.  **Lazy dbplyr table** - Data stays entirely in DuckDB (zero-copy)
@@ -360,9 +388,10 @@ db_write_arrow <- function(data, schema = "main", table, mode = c("overwrite", "
 
 **When to use Arrow functions:**
 
-- `db_read_arrow()`: Direct Parquet access, Arrow ecosystem interop,
-  large data transfers
-- `db_write_arrow()`: When data is already in Arrow format
+- [`db_read_arrow()`](https://cathalbyrnegit.github.io/datapond/reference/db_read_arrow.md):
+  Direct Parquet access, Arrow ecosystem interop, large data transfers
+- [`db_write_arrow()`](https://cathalbyrnegit.github.io/datapond/reference/db_write_arrow.md):
+  When data is already in Arrow format
 
 ------------------------------------------------------------------------
 
@@ -563,7 +592,8 @@ db_lineage <- function(schema = "main", table, sources, transformation = NULL) {
 - All metadata stored in native COMMENT ON (survives
   disconnect/reconnect)
 - JSON format allows structured data (description, owner, tags, lineage)
-- `db_get_lineage()` extracts lineage from the parsed comment JSON
+- [`db_get_lineage()`](https://cathalbyrnegit.github.io/datapond/reference/db_get_lineage.md)
+  extracts lineage from the parsed comment JSON
 - Lineage is merged with existing metadata, not overwritten
 
 ------------------------------------------------------------------------
@@ -698,8 +728,9 @@ db_drop_macro(name = "add_vals")
 
 ### Documentation with db_comment()
 
-`db_comment()` accepts either a **list** (stored as JSON) or a
-**string** (stored as-is):
+[`db_comment()`](https://cathalbyrnegit.github.io/datapond/reference/db_comment.md)
+accepts either a **list** (stored as JSON) or a **string** (stored
+as-is):
 
 ``` r
 
@@ -849,27 +880,46 @@ db_compact <- function(schema = "main", table = NULL, max_files = NULL) {
 - Uses DuckLake’s `ducklake_merge_adjacent_files()` procedure
 - `max_files` parameter limits memory usage for large tables
 - Files with incompatible schema versions cannot be merged
-- Run `db_cleanup_files()` after to remove old files
+- Run
+  [`db_cleanup_files()`](https://cathalbyrnegit.github.io/datapond/reference/db_cleanup_files.md)
+  after to remove old files
 
 ### `db_file_stats()` - Check File Statistics
 
 ``` r
 
-db_file_stats <- function(schema = "main", table = NULL) {
-  sql <- glue::glue("FROM ducklake_table_info({.db_sql_quote(catalog)})")
+db_file_stats <- function(schema = NULL, table = NULL) {
+  # Query DuckLake metadata tables directly
+  # Tables are in __ducklake_metadata_{catalog} schema
+  meta_schema <- glue::glue("__ducklake_metadata_{catalog}")
+
+  sql <- glue::glue("
+    SELECT
+      s.schema_name, t.table_name,
+      COUNT(f.data_file_id) AS file_count,
+      COALESCE(SUM(f.record_count), 0) AS total_rows,
+      COALESCE(SUM(f.file_size_bytes), 0) AS total_bytes
+    FROM {meta_schema}.ducklake_table t
+    JOIN {meta_schema}.ducklake_schema s ON t.schema_id = s.schema_id
+    LEFT JOIN {meta_schema}.ducklake_data_file f
+      ON t.table_id = f.table_id AND f.end_snapshot IS NULL
+    WHERE t.end_snapshot IS NULL AND s.end_snapshot IS NULL
+    GROUP BY s.schema_name, t.table_name
+  ")
   info <- DBI::dbGetQuery(con, sql)
 
-  # Calculate average file size and rows per file
-  info$avg_file_bytes <- info$total_bytes / info$file_count
-  info$avg_rows_per_file <- info$total_rows / info$file_count
-
+  info$avg_file_bytes <- ifelse(info$file_count > 0, info$total_bytes / info$file_count, 0)
+  info$avg_rows_per_file <- ifelse(info$file_count > 0, info$total_rows / info$file_count, 0)
   info
 }
 ```
 
 **Key points:**
 
-- Uses DuckLake’s `ducklake_table_info()` function
+- Queries DuckLake metadata tables directly (`ducklake_table`,
+  `ducklake_schema`, `ducklake_data_file`)
+- Filters by `end_snapshot IS NULL` to get only current (not deleted)
+  data
 - High file count with small average size indicates compaction needed
 - Useful for monitoring and maintenance scheduling
 
@@ -892,41 +942,129 @@ db_cleanup_files <- function(dry_run = TRUE) {
 
 - Orphaned files are created by
   [`db_vacuum()`](https://cathalbyrnegit.github.io/datapond/reference/db_vacuum.md)
-  and `db_compact()`
+  and
+  [`db_compact()`](https://cathalbyrnegit.github.io/datapond/reference/db_compact.md)
 - `dry_run = TRUE` by default for safety
 - Reclaims disk space by removing unreferenced Parquet files
 
-&nbsp;
+------------------------------------------------------------------------
 
+## `R/advanced.R` - Advanced Features
 
-    **Key points:**
+This file contains advanced DuckLake features: clustering, inlining, and
+Iceberg export.
 
-    - Uses SQL `EXCEPT` for set difference operations
-    - With `key_cols`, can distinguish "modified" from "added/removed"
+### `db_set_clustering()` - Configure Sort Order
 
-    ---
+``` r
 
-    ## `R/zzz.R` - Package Hooks
+db_set_clustering <- function(schema = "main", table, columns) {
+  qname <- paste0(catalog, ".", schema, ".", table)
 
+  if (is.null(columns) || length(columns) == 0) {
+    sql <- glue::glue("ALTER TABLE {qname} RESET SORTED BY")
+  } else {
+    sort_clause <- paste(columns, collapse = ", ")
+    sql <- glue::glue("ALTER TABLE {qname} SET SORTED BY ({sort_clause})")
+  }
 
-    ``` r
-    # Null coalesce operator used throughout
-    `%||%` <- function(x, y) if (is.null(x) || length(x) == 0) y else x
+  DBI::dbExecute(con, sql)
+}
+```
 
-    .onAttach <- function(libname, pkgname) {
-      packageStartupMessage(
-        "datapond ", utils::packageVersion("datapond"), "\n",
-        "Use db_connect() to connect to a DuckLake catalog."
-      )
-    }
+**Key points:**
 
-    .onUnload <- function(libpath) {
-      # Clean up connection when package unloads
-      con <- .db_get_con()
-      if (!is.null(con)) {
-        try(DBI::dbDisconnect(con, shutdown = TRUE), silent = TRUE)
-      }
-    }
+- Uses DuckLake’s `ALTER TABLE ... SET SORTED BY` to configure sort
+  order
+- Clustering improves performance for range scans on sorted columns
+- Only affects new data - use
+  [`db_recluster()`](https://cathalbyrnegit.github.io/datapond/reference/db_recluster.md)
+  for existing data
+
+### `db_recluster()` - Re-sort Existing Data
+
+``` r
+
+db_recluster <- function(schema = "main", table, max_files = NULL) {
+  # DuckLake sorts data during compaction based on SET SORTED BY order
+  # Use ducklake_merge_adjacent_files to compact and re-sort
+  args <- c(.db_sql_quote(catalog), .db_sql_quote(table))
+  named_args <- c(glue::glue("schema => {.db_sql_quote(schema)}"))
+
+  if (!is.null(max_files)) {
+    named_args <- c(named_args, glue::glue("max_compacted_files => {as.integer(max_files)}"))
+  }
+
+  all_args <- c(args, named_args)
+  sql <- glue::glue("CALL ducklake_merge_adjacent_files({paste(all_args, collapse = ', ')})")
+
+  DBI::dbExecute(con, sql)
+}
+```
+
+**Key points:**
+
+- Uses `ducklake_merge_adjacent_files()` to compact and re-sort data
+- DuckLake automatically applies the table’s sort order during
+  compaction
+- Note the `=>` syntax for named parameters (standard for DuckLake
+  functions)
+
+### `db_set_inline_threshold()` - Configure Data Inlining
+
+``` r
+
+db_set_inline_threshold <- function(schema = "main", table = NULL, threshold = 10) {
+  # Build set_option call using := syntax for named parameters
+  args <- c("'data_inlining_row_limit'", as.integer(threshold))
+
+  if (!is.null(table)) {
+    args <- c(args, glue::glue("table_name := {.db_sql_quote(table)}"))
+  }
+  if (!is.null(schema)) {
+    args <- c(args, glue::glue("schema := {.db_sql_quote(schema)}"))
+  }
+
+  sql <- glue::glue("CALL {catalog}.set_option({paste(args, collapse = ', ')})")
+  DBI::dbExecute(con, sql)
+}
+```
+
+**Key points:**
+
+- Uses catalog’s `set_option()` procedure to configure inlining
+  threshold
+- Note the `:=` syntax for named parameters (specific to set_option)
+- Inlining stores small writes in the catalog instead of creating
+  parquet files
+- Flush with
+  [`db_flush_inlined()`](https://cathalbyrnegit.github.io/datapond/reference/db_flush_inlined.md)
+  when ready to write to parquet
+
+------------------------------------------------------------------------
+
+## `R/zzz.R` - Package Hooks
+
+``` r
+
+# Null coalesce operator used throughout
+`%||%` <- function(x, y) if (is.null(x) || length(x) == 0) y else x
+
+.onAttach <- function(libname, pkgname) {
+  packageStartupMessage(
+    "datapond ", utils::packageVersion("datapond"), "\n",
+    "Use db_connect() to connect to a DuckLake catalog."
+  )
+}
+
+.onUnload <- function(libpath) {
+  # Clean up connection when package unloads
+  con <- .db_get_con()
+  if (!is.null(con)) {
+    try(DBI::dbDisconnect(con, shutdown = TRUE), silent = TRUE)
+  }
+}
+```
 
 **Key points:**
 
@@ -1109,8 +1247,12 @@ Try answering these questions:
 
 1.  Why do we use `.db_get_con()` instead of accessing `.db_env$con`
     directly?
-2.  What happens if `db_write()` fails halfway through?
-3.  Why does `db_read()` return a lazy table instead of collected data?
+2.  What happens if
+    [`db_write()`](https://cathalbyrnegit.github.io/datapond/reference/db_write.md)
+    fails halfway through?
+3.  Why does
+    [`db_read()`](https://cathalbyrnegit.github.io/datapond/reference/db_read.md)
+    return a lazy table instead of collected data?
 4.  What’s the difference between `update_cols = NULL` and
     `update_cols = character(0)` in
     [`db_upsert()`](https://cathalbyrnegit.github.io/datapond/reference/db_upsert.md)?

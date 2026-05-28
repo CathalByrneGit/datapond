@@ -16,7 +16,7 @@ Character vector of schema names
 
 ``` r
 if (FALSE) { # \dontrun{
-db_lake_connect()
+db_connect()
 db_list_schemas()
 # [1] "main" "trade" "labour"
 } # }

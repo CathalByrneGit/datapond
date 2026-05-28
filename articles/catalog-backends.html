@@ -566,7 +566,7 @@ certain users</li>
 <p><strong>Current workaround for sensitive data:</strong></p>
 <div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Store sensitive data in a separate schema with restricted folder ACLs</span></span>
-<span><span class="fu">db_write</span><span class="op">(</span><span class="va">sensitive_data</span>, schema <span class="op">=</span> <span class="st">"restricted"</span>, table <span class="op">=</span> <span class="st">"pii"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/db_write.html">db_write</a></span><span class="op">(</span><span class="va">sensitive_data</span>, schema <span class="op">=</span> <span class="st">"restricted"</span>, table <span class="op">=</span> <span class="st">"pii"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Folder structure:</span></span>
 <span><span class="co"># /data/restricted/  &lt;- Only authorized users have ACL access</span></span>
@@ -994,7 +994,7 @@ DuckDB spatial extension:</p>
 <span><span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbExecute.html" class="external-link">dbExecute</a></span><span class="op">(</span><span class="va">con</span>, <span class="st">"INSTALL spatial; LOAD spatial;"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Write geospatial data</span></span>
-<span><span class="fu">db_write</span><span class="op">(</span></span>
+<span><span class="fu"><a href="../reference/db_write.html">db_write</a></span><span class="op">(</span></span>
 <span>  <span class="va">geo_data</span>,</span>
 <span>  table <span class="op">=</span> <span class="st">"boundaries"</span>,</span>
 <span>  mode <span class="op">=</span> <span class="st">"overwrite"</span></span>
@@ -1012,7 +1012,7 @@ DuckDB spatial extension:</p>
 <p>DuckDB reads and writes <a href="https://geoparquet.org/" class="external-link">GeoParquet</a> natively:</p>
 <div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Spatial data stored as GeoParquet</span></span>
-<span><span class="va">boundaries</span> <span class="op">&lt;-</span> <span class="fu">db_read</span><span class="op">(</span>table <span class="op">=</span> <span class="st">"boundaries"</span><span class="op">)</span></span>
+<span><span class="va">boundaries</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/db_read.html">db_read</a></span><span class="op">(</span>table <span class="op">=</span> <span class="st">"boundaries"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">boundaries</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/stats/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="fu">ST_Intersects</span><span class="op">(</span><span class="va">geometry</span>, <span class="fu">ST_Point</span><span class="op">(</span><span class="op">-</span><span class="fl">6.26</span>, <span class="fl">53.35</span><span class="op">)</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span></span>
@@ -1088,10 +1088,10 @@ files external:</p>
 <span>  <span class="op">)</span></span>
 <span><span class="op">)</span></span>
 <span></span>
-<span><span class="fu">db_write</span><span class="op">(</span><span class="va">raster_catalog</span>, table <span class="op">=</span> <span class="st">"raster_catalog"</span>, mode <span class="op">=</span> <span class="st">"overwrite"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/db_write.html">db_write</a></span><span class="op">(</span><span class="va">raster_catalog</span>, table <span class="op">=</span> <span class="st">"raster_catalog"</span>, mode <span class="op">=</span> <span class="st">"overwrite"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Document the catalog</span></span>
-<span><span class="fu">db_comment</span><span class="op">(</span></span>
+<span><span class="fu"><a href="../reference/db_comment.html">db_comment</a></span><span class="op">(</span></span>
 <span>  table <span class="op">=</span> <span class="st">"raster_catalog"</span>,</span>
 <span>  comment <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
 <span>    description <span class="op">=</span> <span class="st">"Metadata catalog for raster files stored externally"</span>,</span>
@@ -1105,7 +1105,7 @@ files external:</p>
 </h3>
 <div class="sourceCode" id="cb23"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Find rasters that intersect an area of interest</span></span>
-<span><span class="va">raster_catalog</span> <span class="op">&lt;-</span> <span class="fu">db_read</span><span class="op">(</span>table <span class="op">=</span> <span class="st">"raster_catalog"</span><span class="op">)</span></span>
+<span><span class="va">raster_catalog</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/db_read.html">db_read</a></span><span class="op">(</span>table <span class="op">=</span> <span class="st">"raster_catalog"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">aoi</span> <span class="op">&lt;-</span> <span class="st">"POLYGON((-7 53, -6 53, -6 54, -7 54, -7 53))"</span></span>
 <span></span>

@@ -86,7 +86,9 @@ code does and why it’s designed that way.</p>
 │   ├── upsert.R         # MERGE operations
 │   ├── metadata.R       # Snapshot/catalog queries
 │   ├── discovery.R      # List/exists functions
-│   ├── maintenance.R    # Vacuum, rollback, diff
+│   ├── maintenance.R    # Vacuum, rollback, diff, compaction
+│   ├── advanced.R       # Clustering, inlining, Iceberg export
+│   ├── arrow.R          # Arrow integration (read/write)
 │   ├── docs.R           # Documentation &amp; data dictionary
 │   ├── preview.R        # Write preview functions
 │   ├── browser.R        # Shiny browser launcher
@@ -95,6 +97,7 @@ code does and why it’s designed that way.</p>
 │   └── zzz.R            # Package load/unload hooks
 └── vignettes/
     ├── concepts.Rmd     # Conceptual background
+    ├── catalog-backends.Rmd  # Catalog backend options
     └── code-walkthrough.Rmd  # This file</code></pre>
 <hr>
 </div>
@@ -145,6 +148,24 @@ aggregations)</li>
 <li>Users call <code>collect()</code> when they’re ready to bring data
 into R</li>
 </ul>
+</div>
+<div class="section level3">
+<h3 id="ducklake-sql-parameter-syntax">4. DuckLake SQL Parameter Syntax<a class="anchor" aria-label="anchor" href="#ducklake-sql-parameter-syntax"></a>
+</h3>
+<p>DuckLake uses two different syntaxes for named parameters depending
+on the function:</p>
+<p><strong><code>=&gt;</code> for DuckLake extension
+functions:</strong></p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a><span class="co"># Functions like ducklake_merge_adjacent_files, ducklake_list_files, etc.</span></span>
+<span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a>CALL <span class="fu">ducklake_merge_adjacent_files</span>(<span class="st">'catalog'</span>, <span class="st">'table'</span>, <span class="at">schema =</span><span class="sc">&gt;</span> <span class="st">'main'</span>)</span>
+<span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a>FROM <span class="fu">ducklake_list_files</span>(<span class="st">'catalog'</span>, <span class="st">'table'</span>, <span class="at">schema =</span><span class="sc">&gt;</span> <span class="st">'main'</span>)</span></code></pre></div>
+<p><strong><code>:=</code> for catalog-level set_option
+calls:</strong></p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a><span class="co"># Setting options like data_inlining_row_limit</span></span>
+<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a>CALL <span class="fu">catalog.set_option</span>(<span class="st">'data_inlining_row_limit'</span>, <span class="dv">100</span>, <span class="at">table_name :=</span> <span class="st">'events'</span>)</span></code></pre></div>
+<p>This distinction matters because using the wrong syntax will cause
+SQL errors. The package handles this internally, but it’s important to
+understand when reading the generated SQL.</p>
 <hr>
 </div>
 </div>
@@ -161,7 +182,7 @@ into R</li>
 <div class="section level3">
 <h3 id="private-environment-and-helpers">Private Environment and Helpers<a class="anchor" aria-label="anchor" href="#private-environment-and-helpers"></a>
 </h3>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">.db_env</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/environment.html" class="external-link">new.env</a></span><span class="op">(</span>parent <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/environment.html" class="external-link">emptyenv</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
 <p>This creates an isolated environment that persists for the R session.
 We store:</p>
@@ -178,7 +199,7 @@ We store:</p>
 <code>metadata_path</code> - path to catalog file/connection
 string</li>
 </ul>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">.db_get_con</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="co"># Returns the connection if it exists and is valid, NULL otherwise</span></span>
 <span>  <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/exists.html" class="external-link">exists</a></span><span class="op">(</span><span class="st">"con"</span>, envir <span class="op">=</span> <span class="va">.db_env</span><span class="op">)</span> <span class="op">&amp;&amp;</span> <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbIsValid.html" class="external-link">dbIsValid</a></span><span class="op">(</span><span class="va">.db_env</span><span class="op">$</span><span class="va">con</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
@@ -188,7 +209,7 @@ string</li>
 <span><span class="op">}</span></span></code></pre></div>
 <p>This is the safe way to get the connection - it checks validity, not
 just existence.</p>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">.db_get</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">name</span>, <span class="va">default</span> <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="co"># Safe getter with default value</span></span>
 <span>  <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/exists.html" class="external-link">exists</a></span><span class="op">(</span><span class="va">name</span>, envir <span class="op">=</span> <span class="va">.db_env</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
@@ -204,7 +225,7 @@ just existence.</p>
 </h3>
 <p>These internal functions handle the different catalog backend
 types:</p>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">.db_build_ducklake_dsn</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">catalog_type</span>, <span class="va">metadata_path</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="kw"><a href="https://rdrr.io/r/base/switch.html" class="external-link">switch</a></span><span class="op">(</span><span class="va">catalog_type</span>,</span>
 <span>    duckdb <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="st">"ducklake:"</span>, <span class="va">metadata_path</span><span class="op">)</span>,</span>
@@ -217,7 +238,7 @@ types:</p>
 backend: - DuckDB: <code>ducklake:metadata.ducklake</code> - SQLite:
 <code>ducklake:sqlite:catalog.sqlite</code> - PostgreSQL:
 <code>ducklake:postgres:dbname=... host=...</code></p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">.db_load_catalog_extensions</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">con</span>, <span class="va">catalog_type</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="co"># Always need ducklake</span></span>
 <span>  <span class="kw"><a href="https://rdrr.io/r/base/try.html" class="external-link">try</a></span><span class="op">(</span><span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbExecute.html" class="external-link">dbExecute</a></span><span class="op">(</span><span class="va">con</span>, <span class="st">"INSTALL ducklake"</span><span class="op">)</span>, silent <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
@@ -239,7 +260,7 @@ backends.</p>
 <h3 id="db_connect---ducklake-connection">
 <code>db_connect()</code> - DuckLake Connection<a class="anchor" aria-label="anchor" href="#db_connect---ducklake-connection"></a>
 </h3>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">db_connect</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">duckdb_db</span> <span class="op">=</span> <span class="st">":memory:"</span>,</span>
 <span>                       <span class="va">catalog</span> <span class="op">=</span> <span class="st">"cso"</span>,</span>
 <span>                       <span class="va">catalog_type</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"duckdb"</span>, <span class="st">"sqlite"</span>, <span class="st">"postgres"</span><span class="op">)</span>,</span>
@@ -312,7 +333,7 @@ session</li>
 <h3 id="db_write---ducklake-tables">
 <code>db_write()</code> - DuckLake Tables<a class="anchor" aria-label="anchor" href="#db_write---ducklake-tables"></a>
 </h3>
-<p><code>db_write()</code> supports two input types:</p>
+<p><code><a href="../reference/db_write.html">db_write()</a></code> supports two input types:</p>
 <ol style="list-style-type: decimal">
 <li>
 <strong>data.frame/tibble</strong> - Data passes through R
@@ -321,7 +342,7 @@ memory</li>
 <strong>Lazy dbplyr table</strong> - Data stays entirely in DuckDB
 (zero-copy)</li>
 </ol>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">db_write</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">data</span>, <span class="va">schema</span> <span class="op">=</span> <span class="st">"main"</span>, <span class="va">table</span>,</span>
 <span>                     <span class="va">mode</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"overwrite"</span>, <span class="st">"append"</span><span class="op">)</span>,</span>
 <span>                     <span class="va">col_types</span> <span class="op">=</span> <span class="cn">NULL</span>,       <span class="co"># Explicit column types (data.frame only)</span></span>
@@ -384,20 +405,20 @@ get types from query)</li>
 data inlining</li>
 </ul>
 <p><strong>Example: Zero-copy pipeline</strong></p>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Data never leaves DuckDB - efficient for in-lake transforms</span></span>
-<span><span class="fu">db_read</span><span class="op">(</span>table <span class="op">=</span> <span class="st">"raw_events"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span><span class="fu"><a href="../reference/db_read.html">db_read</a></span><span class="op">(</span>table <span class="op">=</span> <span class="st">"raw_events"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/stats/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">year</span> <span class="op">==</span> <span class="fl">2024</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu">group_by</span><span class="op">(</span><span class="va">event_type</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu">summarise</span><span class="op">(</span>count <span class="op">=</span> <span class="fu">n</span><span class="op">(</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu">db_write</span><span class="op">(</span>table <span class="op">=</span> <span class="st">"event_counts"</span><span class="op">)</span></span>
+<span>  <span class="fu"><a href="../reference/db_write.html">db_write</a></span><span class="op">(</span>table <span class="op">=</span> <span class="st">"event_counts"</span><span class="op">)</span></span>
 <span><span class="co"># Message: Wrote data to cso.main.event_counts (from query)</span></span></code></pre></div>
 </div>
 <div class="section level3">
 <h3 id="rarrow-r---arrow-integration">
 <code>R/arrow.R</code> - Arrow Integration<a class="anchor" aria-label="anchor" href="#rarrow-r---arrow-integration"></a>
 </h3>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Read directly as Arrow Table (bypasses DuckDB compute)</span></span>
 <span><span class="va">db_read_arrow</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">schema</span> <span class="op">=</span> <span class="st">"main"</span>, <span class="va">table</span>, <span class="va">columns</span> <span class="op">=</span> <span class="cn">NULL</span>, <span class="va">as_data_frame</span> <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="co"># Get parquet file paths from DuckLake metadata</span></span>
@@ -417,15 +438,15 @@ data inlining</li>
 <span>  <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/class.html" class="external-link">inherits</a></span><span class="op">(</span><span class="va">data</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"ArrowTabular"</span>, <span class="st">"Table"</span><span class="op">)</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
 <span>    <span class="va">data</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/as.data.frame.html" class="external-link">as.data.frame</a></span><span class="op">(</span><span class="va">data</span><span class="op">)</span></span>
 <span>  <span class="op">}</span></span>
-<span>  <span class="fu">db_write</span><span class="op">(</span><span class="va">data</span>, <span class="va">schema</span>, <span class="va">table</span>, <span class="va">mode</span>, <span class="va">...</span><span class="op">)</span></span>
+<span>  <span class="fu"><a href="../reference/db_write.html">db_write</a></span><span class="op">(</span><span class="va">data</span>, <span class="va">schema</span>, <span class="va">table</span>, <span class="va">mode</span>, <span class="va">...</span><span class="op">)</span></span>
 <span><span class="op">}</span></span></code></pre></div>
 <p><strong>When to use Arrow functions:</strong></p>
 <ul>
 <li>
-<code>db_read_arrow()</code>: Direct Parquet access, Arrow ecosystem
+<code><a href="../reference/db_read_arrow.html">db_read_arrow()</a></code>: Direct Parquet access, Arrow ecosystem
 interop, large data transfers</li>
 <li>
-<code>db_write_arrow()</code>: When data is already in Arrow
+<code><a href="../reference/db_write_arrow.html">db_write_arrow()</a></code>: When data is already in Arrow
 format</li>
 </ul>
 <hr>
@@ -439,7 +460,7 @@ format</li>
 <h3 id="db_upsert---update-insert">
 <code>db_upsert()</code> - Update + Insert<a class="anchor" aria-label="anchor" href="#db_upsert---update-insert"></a>
 </h3>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">db_upsert</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">data</span>, <span class="va">schema</span> <span class="op">=</span> <span class="st">"main"</span>, <span class="va">table</span>, <span class="va">by</span>,</span>
 <span>                      <span class="va">strict</span> <span class="op">=</span> <span class="cn">TRUE</span>, <span class="va">update_cols</span> <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>                      <span class="va">commit_author</span> <span class="op">=</span> <span class="cn">NULL</span>, <span class="va">commit_message</span> <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span> <span class="op">{</span></span>
@@ -514,7 +535,7 @@ COMMENT ON</strong> with JSON for structured data. This approach:</p>
 <li>Supports time travel (comments are versioned with snapshots)</li>
 <li>Is stored in the DuckLake catalog alongside table definitions</li>
 </ul>
-<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Internal helper to parse JSON comment</span></span>
 <span><span class="va">.db_parse_comment</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">comment_str</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">comment_str</span><span class="op">)</span> <span class="op">||</span> <span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/nchar.html" class="external-link">nzchar</a></span><span class="op">(</span><span class="va">comment_str</span><span class="op">)</span><span class="op">)</span> <span class="kw"><a href="https://rdrr.io/r/base/function.html" class="external-link">return</a></span><span class="op">(</span><span class="cn">NULL</span><span class="op">)</span></span>
@@ -542,39 +563,39 @@ COMMENT ON</strong> with JSON for structured data. This approach:</p>
 <h3 id="db_get_docs---retrieve-documentation">
 <code>db_get_docs()</code> - Retrieve Documentation<a class="anchor" aria-label="anchor" href="#db_get_docs---retrieve-documentation"></a>
 </h3>
-<div class="sourceCode" id="cb16"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" tabindex="-1"></a>db_get_docs <span class="ot">&lt;-</span> <span class="cf">function</span>(<span class="at">schema =</span> <span class="st">"main"</span>, table) {</span>
-<span id="cb16-2"><a href="#cb16-2" tabindex="-1"></a>  <span class="co"># Read table comment from duckdb_tables()</span></span>
-<span id="cb16-3"><a href="#cb16-3" tabindex="-1"></a>  table_comment <span class="ot">&lt;-</span> <span class="fu">.db_get_table_comment</span>(con, catalog, schema, table)</span>
-<span id="cb16-4"><a href="#cb16-4" tabindex="-1"></a>  parsed <span class="ot">&lt;-</span> <span class="fu">.db_parse_comment</span>(table_comment)</span>
-<span id="cb16-5"><a href="#cb16-5" tabindex="-1"></a></span>
-<span id="cb16-6"><a href="#cb16-6" tabindex="-1"></a>  <span class="co"># Build result with defaults</span></span>
-<span id="cb16-7"><a href="#cb16-7" tabindex="-1"></a></span>
-<span id="cb16-8"><a href="#cb16-8" tabindex="-1"></a>  result <span class="ot">&lt;-</span> <span class="fu">list</span>(</span>
-<span id="cb16-9"><a href="#cb16-9" tabindex="-1"></a>    <span class="at">schema =</span> schema, <span class="at">table =</span> table,</span>
-<span id="cb16-10"><a href="#cb16-10" tabindex="-1"></a>    <span class="at">description =</span> parsed<span class="sc">$</span>description,</span>
-<span id="cb16-11"><a href="#cb16-11" tabindex="-1"></a>    <span class="at">owner =</span> parsed<span class="sc">$</span>owner,</span>
-<span id="cb16-12"><a href="#cb16-12" tabindex="-1"></a>    <span class="at">tags =</span> parsed<span class="sc">$</span>tags <span class="sc">%||%</span> <span class="fu">character</span>(<span class="dv">0</span>),</span>
-<span id="cb16-13"><a href="#cb16-13" tabindex="-1"></a>    <span class="at">lineage =</span> <span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.null</span>(parsed<span class="sc">$</span>lineage_sources)) <span class="fu">list</span>(</span>
-<span id="cb16-14"><a href="#cb16-14" tabindex="-1"></a>      <span class="at">sources =</span> parsed<span class="sc">$</span>lineage_sources,</span>
-<span id="cb16-15"><a href="#cb16-15" tabindex="-1"></a>      <span class="at">transformation =</span> parsed<span class="sc">$</span>lineage_transformation</span>
-<span id="cb16-16"><a href="#cb16-16" tabindex="-1"></a>    ),</span>
-<span id="cb16-17"><a href="#cb16-17" tabindex="-1"></a>    <span class="at">columns =</span> <span class="fu">list</span>()  <span class="co"># Populated from duckdb_columns()</span></span>
-<span id="cb16-18"><a href="#cb16-18" tabindex="-1"></a>  )</span>
-<span id="cb16-19"><a href="#cb16-19" tabindex="-1"></a></span>
-<span id="cb16-20"><a href="#cb16-20" tabindex="-1"></a>  <span class="co"># Get column comments</span></span>
-<span id="cb16-21"><a href="#cb16-21" tabindex="-1"></a>  cols <span class="ot">&lt;-</span> DBI<span class="sc">::</span><span class="fu">dbGetQuery</span>(con, <span class="st">"SELECT column_name, comment FROM duckdb_columns() ..."</span>)</span>
-<span id="cb16-22"><a href="#cb16-22" tabindex="-1"></a>  <span class="cf">for</span> (col <span class="cf">in</span> cols with comments) {</span>
-<span id="cb16-23"><a href="#cb16-23" tabindex="-1"></a>    result<span class="sc">$</span>columns[[col_name]] <span class="ot">&lt;-</span> <span class="fu">.db_parse_comment</span>(col_comment)</span>
-<span id="cb16-24"><a href="#cb16-24" tabindex="-1"></a>  }</span>
-<span id="cb16-25"><a href="#cb16-25" tabindex="-1"></a></span>
-<span id="cb16-26"><a href="#cb16-26" tabindex="-1"></a>  result</span>
-<span id="cb16-27"><a href="#cb16-27" tabindex="-1"></a>}</span></code></pre></div>
+<div class="sourceCode" id="cb18"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1" tabindex="-1"></a>db_get_docs <span class="ot">&lt;-</span> <span class="cf">function</span>(<span class="at">schema =</span> <span class="st">"main"</span>, table) {</span>
+<span id="cb18-2"><a href="#cb18-2" tabindex="-1"></a>  <span class="co"># Read table comment from duckdb_tables()</span></span>
+<span id="cb18-3"><a href="#cb18-3" tabindex="-1"></a>  table_comment <span class="ot">&lt;-</span> <span class="fu">.db_get_table_comment</span>(con, catalog, schema, table)</span>
+<span id="cb18-4"><a href="#cb18-4" tabindex="-1"></a>  parsed <span class="ot">&lt;-</span> <span class="fu">.db_parse_comment</span>(table_comment)</span>
+<span id="cb18-5"><a href="#cb18-5" tabindex="-1"></a></span>
+<span id="cb18-6"><a href="#cb18-6" tabindex="-1"></a>  <span class="co"># Build result with defaults</span></span>
+<span id="cb18-7"><a href="#cb18-7" tabindex="-1"></a></span>
+<span id="cb18-8"><a href="#cb18-8" tabindex="-1"></a>  result <span class="ot">&lt;-</span> <span class="fu">list</span>(</span>
+<span id="cb18-9"><a href="#cb18-9" tabindex="-1"></a>    <span class="at">schema =</span> schema, <span class="at">table =</span> table,</span>
+<span id="cb18-10"><a href="#cb18-10" tabindex="-1"></a>    <span class="at">description =</span> parsed<span class="sc">$</span>description,</span>
+<span id="cb18-11"><a href="#cb18-11" tabindex="-1"></a>    <span class="at">owner =</span> parsed<span class="sc">$</span>owner,</span>
+<span id="cb18-12"><a href="#cb18-12" tabindex="-1"></a>    <span class="at">tags =</span> parsed<span class="sc">$</span>tags <span class="sc">%||%</span> <span class="fu">character</span>(<span class="dv">0</span>),</span>
+<span id="cb18-13"><a href="#cb18-13" tabindex="-1"></a>    <span class="at">lineage =</span> <span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.null</span>(parsed<span class="sc">$</span>lineage_sources)) <span class="fu">list</span>(</span>
+<span id="cb18-14"><a href="#cb18-14" tabindex="-1"></a>      <span class="at">sources =</span> parsed<span class="sc">$</span>lineage_sources,</span>
+<span id="cb18-15"><a href="#cb18-15" tabindex="-1"></a>      <span class="at">transformation =</span> parsed<span class="sc">$</span>lineage_transformation</span>
+<span id="cb18-16"><a href="#cb18-16" tabindex="-1"></a>    ),</span>
+<span id="cb18-17"><a href="#cb18-17" tabindex="-1"></a>    <span class="at">columns =</span> <span class="fu">list</span>()  <span class="co"># Populated from duckdb_columns()</span></span>
+<span id="cb18-18"><a href="#cb18-18" tabindex="-1"></a>  )</span>
+<span id="cb18-19"><a href="#cb18-19" tabindex="-1"></a></span>
+<span id="cb18-20"><a href="#cb18-20" tabindex="-1"></a>  <span class="co"># Get column comments</span></span>
+<span id="cb18-21"><a href="#cb18-21" tabindex="-1"></a>  cols <span class="ot">&lt;-</span> DBI<span class="sc">::</span><span class="fu">dbGetQuery</span>(con, <span class="st">"SELECT column_name, comment FROM duckdb_columns() ..."</span>)</span>
+<span id="cb18-22"><a href="#cb18-22" tabindex="-1"></a>  <span class="cf">for</span> (col <span class="cf">in</span> cols with comments) {</span>
+<span id="cb18-23"><a href="#cb18-23" tabindex="-1"></a>    result<span class="sc">$</span>columns[[col_name]] <span class="ot">&lt;-</span> <span class="fu">.db_parse_comment</span>(col_comment)</span>
+<span id="cb18-24"><a href="#cb18-24" tabindex="-1"></a>  }</span>
+<span id="cb18-25"><a href="#cb18-25" tabindex="-1"></a></span>
+<span id="cb18-26"><a href="#cb18-26" tabindex="-1"></a>  result</span>
+<span id="cb18-27"><a href="#cb18-27" tabindex="-1"></a>}</span></code></pre></div>
 </div>
 <div class="section level3">
 <h3 id="db_dictionary---generate-data-dictionary">
 <code>db_dictionary()</code> - Generate Data Dictionary<a class="anchor" aria-label="anchor" href="#db_dictionary---generate-data-dictionary"></a>
 </h3>
-<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">db_dictionary</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">schema</span> <span class="op">=</span> <span class="cn">NULL</span>, <span class="va">include_columns</span> <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="co"># Query information_schema for tables</span></span>
 <span>  <span class="va">tables</span> <span class="op">&lt;-</span> <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbGetQuery.html" class="external-link">dbGetQuery</a></span><span class="op">(</span><span class="va">con</span>, <span class="st">"SELECT * FROM information_schema.tables ..."</span><span class="op">)</span></span>
@@ -592,7 +613,7 @@ COMMENT ON</strong> with JSON for structured data. This approach:</p>
 <h3 id="db_search---find-tables">
 <code>db_search()</code> - Find Tables<a class="anchor" aria-label="anchor" href="#db_search---find-tables"></a>
 </h3>
-<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">db_search</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">pattern</span>, <span class="va">field</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"all"</span>, <span class="st">"name"</span>, <span class="st">"description"</span>, <span class="st">"owner"</span>, <span class="st">"tags"</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="co"># Get full dictionary (without columns for speed)</span></span>
 <span>  <span class="va">dict</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/db_dictionary.html">db_dictionary</a></span><span class="op">(</span>include_columns <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
@@ -614,7 +635,7 @@ COMMENT ON</strong> with JSON for structured data. This approach:</p>
 </h3>
 <p>Lineage is stored in the table’s native COMMENT as JSON alongside
 other metadata:</p>
-<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">db_lineage</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">schema</span> <span class="op">=</span> <span class="st">"main"</span>, <span class="va">table</span>, <span class="va">sources</span>, <span class="va">transformation</span> <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="co"># Get existing table comment/metadata</span></span>
 <span>  <span class="va">existing_comment</span> <span class="op">&lt;-</span> <span class="fu">.db_get_table_comment</span><span class="op">(</span><span class="va">con</span>, <span class="va">catalog</span>, <span class="va">schema</span>, <span class="va">table</span><span class="op">)</span></span>
@@ -625,7 +646,7 @@ other metadata:</p>
 <span>  <span class="va">existing_meta</span><span class="op">$</span><span class="va">lineage_transformation</span> <span class="op">&lt;-</span> <span class="va">transformation</span></span>
 <span></span>
 <span>  <span class="co"># Save back using db_comment</span></span>
-<span>  <span class="fu">db_comment</span><span class="op">(</span>schema <span class="op">=</span> <span class="va">schema</span>, table <span class="op">=</span> <span class="va">table</span>, comment <span class="op">=</span> <span class="va">existing_meta</span><span class="op">)</span></span>
+<span>  <span class="fu"><a href="../reference/db_comment.html">db_comment</a></span><span class="op">(</span>schema <span class="op">=</span> <span class="va">schema</span>, table <span class="op">=</span> <span class="va">table</span>, comment <span class="op">=</span> <span class="va">existing_meta</span><span class="op">)</span></span>
 <span><span class="op">}</span></span></code></pre></div>
 <p><strong>Key points:</strong></p>
 <ul>
@@ -634,7 +655,7 @@ disconnect/reconnect)</li>
 <li>JSON format allows structured data (description, owner, tags,
 lineage)</li>
 <li>
-<code>db_get_lineage()</code> extracts lineage from the parsed
+<code><a href="../reference/db_get_lineage.html">db_get_lineage()</a></code> extracts lineage from the parsed
 comment JSON</li>
 <li>Lineage is merged with existing metadata, not overwritten</li>
 </ul>
@@ -649,7 +670,7 @@ comment JSON</li>
 <h3 id="db_preview_write---preview-before-writing">
 <code>db_preview_write()</code> - Preview Before Writing<a class="anchor" aria-label="anchor" href="#db_preview_write---preview-before-writing"></a>
 </h3>
-<div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">db_preview_write</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">data</span>, <span class="va">schema</span> <span class="op">=</span> <span class="st">"main"</span>, <span class="va">table</span>,</span>
 <span>                             <span class="va">mode</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"overwrite"</span>, <span class="st">"append"</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
 <span></span>
@@ -689,7 +710,7 @@ summary</li>
 <code>db_preview_upsert()</code> - Preview Insert vs Update
 Counts<a class="anchor" aria-label="anchor" href="#db_preview_upsert---preview-insert-vs-update-counts"></a>
 </h3>
-<div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb23"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">db_preview_upsert</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">data</span>, <span class="va">schema</span>, <span class="va">table</span>, <span class="va">by</span>, <span class="va">update_cols</span> <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span> <span class="op">{</span></span>
 <span></span>
 <span>  <span class="co"># Register data temporarily</span></span>
@@ -729,7 +750,7 @@ Counts<a class="anchor" aria-label="anchor" href="#db_preview_upsert---preview-i
 <div class="section level3">
 <h3 id="ducklake-discovery">DuckLake Discovery<a class="anchor" aria-label="anchor" href="#ducklake-discovery"></a>
 </h3>
-<div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb24"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">db_tables</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">schema</span> <span class="op">=</span> <span class="st">"main"</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">sql</span> <span class="op">&lt;-</span> <span class="fu">glue</span><span class="fu">::</span><span class="fu"><a href="https://glue.tidyverse.org/reference/glue.html" class="external-link">glue</a></span><span class="op">(</span><span class="st">"</span></span>
 <span><span class="st">    SELECT table_name</span></span>
@@ -752,50 +773,50 @@ databases</li>
 </h3>
 <p>Views and macros are stored in the DuckLake catalog and support time
 travel:</p>
-<div class="sourceCode" id="cb23"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb25"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Create a view - stored in catalog</span></span>
-<span><span class="fu">db_create_view</span><span class="op">(</span>view <span class="op">=</span> <span class="st">"active_users"</span>,</span>
+<span><span class="fu"><a href="../reference/db_create_view.html">db_create_view</a></span><span class="op">(</span>view <span class="op">=</span> <span class="st">"active_users"</span>,</span>
 <span>               query <span class="op">=</span> <span class="st">"SELECT * FROM users WHERE active = true"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Create a scalar macro</span></span>
-<span><span class="fu">db_create_macro</span><span class="op">(</span>name <span class="op">=</span> <span class="st">"add_vals"</span>, params <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"a"</span>, <span class="st">"b"</span><span class="op">)</span>, body <span class="op">=</span> <span class="st">"a + b"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/db_create_macro.html">db_create_macro</a></span><span class="op">(</span>name <span class="op">=</span> <span class="st">"add_vals"</span>, params <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"a"</span>, <span class="st">"b"</span><span class="op">)</span>, body <span class="op">=</span> <span class="st">"a + b"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Create a table macro (returns a table, not a scalar)</span></span>
-<span><span class="fu">db_create_macro</span><span class="op">(</span>name <span class="op">=</span> <span class="st">"big_sales"</span>,</span>
+<span><span class="fu"><a href="../reference/db_create_macro.html">db_create_macro</a></span><span class="op">(</span>name <span class="op">=</span> <span class="st">"big_sales"</span>,</span>
 <span>                params <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>threshold <span class="op">=</span> <span class="st">"INTEGER"</span><span class="op">)</span>,</span>
 <span>                body <span class="op">=</span> <span class="st">"SELECT * FROM sales WHERE value &gt; threshold"</span>,</span>
 <span>                table_macro <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># List and drop</span></span>
 <span><span class="fu"><a href="../reference/db_list_views.html">db_list_views</a></span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="fu">db_list_macros</span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="fu">db_drop_view</span><span class="op">(</span>view <span class="op">=</span> <span class="st">"active_users"</span><span class="op">)</span></span>
-<span><span class="fu">db_drop_macro</span><span class="op">(</span>name <span class="op">=</span> <span class="st">"add_vals"</span><span class="op">)</span></span></code></pre></div>
+<span><span class="fu"><a href="../reference/db_list_macros.html">db_list_macros</a></span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/db_drop_view.html">db_drop_view</a></span><span class="op">(</span>view <span class="op">=</span> <span class="st">"active_users"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/db_drop_macro.html">db_drop_macro</a></span><span class="op">(</span>name <span class="op">=</span> <span class="st">"add_vals"</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level3">
 <h3 id="documentation-with-db_comment">Documentation with db_comment()<a class="anchor" aria-label="anchor" href="#documentation-with-db_comment"></a>
 </h3>
-<p><code>db_comment()</code> accepts either a <strong>list</strong>
+<p><code><a href="../reference/db_comment.html">db_comment()</a></code> accepts either a <strong>list</strong>
 (stored as JSON) or a <strong>string</strong> (stored as-is):</p>
-<div class="sourceCode" id="cb24"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb26"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Structured metadata (stored as JSON)</span></span>
-<span><span class="fu">db_comment</span><span class="op">(</span>table <span class="op">=</span> <span class="st">"users"</span>, comment <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span><span class="fu"><a href="../reference/db_comment.html">db_comment</a></span><span class="op">(</span>table <span class="op">=</span> <span class="st">"users"</span>, comment <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
 <span>  description <span class="op">=</span> <span class="st">"Active user accounts"</span>,</span>
 <span>  owner <span class="op">=</span> <span class="st">"Admin Team"</span>,</span>
 <span>  tags <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"users"</span>, <span class="st">"reference"</span><span class="op">)</span></span>
 <span><span class="op">)</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Simple string comment</span></span>
-<span><span class="fu">db_comment</span><span class="op">(</span>table <span class="op">=</span> <span class="st">"users"</span>, comment <span class="op">=</span> <span class="st">"Active user accounts"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/db_comment.html">db_comment</a></span><span class="op">(</span>table <span class="op">=</span> <span class="st">"users"</span>, comment <span class="op">=</span> <span class="st">"Active user accounts"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Column documentation</span></span>
-<span><span class="fu">db_comment</span><span class="op">(</span>table <span class="op">=</span> <span class="st">"users"</span>, column <span class="op">=</span> <span class="st">"email"</span>, comment <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span><span class="fu"><a href="../reference/db_comment.html">db_comment</a></span><span class="op">(</span>table <span class="op">=</span> <span class="st">"users"</span>, column <span class="op">=</span> <span class="st">"email"</span>, comment <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
 <span>  description <span class="op">=</span> <span class="st">"Primary email"</span>,</span>
 <span>  units <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Remove comment</span></span>
-<span><span class="fu">db_comment</span><span class="op">(</span>table <span class="op">=</span> <span class="st">"users"</span>, column <span class="op">=</span> <span class="st">"email"</span>, comment <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span></span></code></pre></div>
+<span><span class="fu"><a href="../reference/db_comment.html">db_comment</a></span><span class="op">(</span>table <span class="op">=</span> <span class="st">"users"</span>, column <span class="op">=</span> <span class="st">"email"</span>, comment <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span></span></code></pre></div>
 <p>The list format is automatically converted to JSON via
 <code><a href="https://jeroen.r-universe.dev/jsonlite/reference/fromJSON.html" class="external-link">jsonlite::toJSON()</a></code>. When retrieved via
 <code><a href="../reference/db_get_docs.html">db_get_docs()</a></code>, JSON is parsed back to a list.</p>
@@ -804,11 +825,11 @@ travel:</p>
 <h3 id="logging">Logging<a class="anchor" aria-label="anchor" href="#logging"></a>
 </h3>
 <p>Enable DuckDB query logging for debugging:</p>
-<div class="sourceCode" id="cb25"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu">db_enable_logging</span><span class="op">(</span><span class="cn">TRUE</span>, log_type <span class="op">=</span> <span class="st">"query"</span><span class="op">)</span></span>
+<div class="sourceCode" id="cb27"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="../reference/db_enable_logging.html">db_enable_logging</a></span><span class="op">(</span><span class="cn">TRUE</span>, log_type <span class="op">=</span> <span class="st">"query"</span><span class="op">)</span></span>
 <span><span class="co"># ... run operations ...</span></span>
 <span><span class="fu"><a href="../reference/db_query.html">db_query</a></span><span class="op">(</span><span class="st">"SELECT * FROM duckdb_logs()"</span><span class="op">)</span></span>
-<span><span class="fu">db_enable_logging</span><span class="op">(</span><span class="cn">FALSE</span><span class="op">)</span></span></code></pre></div>
+<span><span class="fu"><a href="../reference/db_enable_logging.html">db_enable_logging</a></span><span class="op">(</span><span class="cn">FALSE</span><span class="op">)</span></span></code></pre></div>
 <hr>
 </div>
 </div>
@@ -820,7 +841,7 @@ travel:</p>
 <h3 id="db_vacuum---clean-up-old-snapshots">
 <code>db_vacuum()</code> - Clean Up Old Snapshots<a class="anchor" aria-label="anchor" href="#db_vacuum---clean-up-old-snapshots"></a>
 </h3>
-<div class="sourceCode" id="cb26"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb28"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">db_vacuum</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">older_than</span> <span class="op">=</span> <span class="st">"30 days"</span>, <span class="va">dry_run</span> <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="co"># Get snapshots before</span></span>
 <span>  <span class="va">snapshots_before</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/db_snapshots.html">db_snapshots</a></span><span class="op">(</span><span class="op">)</span></span>
@@ -848,7 +869,7 @@ deletion</li>
 <h3 id="db_rollback---restore-previous-version">
 <code>db_rollback()</code> - Restore Previous Version<a class="anchor" aria-label="anchor" href="#db_rollback---restore-previous-version"></a>
 </h3>
-<div class="sourceCode" id="cb27"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb29"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">db_rollback</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">schema</span>, <span class="va">table</span>, <span class="va">version</span> <span class="op">=</span> <span class="cn">NULL</span>, <span class="va">timestamp</span> <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="co"># Build time travel clause</span></span>
 <span>  <span class="va">at_clause</span> <span class="op">&lt;-</span> <span class="fu">glue</span><span class="fu">::</span><span class="fu"><a href="https://glue.tidyverse.org/reference/glue.html" class="external-link">glue</a></span><span class="op">(</span><span class="st">"AT (VERSION =&gt; {version})"</span><span class="op">)</span></span>
@@ -872,7 +893,7 @@ version</li>
 <h3 id="db_diff---compare-versions">
 <code>db_diff()</code> - Compare Versions<a class="anchor" aria-label="anchor" href="#db_diff---compare-versions"></a>
 </h3>
-<div class="sourceCode" id="cb28"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb30"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">db_diff</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">schema</span>, <span class="va">table</span>, <span class="va">from_version</span>, <span class="va">to_version</span>, <span class="va">key_cols</span> <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="co"># ADDED: rows in 'to' but not in 'from'</span></span>
 <span>  <span class="va">added_sql</span> <span class="op">&lt;-</span> <span class="fu">glue</span><span class="fu">::</span><span class="fu"><a href="https://glue.tidyverse.org/reference/glue.html" class="external-link">glue</a></span><span class="op">(</span><span class="st">"SELECT * FROM {to_ref} EXCEPT SELECT * FROM {from_ref}"</span><span class="op">)</span></span>
@@ -904,15 +925,15 @@ version</li>
 <h3 id="db_compact---merge-small-files">
 <code>db_compact()</code> - Merge Small Files<a class="anchor" aria-label="anchor" href="#db_compact---merge-small-files"></a>
 </h3>
-<div class="sourceCode" id="cb29"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb31"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">db_compact</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">schema</span> <span class="op">=</span> <span class="st">"main"</span>, <span class="va">table</span> <span class="op">=</span> <span class="cn">NULL</span>, <span class="va">max_files</span> <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="co"># Build the SQL call with optional parameters</span></span>
 <span>  <span class="va">sql</span> <span class="op">&lt;-</span> <span class="fu">glue</span><span class="fu">::</span><span class="fu"><a href="https://glue.tidyverse.org/reference/glue.html" class="external-link">glue</a></span><span class="op">(</span><span class="st">"CALL ducklake_merge_adjacent_files({catalog}, {table}, ...)"</span><span class="op">)</span></span>
 <span></span>
 <span>  <span class="co"># Get file stats before and after for reporting</span></span>
-<span>  <span class="va">stats_before</span> <span class="op">&lt;-</span> <span class="fu">db_file_stats</span><span class="op">(</span><span class="va">schema</span>, <span class="va">table</span><span class="op">)</span></span>
+<span>  <span class="va">stats_before</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/db_file_stats.html">db_file_stats</a></span><span class="op">(</span><span class="va">schema</span>, <span class="va">table</span><span class="op">)</span></span>
 <span>  <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbExecute.html" class="external-link">dbExecute</a></span><span class="op">(</span><span class="va">con</span>, <span class="va">sql</span><span class="op">)</span></span>
-<span>  <span class="va">stats_after</span> <span class="op">&lt;-</span> <span class="fu">db_file_stats</span><span class="op">(</span><span class="va">schema</span>, <span class="va">table</span><span class="op">)</span></span>
+<span>  <span class="va">stats_after</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/db_file_stats.html">db_file_stats</a></span><span class="op">(</span><span class="va">schema</span>, <span class="va">table</span><span class="op">)</span></span>
 <span></span>
 <span>  <span class="co"># Report reduction</span></span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/base/message.html" class="external-link">message</a></span><span class="op">(</span><span class="st">"Files before: "</span>, <span class="fu"><a href="https://rdrr.io/r/base/sum.html" class="external-link">sum</a></span><span class="op">(</span><span class="va">stats_before</span><span class="op">$</span><span class="va">file_count</span><span class="op">)</span><span class="op">)</span></span>
@@ -926,27 +947,45 @@ procedure</li>
 <code>max_files</code> parameter limits memory usage for large
 tables</li>
 <li>Files with incompatible schema versions cannot be merged</li>
-<li>Run <code>db_cleanup_files()</code> after to remove old files</li>
+<li>Run <code><a href="../reference/db_cleanup_files.html">db_cleanup_files()</a></code> after to remove old files</li>
 </ul>
 </div>
 <div class="section level3">
 <h3 id="db_file_stats---check-file-statistics">
 <code>db_file_stats()</code> - Check File Statistics<a class="anchor" aria-label="anchor" href="#db_file_stats---check-file-statistics"></a>
 </h3>
-<div class="sourceCode" id="cb30"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">db_file_stats</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">schema</span> <span class="op">=</span> <span class="st">"main"</span>, <span class="va">table</span> <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="va">sql</span> <span class="op">&lt;-</span> <span class="fu">glue</span><span class="fu">::</span><span class="fu"><a href="https://glue.tidyverse.org/reference/glue.html" class="external-link">glue</a></span><span class="op">(</span><span class="st">"FROM ducklake_table_info({.db_sql_quote(catalog)})"</span><span class="op">)</span></span>
+<div class="sourceCode" id="cb32"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">db_file_stats</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">schema</span> <span class="op">=</span> <span class="cn">NULL</span>, <span class="va">table</span> <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="co"># Query DuckLake metadata tables directly</span></span>
+<span>  <span class="co"># Tables are in __ducklake_metadata_{catalog} schema</span></span>
+<span>  <span class="va">meta_schema</span> <span class="op">&lt;-</span> <span class="fu">glue</span><span class="fu">::</span><span class="fu"><a href="https://glue.tidyverse.org/reference/glue.html" class="external-link">glue</a></span><span class="op">(</span><span class="st">"__ducklake_metadata_{catalog}"</span><span class="op">)</span></span>
+<span></span>
+<span>  <span class="va">sql</span> <span class="op">&lt;-</span> <span class="fu">glue</span><span class="fu">::</span><span class="fu"><a href="https://glue.tidyverse.org/reference/glue.html" class="external-link">glue</a></span><span class="op">(</span><span class="st">"</span></span>
+<span><span class="st">    SELECT</span></span>
+<span><span class="st">      s.schema_name, t.table_name,</span></span>
+<span><span class="st">      COUNT(f.data_file_id) AS file_count,</span></span>
+<span><span class="st">      COALESCE(SUM(f.record_count), 0) AS total_rows,</span></span>
+<span><span class="st">      COALESCE(SUM(f.file_size_bytes), 0) AS total_bytes</span></span>
+<span><span class="st">    FROM {meta_schema}.ducklake_table t</span></span>
+<span><span class="st">    JOIN {meta_schema}.ducklake_schema s ON t.schema_id = s.schema_id</span></span>
+<span><span class="st">    LEFT JOIN {meta_schema}.ducklake_data_file f</span></span>
+<span><span class="st">      ON t.table_id = f.table_id AND f.end_snapshot IS NULL</span></span>
+<span><span class="st">    WHERE t.end_snapshot IS NULL AND s.end_snapshot IS NULL</span></span>
+<span><span class="st">    GROUP BY s.schema_name, t.table_name</span></span>
+<span><span class="st">  "</span><span class="op">)</span></span>
 <span>  <span class="va">info</span> <span class="op">&lt;-</span> <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbGetQuery.html" class="external-link">dbGetQuery</a></span><span class="op">(</span><span class="va">con</span>, <span class="va">sql</span><span class="op">)</span></span>
 <span></span>
-<span>  <span class="co"># Calculate average file size and rows per file</span></span>
-<span>  <span class="va">info</span><span class="op">$</span><span class="va">avg_file_bytes</span> <span class="op">&lt;-</span> <span class="va">info</span><span class="op">$</span><span class="va">total_bytes</span> <span class="op">/</span> <span class="va">info</span><span class="op">$</span><span class="va">file_count</span></span>
-<span>  <span class="va">info</span><span class="op">$</span><span class="va">avg_rows_per_file</span> <span class="op">&lt;-</span> <span class="va">info</span><span class="op">$</span><span class="va">total_rows</span> <span class="op">/</span> <span class="va">info</span><span class="op">$</span><span class="va">file_count</span></span>
-<span></span>
+<span>  <span class="va">info</span><span class="op">$</span><span class="va">avg_file_bytes</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/ifelse.html" class="external-link">ifelse</a></span><span class="op">(</span><span class="va">info</span><span class="op">$</span><span class="va">file_count</span> <span class="op">&gt;</span> <span class="fl">0</span>, <span class="va">info</span><span class="op">$</span><span class="va">total_bytes</span> <span class="op">/</span> <span class="va">info</span><span class="op">$</span><span class="va">file_count</span>, <span class="fl">0</span><span class="op">)</span></span>
+<span>  <span class="va">info</span><span class="op">$</span><span class="va">avg_rows_per_file</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/ifelse.html" class="external-link">ifelse</a></span><span class="op">(</span><span class="va">info</span><span class="op">$</span><span class="va">file_count</span> <span class="op">&gt;</span> <span class="fl">0</span>, <span class="va">info</span><span class="op">$</span><span class="va">total_rows</span> <span class="op">/</span> <span class="va">info</span><span class="op">$</span><span class="va">file_count</span>, <span class="fl">0</span><span class="op">)</span></span>
 <span>  <span class="va">info</span></span>
 <span><span class="op">}</span></span></code></pre></div>
 <p><strong>Key points:</strong></p>
 <ul>
-<li>Uses DuckLake’s <code>ducklake_table_info()</code> function</li>
+<li>Queries DuckLake metadata tables directly
+(<code>ducklake_table</code>, <code>ducklake_schema</code>,
+<code>ducklake_data_file</code>)</li>
+<li>Filters by <code>end_snapshot IS NULL</code> to get only current
+(not deleted) data</li>
 <li>High file count with small average size indicates compaction
 needed</li>
 <li>Useful for monitoring and maintenance scheduling</li>
@@ -956,7 +995,7 @@ needed</li>
 <h3 id="db_cleanup_files---remove-orphaned-files">
 <code>db_cleanup_files()</code> - Remove Orphaned Files<a class="anchor" aria-label="anchor" href="#db_cleanup_files---remove-orphaned-files"></a>
 </h3>
-<div class="sourceCode" id="cb31"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb33"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">db_cleanup_files</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">dry_run</span> <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="kw">if</span> <span class="op">(</span><span class="va">dry_run</span><span class="op">)</span> <span class="op">{</span></span>
 <span>    <span class="co"># Show preview of what would be cleaned</span></span>
@@ -969,41 +1008,134 @@ needed</li>
 <p><strong>Key points:</strong></p>
 <ul>
 <li>Orphaned files are created by <code><a href="../reference/db_vacuum.html">db_vacuum()</a></code> and
-<code>db_compact()</code>
+<code><a href="../reference/db_compact.html">db_compact()</a></code>
 </li>
 <li>
 <code>dry_run = TRUE</code> by default for safety</li>
 <li>Reclaims disk space by removing unreferenced Parquet files</li>
 </ul>
-<pre><code>
-**Key points:**
-
-- Uses SQL `EXCEPT` for set difference operations
-- With `key_cols`, can distinguish "modified" from "added/removed"
-
----
-
-## `R/zzz.R` - Package Hooks
-
-
-``` r
-# Null coalesce operator used throughout
-`%||%` &lt;- function(x, y) if (is.null(x) || length(x) == 0) y else x
-
-.onAttach &lt;- function(libname, pkgname) {
-  packageStartupMessage(
-    "datapond ", utils::packageVersion("datapond"), "\n",
-    "Use db_connect() to connect to a DuckLake catalog."
-  )
-}
-
-.onUnload &lt;- function(libpath) {
-  # Clean up connection when package unloads
-  con &lt;- .db_get_con()
-  if (!is.null(con)) {
-    try(DBI::dbDisconnect(con, shutdown = TRUE), silent = TRUE)
-  }
-}</code></pre>
+<hr>
+</div>
+</div>
+<div class="section level2">
+<h2 id="radvanced-r---advanced-features">
+<code>R/advanced.R</code> - Advanced Features<a class="anchor" aria-label="anchor" href="#radvanced-r---advanced-features"></a>
+</h2>
+<p>This file contains advanced DuckLake features: clustering, inlining,
+and Iceberg export.</p>
+<div class="section level3">
+<h3 id="db_set_clustering---configure-sort-order">
+<code>db_set_clustering()</code> - Configure Sort Order<a class="anchor" aria-label="anchor" href="#db_set_clustering---configure-sort-order"></a>
+</h3>
+<div class="sourceCode" id="cb34"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">db_set_clustering</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">schema</span> <span class="op">=</span> <span class="st">"main"</span>, <span class="va">table</span>, <span class="va">columns</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="va">qname</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="va">catalog</span>, <span class="st">"."</span>, <span class="va">schema</span>, <span class="st">"."</span>, <span class="va">table</span><span class="op">)</span></span>
+<span></span>
+<span>  <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">columns</span><span class="op">)</span> <span class="op">||</span> <span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">columns</span><span class="op">)</span> <span class="op">==</span> <span class="fl">0</span><span class="op">)</span> <span class="op">{</span></span>
+<span>    <span class="va">sql</span> <span class="op">&lt;-</span> <span class="fu">glue</span><span class="fu">::</span><span class="fu"><a href="https://glue.tidyverse.org/reference/glue.html" class="external-link">glue</a></span><span class="op">(</span><span class="st">"ALTER TABLE {qname} RESET SORTED BY"</span><span class="op">)</span></span>
+<span>  <span class="op">}</span> <span class="kw">else</span> <span class="op">{</span></span>
+<span>    <span class="va">sort_clause</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste</a></span><span class="op">(</span><span class="va">columns</span>, collapse <span class="op">=</span> <span class="st">", "</span><span class="op">)</span></span>
+<span>    <span class="va">sql</span> <span class="op">&lt;-</span> <span class="fu">glue</span><span class="fu">::</span><span class="fu"><a href="https://glue.tidyverse.org/reference/glue.html" class="external-link">glue</a></span><span class="op">(</span><span class="st">"ALTER TABLE {qname} SET SORTED BY ({sort_clause})"</span><span class="op">)</span></span>
+<span>  <span class="op">}</span></span>
+<span></span>
+<span>  <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbExecute.html" class="external-link">dbExecute</a></span><span class="op">(</span><span class="va">con</span>, <span class="va">sql</span><span class="op">)</span></span>
+<span><span class="op">}</span></span></code></pre></div>
+<p><strong>Key points:</strong></p>
+<ul>
+<li>Uses DuckLake’s <code>ALTER TABLE ... SET SORTED BY</code> to
+configure sort order</li>
+<li>Clustering improves performance for range scans on sorted
+columns</li>
+<li>Only affects new data - use <code><a href="../reference/db_recluster.html">db_recluster()</a></code> for existing
+data</li>
+</ul>
+</div>
+<div class="section level3">
+<h3 id="db_recluster---re-sort-existing-data">
+<code>db_recluster()</code> - Re-sort Existing Data<a class="anchor" aria-label="anchor" href="#db_recluster---re-sort-existing-data"></a>
+</h3>
+<div class="sourceCode" id="cb35"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">db_recluster</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">schema</span> <span class="op">=</span> <span class="st">"main"</span>, <span class="va">table</span>, <span class="va">max_files</span> <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="co"># DuckLake sorts data during compaction based on SET SORTED BY order</span></span>
+<span>  <span class="co"># Use ducklake_merge_adjacent_files to compact and re-sort</span></span>
+<span>  <span class="va">args</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fu">.db_sql_quote</span><span class="op">(</span><span class="va">catalog</span><span class="op">)</span>, <span class="fu">.db_sql_quote</span><span class="op">(</span><span class="va">table</span><span class="op">)</span><span class="op">)</span></span>
+<span>  <span class="va">named_args</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fu">glue</span><span class="fu">::</span><span class="fu"><a href="https://glue.tidyverse.org/reference/glue.html" class="external-link">glue</a></span><span class="op">(</span><span class="st">"schema =&gt; {.db_sql_quote(schema)}"</span><span class="op">)</span><span class="op">)</span></span>
+<span></span>
+<span>  <span class="kw">if</span> <span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">max_files</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
+<span>    <span class="va">named_args</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">named_args</span>, <span class="fu">glue</span><span class="fu">::</span><span class="fu"><a href="https://glue.tidyverse.org/reference/glue.html" class="external-link">glue</a></span><span class="op">(</span><span class="st">"max_compacted_files =&gt; {as.integer(max_files)}"</span><span class="op">)</span><span class="op">)</span></span>
+<span>  <span class="op">}</span></span>
+<span></span>
+<span>  <span class="va">all_args</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">args</span>, <span class="va">named_args</span><span class="op">)</span></span>
+<span>  <span class="va">sql</span> <span class="op">&lt;-</span> <span class="fu">glue</span><span class="fu">::</span><span class="fu"><a href="https://glue.tidyverse.org/reference/glue.html" class="external-link">glue</a></span><span class="op">(</span><span class="st">"CALL ducklake_merge_adjacent_files({paste(all_args, collapse = ', ')})"</span><span class="op">)</span></span>
+<span></span>
+<span>  <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbExecute.html" class="external-link">dbExecute</a></span><span class="op">(</span><span class="va">con</span>, <span class="va">sql</span><span class="op">)</span></span>
+<span><span class="op">}</span></span></code></pre></div>
+<p><strong>Key points:</strong></p>
+<ul>
+<li>Uses <code>ducklake_merge_adjacent_files()</code> to compact and
+re-sort data</li>
+<li>DuckLake automatically applies the table’s sort order during
+compaction</li>
+<li>Note the <code>=&gt;</code> syntax for named parameters (standard
+for DuckLake functions)</li>
+</ul>
+</div>
+<div class="section level3">
+<h3 id="db_set_inline_threshold---configure-data-inlining">
+<code>db_set_inline_threshold()</code> - Configure Data
+Inlining<a class="anchor" aria-label="anchor" href="#db_set_inline_threshold---configure-data-inlining"></a>
+</h3>
+<div class="sourceCode" id="cb36"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">db_set_inline_threshold</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">schema</span> <span class="op">=</span> <span class="st">"main"</span>, <span class="va">table</span> <span class="op">=</span> <span class="cn">NULL</span>, <span class="va">threshold</span> <span class="op">=</span> <span class="fl">10</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="co"># Build set_option call using := syntax for named parameters</span></span>
+<span>  <span class="va">args</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"'data_inlining_row_limit'"</span>, <span class="fu"><a href="https://rdrr.io/r/base/integer.html" class="external-link">as.integer</a></span><span class="op">(</span><span class="va">threshold</span><span class="op">)</span><span class="op">)</span></span>
+<span></span>
+<span>  <span class="kw">if</span> <span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">table</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
+<span>    <span class="va">args</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">args</span>, <span class="fu">glue</span><span class="fu">::</span><span class="fu"><a href="https://glue.tidyverse.org/reference/glue.html" class="external-link">glue</a></span><span class="op">(</span><span class="st">"table_name := {.db_sql_quote(table)}"</span><span class="op">)</span><span class="op">)</span></span>
+<span>  <span class="op">}</span></span>
+<span>  <span class="kw">if</span> <span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">schema</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
+<span>    <span class="va">args</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">args</span>, <span class="fu">glue</span><span class="fu">::</span><span class="fu"><a href="https://glue.tidyverse.org/reference/glue.html" class="external-link">glue</a></span><span class="op">(</span><span class="st">"schema := {.db_sql_quote(schema)}"</span><span class="op">)</span><span class="op">)</span></span>
+<span>  <span class="op">}</span></span>
+<span></span>
+<span>  <span class="va">sql</span> <span class="op">&lt;-</span> <span class="fu">glue</span><span class="fu">::</span><span class="fu"><a href="https://glue.tidyverse.org/reference/glue.html" class="external-link">glue</a></span><span class="op">(</span><span class="st">"CALL {catalog}.set_option({paste(args, collapse = ', ')})"</span><span class="op">)</span></span>
+<span>  <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbExecute.html" class="external-link">dbExecute</a></span><span class="op">(</span><span class="va">con</span>, <span class="va">sql</span><span class="op">)</span></span>
+<span><span class="op">}</span></span></code></pre></div>
+<p><strong>Key points:</strong></p>
+<ul>
+<li>Uses catalog’s <code>set_option()</code> procedure to configure
+inlining threshold</li>
+<li>Note the <code>:=</code> syntax for named parameters (specific to
+set_option)</li>
+<li>Inlining stores small writes in the catalog instead of creating
+parquet files</li>
+<li>Flush with <code><a href="../reference/db_flush_inlined.html">db_flush_inlined()</a></code> when ready to write to
+parquet</li>
+</ul>
+<hr>
+</div>
+</div>
+<div class="section level2">
+<h2 id="rzzz-r---package-hooks">
+<code>R/zzz.R</code> - Package Hooks<a class="anchor" aria-label="anchor" href="#rzzz-r---package-hooks"></a>
+</h2>
+<div class="sourceCode" id="cb37"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Null coalesce operator used throughout</span></span>
+<span><span class="va">`%||%`</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">x</span>, <span class="va">y</span><span class="op">)</span> <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="op">||</span> <span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="op">==</span> <span class="fl">0</span><span class="op">)</span> <span class="va">y</span> <span class="kw">else</span> <span class="va">x</span></span>
+<span></span>
+<span><span class="va">.onAttach</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">libname</span>, <span class="va">pkgname</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/message.html" class="external-link">packageStartupMessage</a></span><span class="op">(</span></span>
+<span>    <span class="st">"datapond "</span>, <span class="fu">utils</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/r/utils/packageDescription.html" class="external-link">packageVersion</a></span><span class="op">(</span><span class="st">"datapond"</span><span class="op">)</span>, <span class="st">"\n"</span>,</span>
+<span>    <span class="st">"Use db_connect() to connect to a DuckLake catalog."</span></span>
+<span>  <span class="op">)</span></span>
+<span><span class="op">}</span></span>
+<span></span>
+<span><span class="va">.onUnload</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">libpath</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="co"># Clean up connection when package unloads</span></span>
+<span>  <span class="va">con</span> <span class="op">&lt;-</span> <span class="fu">.db_get_con</span><span class="op">(</span><span class="op">)</span></span>
+<span>  <span class="kw">if</span> <span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">con</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
+<span>    <span class="kw"><a href="https://rdrr.io/r/base/try.html" class="external-link">try</a></span><span class="op">(</span><span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbDisconnect.html" class="external-link">dbDisconnect</a></span><span class="op">(</span><span class="va">con</span>, shutdown <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span>, silent <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span>  <span class="op">}</span></span>
+<span><span class="op">}</span></span></code></pre></div>
 <p><strong>Key points:</strong></p>
 <ul>
 <li>
@@ -1017,7 +1149,6 @@ unloaded</li>
 values</li>
 </ul>
 <hr>
-</div>
 </div>
 <div class="section level2">
 <h2 id="rbrowser-r-rbrowser_ui-r-rbrowser_server-r---interactive-browser">
@@ -1033,7 +1164,7 @@ data lake.</p>
 allows it to be: 1. Used standalone via <code><a href="../reference/db_browser.html">db_browser()</a></code> 2.
 Embedded in other Shiny apps via <code><a href="../reference/db_browser_ui.html">db_browser_ui()</a></code> +
 <code><a href="../reference/db_browser_server.html">db_browser_server()</a></code></p>
-<div class="sourceCode" id="cb33"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb38"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Standalone usage</span></span>
 <span><span class="fu"><a href="../reference/db_browser.html">db_browser</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
@@ -1049,7 +1180,7 @@ Embedded in other Shiny apps via <code><a href="../reference/db_browser_ui.html"
 <h3 id="browser-r---launcher">
 <code>browser.R</code> - Launcher<a class="anchor" aria-label="anchor" href="#browser-r---launcher"></a>
 </h3>
-<div class="sourceCode" id="cb34"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb39"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">db_browser</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">height</span> <span class="op">=</span> <span class="st">"500px"</span>, <span class="va">viewer</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"dialog"</span>, <span class="st">"browser"</span>, <span class="st">"pane"</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="co"># Check packages are available</span></span>
 <span>  <span class="fu">.db_assert_browser_packages</span><span class="op">(</span><span class="op">)</span></span>
@@ -1071,7 +1202,7 @@ Embedded in other Shiny apps via <code><a href="../reference/db_browser_ui.html"
 </h3>
 <p>The UI is built with <code>bslib</code> for modern Bootstrap 5
 styling:</p>
-<div class="sourceCode" id="cb35"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb40"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">db_browser_ui</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">id</span>, <span class="va">height</span> <span class="op">=</span> <span class="st">"500px"</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">ns</span> <span class="op">&lt;-</span> <span class="fu">shiny</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/shiny/man/NS.html" class="external-link">NS</a></span><span class="op">(</span><span class="va">id</span><span class="op">)</span>  <span class="co"># Namespace for module</span></span>
 <span></span>
@@ -1106,7 +1237,7 @@ tables</li>
 <h3 id="browser_server-r---module-server">
 <code>browser_server.R</code> - Module Server<a class="anchor" aria-label="anchor" href="#browser_server-r---module-server"></a>
 </h3>
-<div class="sourceCode" id="cb36"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb41"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">db_browser_server</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">id</span>, <span class="va">height</span> <span class="op">=</span> <span class="st">"500px"</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="fu">shiny</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/shiny/man/moduleServer.html" class="external-link">moduleServer</a></span><span class="op">(</span><span class="va">id</span>, <span class="kw">function</span><span class="op">(</span><span class="va">input</span>, <span class="va">output</span>, <span class="va">session</span><span class="op">)</span> <span class="op">{</span></span>
 <span></span>
@@ -1123,7 +1254,7 @@ tables</li>
 <span></span>
 <span>    <span class="co"># Preview - loads data on button click</span></span>
 <span>    <span class="va">preview_data</span> <span class="op">&lt;-</span> <span class="fu">shiny</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/shiny/man/observeEvent.html" class="external-link">eventReactive</a></span><span class="op">(</span><span class="va">input</span><span class="op">$</span><span class="va">load_preview</span>, <span class="op">{</span></span>
-<span>      <span class="fu">db_read</span><span class="op">(</span><span class="va">rv</span><span class="op">$</span><span class="va">selected_schema</span>, <span class="va">rv</span><span class="op">$</span><span class="va">selected_table</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>      <span class="fu"><a href="../reference/db_read.html">db_read</a></span><span class="op">(</span><span class="va">rv</span><span class="op">$</span><span class="va">selected_schema</span>, <span class="va">rv</span><span class="op">$</span><span class="va">selected_table</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>        <span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">input</span><span class="op">$</span><span class="va">preview_rows</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>        <span class="fu">collect</span><span class="op">(</span><span class="op">)</span></span>
 <span>    <span class="op">}</span><span class="op">)</span></span>
@@ -1178,7 +1309,7 @@ filtering</li>
 <strong>Quoted</strong> with <code>.db_sql_quote()</code> (escapes
 single quotes)</li>
 </ol>
-<div class="sourceCode" id="cb37"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb42"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># This is safe:</span></span>
 <span><span class="va">table</span> <span class="op">&lt;-</span> <span class="fu">.db_validate_name</span><span class="op">(</span><span class="va">table</span><span class="op">)</span>  <span class="co"># Rejects "../../../etc"</span></span>
 <span><span class="va">path</span> <span class="op">&lt;-</span> <span class="fu">.db_sql_quote</span><span class="op">(</span><span class="va">glob_path</span><span class="op">)</span>   <span class="co"># Escapes quotes properly</span></span></code></pre></div>
@@ -1190,8 +1321,8 @@ single quotes)</li>
 separators (<code>/</code>, <code>\</code>) - Parent directory
 references (<code>..</code>) - Special characters</p>
 <p>This prevents attacks like:</p>
-<div class="sourceCode" id="cb38"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu">db_read</span><span class="op">(</span>table <span class="op">=</span> <span class="st">"../../../etc/passwd"</span><span class="op">)</span>  <span class="co"># Rejected!</span></span></code></pre></div>
+<div class="sourceCode" id="cb43"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="../reference/db_read.html">db_read</a></span><span class="op">(</span>table <span class="op">=</span> <span class="st">"../../../etc/passwd"</span><span class="op">)</span>  <span class="co"># Rejected!</span></span></code></pre></div>
 <hr>
 </div>
 </div>
@@ -1202,8 +1333,8 @@ references (<code>..</code>) - Special characters</p>
 <ol style="list-style-type: decimal">
 <li>Why do we use <code>.db_get_con()</code> instead of accessing
 <code>.db_env$con</code> directly?</li>
-<li>What happens if <code>db_write()</code> fails halfway through?</li>
-<li>Why does <code>db_read()</code> return a lazy table instead of
+<li>What happens if <code><a href="../reference/db_write.html">db_write()</a></code> fails halfway through?</li>
+<li>Why does <code><a href="../reference/db_read.html">db_read()</a></code> return a lazy table instead of
 collected data?</li>
 <li>What’s the difference between <code>update_cols = NULL</code> and
 <code>update_cols = character(0)</code> in

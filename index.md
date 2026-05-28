@@ -10,11 +10,11 @@ and schema evolution on top of Parquet files.
 
 ``` r
 
-# Install from local source
-devtools::install("path/to/datapond")
+# Install pak if you don't have it
+install.packages("pak")
 
-# Or load for development
-devtools::load_all("path/to/datapond")
+# Install datapond from GitHub
+pak::pak("CathalByrneGit/datapond")
 ```
 
 ## Quick Start
@@ -393,31 +393,35 @@ db_write(imports_data, schema = "trade", table = "imports")
 
 | Function | Description |
 |----|----|
-| `db_read()` | Read table (with optional time travel by version or timestamp) |
+| [`db_read()`](https://cathalbyrnegit.github.io/datapond/reference/db_read.md) | Read table (with optional time travel by version or timestamp) |
 
 ### Writing Data
 
 | Function | Description |
 |----|----|
-| `db_write()` | Write data.frame or lazy dplyr query (zero-copy transforms stay in DuckDB) |
+| [`db_write()`](https://cathalbyrnegit.github.io/datapond/reference/db_write.md) | Write data.frame or lazy dplyr query (zero-copy transforms stay in DuckDB) |
 | [`db_upsert()`](https://cathalbyrnegit.github.io/datapond/reference/db_upsert.md) | MERGE operation (update existing rows + insert new rows) |
 
-*Note: `db_write()` accepts both data.frames (data passes through R) and
-lazy dbplyr tables from `db_read()` (stays entirely in DuckDB, no R
-memory used). Use the lazy approach for in-lake transformations.*
+*Note:
+[`db_write()`](https://cathalbyrnegit.github.io/datapond/reference/db_write.md)
+accepts both data.frames (data passes through R) and lazy dbplyr tables
+from
+[`db_read()`](https://cathalbyrnegit.github.io/datapond/reference/db_read.md)
+(stays entirely in DuckDB, no R memory used). Use the lazy approach for
+in-lake transformations.*
 
 ### Arrow Integration
 
 | Function | Description |
 |----|----|
-| `db_read_arrow()` | Read table directly as Arrow Table (bypasses DuckDB compute) |
-| `db_write_arrow()` | Write Arrow Table/RecordBatch to DuckLake |
+| [`db_read_arrow()`](https://cathalbyrnegit.github.io/datapond/reference/db_read_arrow.md) | Read table directly as Arrow Table (bypasses DuckDB compute) |
+| [`db_write_arrow()`](https://cathalbyrnegit.github.io/datapond/reference/db_write_arrow.md) | Write Arrow Table/RecordBatch to DuckLake |
 
 ### Preview Operations
 
 | Function | Description |
 |----|----|
-| `db_preview_write()` | Preview write impact before executing |
+| [`db_preview_write()`](https://cathalbyrnegit.github.io/datapond/reference/db_preview_write.md) | Preview write impact before executing |
 | [`db_preview_upsert()`](https://cathalbyrnegit.github.io/datapond/reference/db_preview_upsert.md) | Preview inserts vs updates before executing |
 
 ### Discovery
@@ -427,30 +431,30 @@ memory used). Use the lazy approach for in-lake transformations.*
 | [`db_list_schemas()`](https://cathalbyrnegit.github.io/datapond/reference/db_list_schemas.md) | List schemas |
 | [`db_tables()`](https://cathalbyrnegit.github.io/datapond/reference/db_tables.md) | List tables in a schema |
 | [`db_list_views()`](https://cathalbyrnegit.github.io/datapond/reference/db_list_views.md) | List views in a schema |
-| `db_list_macros()` | List macros in a schema |
+| [`db_list_macros()`](https://cathalbyrnegit.github.io/datapond/reference/db_list_macros.md) | List macros in a schema |
 | [`db_table_exists()`](https://cathalbyrnegit.github.io/datapond/reference/db_table_exists.md) | Check if a table exists |
 | [`db_create_schema()`](https://cathalbyrnegit.github.io/datapond/reference/db_create_schema.md) | Create a new schema |
 
 ### Views & Macros
 
-| Function            | Description                             |
-|---------------------|-----------------------------------------|
-| `db_create_view()`  | Create a SQL view stored in the catalog |
-| `db_drop_view()`    | Drop a view                             |
-| `db_create_macro()` | Create a scalar or table macro          |
-| `db_drop_macro()`   | Drop a macro                            |
+| Function | Description |
+|----|----|
+| [`db_create_view()`](https://cathalbyrnegit.github.io/datapond/reference/db_create_view.md) | Create a SQL view stored in the catalog |
+| [`db_drop_view()`](https://cathalbyrnegit.github.io/datapond/reference/db_drop_view.md) | Drop a view |
+| [`db_create_macro()`](https://cathalbyrnegit.github.io/datapond/reference/db_create_macro.md) | Create a scalar or table macro |
+| [`db_drop_macro()`](https://cathalbyrnegit.github.io/datapond/reference/db_drop_macro.md) | Drop a macro |
 
 ### Documentation & Search
 
 | Function | Description |
 |----|----|
-| `db_comment()` | Add metadata to table/column (list for structured, string for simple) |
+| [`db_comment()`](https://cathalbyrnegit.github.io/datapond/reference/db_comment.md) | Add metadata to table/column (list for structured, string for simple) |
 | [`db_get_docs()`](https://cathalbyrnegit.github.io/datapond/reference/db_get_docs.md) | Retrieve documentation for a table |
 | [`db_dictionary()`](https://cathalbyrnegit.github.io/datapond/reference/db_dictionary.md) | Generate full data dictionary |
 | [`db_search()`](https://cathalbyrnegit.github.io/datapond/reference/db_search.md) | Search by name, description, owner, or tags |
 | [`db_search_columns()`](https://cathalbyrnegit.github.io/datapond/reference/db_search_columns.md) | Find columns by name across all tables |
-| `db_lineage()` | Record data lineage (sources and transformations) |
-| `db_get_lineage()` | Retrieve lineage information for a table |
+| [`db_lineage()`](https://cathalbyrnegit.github.io/datapond/reference/db_lineage.md) | Record data lineage (sources and transformations) |
+| [`db_get_lineage()`](https://cathalbyrnegit.github.io/datapond/reference/db_get_lineage.md) | Retrieve lineage information for a table |
 
 ### Partitioning & Clustering
 
@@ -458,22 +462,22 @@ memory used). Use the lazy approach for in-lake transformations.*
 |----|----|
 | [`db_set_partitioning()`](https://cathalbyrnegit.github.io/datapond/reference/db_set_partitioning.md) | Set or remove partitioning on a table |
 | [`db_get_partitioning()`](https://cathalbyrnegit.github.io/datapond/reference/db_get_partitioning.md) | Get current partition columns for a table |
-| `db_set_clustering()` | Set sort/clustering order for better query performance |
-| `db_recluster()` | Re-sort existing data to match clustering order |
+| [`db_set_clustering()`](https://cathalbyrnegit.github.io/datapond/reference/db_set_clustering.md) | Set sort/clustering order for better query performance |
+| [`db_recluster()`](https://cathalbyrnegit.github.io/datapond/reference/db_recluster.md) | Re-sort existing data to match clustering order |
 
 ### Data Inlining (Streaming)
 
 | Function | Description |
 |----|----|
-| `db_flush_inlined()` | Write inlined data to parquet files |
-| `db_set_inline_threshold()` | Configure auto-flush threshold for inlined data |
+| [`db_flush_inlined()`](https://cathalbyrnegit.github.io/datapond/reference/db_flush_inlined.md) | Write inlined data to parquet files |
+| [`db_set_inline_threshold()`](https://cathalbyrnegit.github.io/datapond/reference/db_set_inline_threshold.md) | Configure auto-flush threshold for inlined data |
 
 ### Iceberg Export (Experimental)
 
 | Function | Description |
 |----|----|
-| `db_export_iceberg()` | Export table to Iceberg format for Spark/Trino/Presto |
-| `db_iceberg_metadata()` | Get Iceberg-compatible metadata for a table |
+| [`db_export_iceberg()`](https://cathalbyrnegit.github.io/datapond/reference/db_export_iceberg.md) | Export table to Iceberg format for Spark/Trino/Presto |
+| [`db_iceberg_metadata()`](https://cathalbyrnegit.github.io/datapond/reference/db_iceberg_metadata.md) | Get Iceberg-compatible metadata for a table |
 
 ### Metadata & Maintenance
 
@@ -484,16 +488,16 @@ memory used). Use the lazy approach for in-lake transformations.*
 | [`db_table_cols()`](https://cathalbyrnegit.github.io/datapond/reference/db_table_cols.md) | Get column names for a table |
 | [`db_view_cols()`](https://cathalbyrnegit.github.io/datapond/reference/db_view_cols.md) | Get column names for a view |
 | [`db_diff()`](https://cathalbyrnegit.github.io/datapond/reference/db_diff.md) | Compare two snapshots (set-based) |
-| `db_changes()` | Get row-level changes via Data Change Feed |
-| `db_insertions()` | Get only inserted rows between snapshots |
-| `db_deletions()` | Get only deleted rows between snapshots |
+| [`db_changes()`](https://cathalbyrnegit.github.io/datapond/reference/db_changes.md) | Get row-level changes via Data Change Feed |
+| [`db_insertions()`](https://cathalbyrnegit.github.io/datapond/reference/db_insertions.md) | Get only inserted rows between snapshots |
+| [`db_deletions()`](https://cathalbyrnegit.github.io/datapond/reference/db_deletions.md) | Get only deleted rows between snapshots |
 | [`db_rollback()`](https://cathalbyrnegit.github.io/datapond/reference/db_rollback.md) | Restore table to a previous version |
 | [`db_vacuum()`](https://cathalbyrnegit.github.io/datapond/reference/db_vacuum.md) | Clean up old snapshots and unreferenced files |
-| `db_compact()` | Merge small Parquet files for better performance |
-| `db_file_stats()` | Get file counts and sizes to identify compaction candidates |
-| `db_cleanup_files()` | Remove orphaned files after vacuum or compact |
+| [`db_compact()`](https://cathalbyrnegit.github.io/datapond/reference/db_compact.md) | Merge small Parquet files for better performance |
+| [`db_file_stats()`](https://cathalbyrnegit.github.io/datapond/reference/db_file_stats.md) | Get file counts and sizes to identify compaction candidates |
+| [`db_cleanup_files()`](https://cathalbyrnegit.github.io/datapond/reference/db_cleanup_files.md) | Remove orphaned files after vacuum or compact |
 | [`db_query()`](https://cathalbyrnegit.github.io/datapond/reference/db_query.md) | Run arbitrary SQL |
-| `db_enable_logging()` | Enable DuckDB/DuckLake logging for debugging |
+| [`db_enable_logging()`](https://cathalbyrnegit.github.io/datapond/reference/db_enable_logging.md) | Enable DuckDB/DuckLake logging for debugging |
 
 ### Interactive Tools
 

@@ -1,6 +1,6 @@
-# Search for datasets or tables
+# Search for tables
 
-Search for datasets/tables by name, description, owner, or tags.
+Search for tables by name, description, owner, or tags.
 
 ## Usage
 
@@ -21,7 +21,7 @@ db_search(pattern, field = c("all", "name", "description", "owner", "tags"))
 
 ## Value
 
-A data.frame of matching datasets/tables with their documentation
+A data.frame of matching tables with their documentation
 
 ## Examples
 

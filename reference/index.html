@@ -78,10 +78,45 @@
 
         <dt>
 
+          <code><a href="db_changes.html">db_changes()</a></code>
+
+        </dt>
+        <dd>Get row-level changes from the Data Change Feed</dd>
+
+        <dt>
+
+          <code><a href="db_cleanup_files.html">db_cleanup_files()</a></code>
+
+        </dt>
+        <dd>Clean up orphaned files from DuckLake storage</dd>
+
+        <dt>
+
+          <code><a href="db_comment.html">db_comment()</a></code>
+
+        </dt>
+        <dd>Add comment/metadata to table or column</dd>
+
+        <dt>
+
+          <code><a href="db_compact.html">db_compact()</a></code>
+
+        </dt>
+        <dd>Compact small files in a DuckLake table</dd>
+
+        <dt>
+
           <code><a href="db_connect.html">db_connect()</a></code>
 
         </dt>
-        <dd>Connect to the CSO hive parquet lake</dd>
+        <dd>Connect to a DuckLake data lake</dd>
+
+        <dt>
+
+          <code><a href="db_create_macro.html">db_create_macro()</a></code>
+
+        </dt>
+        <dd>Create a macro in DuckLake</dd>
 
         <dt>
 
@@ -89,6 +124,20 @@
 
         </dt>
         <dd>Create a new schema in DuckLake</dd>
+
+        <dt>
+
+          <code><a href="db_create_view.html">db_create_view()</a></code>
+
+        </dt>
+        <dd>Create a view in DuckLake</dd>
+
+        <dt>
+
+          <code><a href="db_deletions.html">db_deletions()</a></code>
+
+        </dt>
+        <dd>Get deleted rows from the Data Change Feed</dd>
 
         <dt>
 
@@ -113,10 +162,59 @@
 
         <dt>
 
+          <code><a href="db_drop_macro.html">db_drop_macro()</a></code>
+
+        </dt>
+        <dd>Drop a macro from DuckLake</dd>
+
+        <dt>
+
+          <code><a href="db_drop_view.html">db_drop_view()</a></code>
+
+        </dt>
+        <dd>Drop a view from DuckLake</dd>
+
+        <dt>
+
+          <code><a href="db_enable_logging.html">db_enable_logging()</a></code>
+
+        </dt>
+        <dd>Enable DuckDB/DuckLake logging</dd>
+
+        <dt>
+
+          <code><a href="db_export_iceberg.html">db_export_iceberg()</a></code>
+
+        </dt>
+        <dd>Export a DuckLake table as Iceberg format (EXPERIMENTAL)</dd>
+
+        <dt>
+
+          <code><a href="db_file_stats.html">db_file_stats()</a></code>
+
+        </dt>
+        <dd>Get file statistics for DuckLake tables</dd>
+
+        <dt>
+
+          <code><a href="db_flush_inlined.html">db_flush_inlined()</a></code>
+
+        </dt>
+        <dd>Flush inlined data to parquet files</dd>
+
+        <dt>
+
           <code><a href="db_get_docs.html">db_get_docs()</a></code>
 
         </dt>
-        <dd>Get documentation for a dataset or table</dd>
+        <dd>Get documentation for a table</dd>
+
+        <dt>
+
+          <code><a href="db_get_lineage.html">db_get_lineage()</a></code>
+
+        </dt>
+        <dd>Get lineage information</dd>
 
         <dt>
 
@@ -124,6 +222,34 @@
 
         </dt>
         <dd>Get partitioning configuration for a DuckLake table</dd>
+
+        <dt>
+
+          <code><a href="db_iceberg_metadata.html">db_iceberg_metadata()</a></code>
+
+        </dt>
+        <dd>Get Iceberg metadata for a DuckLake table</dd>
+
+        <dt>
+
+          <code><a href="db_insertions.html">db_insertions()</a></code>
+
+        </dt>
+        <dd>Get inserted rows from the Data Change Feed</dd>
+
+        <dt>
+
+          <code><a href="db_lineage.html">db_lineage()</a></code>
+
+        </dt>
+        <dd>Record data lineage</dd>
+
+        <dt>
+
+          <code><a href="db_list_macros.html">db_list_macros()</a></code>
+
+        </dt>
+        <dd>List macros in a DuckLake schema</dd>
 
         <dt>
 
@@ -148,10 +274,38 @@
 
         <dt>
 
+          <code><a href="db_preview_write.html">db_preview_write()</a></code>
+
+        </dt>
+        <dd>Preview a DuckLake write operation</dd>
+
+        <dt>
+
           <code><a href="db_query.html">db_query()</a></code>
 
         </dt>
         <dd>Run arbitrary SQL and return results</dd>
+
+        <dt>
+
+          <code><a href="db_read.html">db_read()</a></code>
+
+        </dt>
+        <dd>Read a DuckLake table (lazy)</dd>
+
+        <dt>
+
+          <code><a href="db_read_arrow.html">db_read_arrow()</a></code>
+
+        </dt>
+        <dd>Read a DuckLake table as an Arrow Table</dd>
+
+        <dt>
+
+          <code><a href="db_recluster.html">db_recluster()</a></code>
+
+        </dt>
+        <dd>Re-cluster table data</dd>
 
         <dt>
 
@@ -165,14 +319,28 @@
           <code><a href="db_search.html">db_search()</a></code>
 
         </dt>
-        <dd>Search for datasets or tables</dd>
+        <dd>Search for tables</dd>
 
         <dt>
 
           <code><a href="db_search_columns.html">db_search_columns()</a></code>
 
         </dt>
-        <dd>Search for columns</dd>
+        <dd>Search for columns by name</dd>
+
+        <dt>
+
+          <code><a href="db_set_clustering.html">db_set_clustering()</a></code>
+
+        </dt>
+        <dd>Set sort order for a table</dd>
+
+        <dt>
+
+          <code><a href="db_set_inline_threshold.html">db_set_inline_threshold()</a></code>
+
+        </dt>
+        <dd>Set the inline threshold for a table, schema, or globally</dd>
 
         <dt>
 
@@ -236,6 +404,20 @@
 
         </dt>
         <dd>Get column names for a DuckLake view</dd>
+
+        <dt>
+
+          <code><a href="db_write.html">db_write()</a></code>
+
+        </dt>
+        <dd>Write a DuckLake table (overwrite/append)</dd>
+
+        <dt>
+
+          <code><a href="db_write_arrow.html">db_write_arrow()</a></code>
+
+        </dt>
+        <dd>Write an Arrow Table to DuckLake</dd>
 
         <dt>
 

@@ -27,7 +27,7 @@ Query results as data.frame or lazy tbl
 
 ``` r
 if (FALSE) { # \dontrun{
-db_lake_connect()
+db_connect()
 
 # Run a custom query
 db_query("SELECT * FROM main.products WHERE price > 100")

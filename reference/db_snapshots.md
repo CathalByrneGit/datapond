@@ -17,7 +17,7 @@ A data.frame of snapshot information
 
 ``` r
 if (FALSE) { # \dontrun{
-db_lake_connect()
+db_connect()
 db_snapshots()
 } # }
 ```

@@ -26,7 +26,7 @@ Invisibly returns the schema name
 
 ``` r
 if (FALSE) { # \dontrun{
-db_lake_connect(data_path = "//CSO-NAS/DataLake")
+db_connect(data_path = "//CSO-NAS/DataLake")
 
 db_create_schema("trade")
 db_create_schema("labour")

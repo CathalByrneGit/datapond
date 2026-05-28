@@ -1,7 +1,7 @@
 # Get connection status and configuration
 
-Returns information about the current connection state, including mode
-(hive/ducklake), paths, and connection validity.
+Returns information about the current connection state, including paths,
+catalog configuration, and connection validity.
 
 ## Usage
 
@@ -24,7 +24,7 @@ A list (invisibly if verbose=TRUE) containing connection details.
 
 ``` r
 if (FALSE) { # \dontrun{
-db_lake_connect()
+db_connect()
 db_status()
 } # }
 ```

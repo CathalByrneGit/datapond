@@ -520,7 +520,8 @@ db_enable_logging(TRUE, log_type = "all")
 
 ### 15. Zero-Copy Transforms (Lazy Tables)
 
-`db_write()` supports two approaches for writing data:
+[`db_write()`](https://cathalbyrnegit.github.io/datapond/reference/db_write.md)
+supports two approaches for writing data:
 
 **Approach 1: data.frame (data passes through R)**
 
@@ -882,10 +883,10 @@ db_cleanup_files(dry_run = FALSE)
 
 | Operation | Frequency | Purpose |
 |----|----|----|
-| `db_file_stats()` | Weekly | Monitor file fragmentation |
-| `db_compact()` | Monthly or after bulk loads | Merge small files |
+| [`db_file_stats()`](https://cathalbyrnegit.github.io/datapond/reference/db_file_stats.md) | Weekly | Monitor file fragmentation |
+| [`db_compact()`](https://cathalbyrnegit.github.io/datapond/reference/db_compact.md) | Monthly or after bulk loads | Merge small files |
 | [`db_vacuum()`](https://cathalbyrnegit.github.io/datapond/reference/db_vacuum.md) | Monthly | Remove old snapshots |
-| `db_cleanup_files()` | After vacuum or compact | Reclaim disk space |
+| [`db_cleanup_files()`](https://cathalbyrnegit.github.io/datapond/reference/db_cleanup_files.md) | After vacuum or compact | Reclaim disk space |
 
 ------------------------------------------------------------------------
 
