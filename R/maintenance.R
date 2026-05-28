@@ -312,7 +312,7 @@ db_compact <- function(schema = "main", table = NULL, max_files = NULL) {
 #' }
 #' @seealso [db_compact()] to merge small files
 #' @export
-db_file_stats <- function(schema = "main", table = NULL) {
+db_file_stats <- function(schema = NULL, table = NULL) {
   con <- .db_get_con()
   if (is.null(con)) {
     stop("Not connected. Use db_connect() first.", call. = FALSE)
@@ -323,80 +323,101 @@ db_file_stats <- function(schema = "main", table = NULL) {
     stop("No DuckLake catalog configured. Use db_connect() first.", call. = FALSE)
   }
 
-  # Validate filter params first
- schema_filter <- if (!is.null(schema)) .db_validate_name(schema, "schema") else NULL
+  # Validate filter params
+  schema_filter <- if (!is.null(schema)) .db_validate_name(schema, "schema") else NULL
   table_filter <- if (!is.null(table)) .db_validate_name(table, "table") else NULL
 
-  # Query DuckLake internal metadata tables directly for reliable column names
-  # DuckLake stores metadata in memory database, not in the attached catalog
-  metadata_schema <- paste0("memory.__ducklake_metadata_", catalog)
+  # Use ducklake_list_files to get file info - this is the documented API
+  # We need to get the list of tables first, then aggregate file stats per table
 
-  # Build query with optional filters
-  where_clauses <- "1=1"
-  if (!is.null(schema_filter)) {
-    where_clauses <- paste0(where_clauses, " AND s.schema_name = ", .db_sql_quote(schema_filter))
-  }
-  if (!is.null(table_filter)) {
-    where_clauses <- paste0(where_clauses, " AND t.table_name = ", .db_sql_quote(table_filter))
-  }
-
-  sql <- glue::glue("
-    SELECT
-      s.schema_name,
-      t.table_name,
-      COUNT(f.file_id) AS file_count,
-      COALESCE(SUM(f.row_count), 0) AS total_rows,
-      COALESCE(SUM(f.file_size_bytes), 0) AS total_bytes
-    FROM {metadata_schema}.ducklake_table t
-    JOIN {metadata_schema}.ducklake_schema s ON t.schema_id = s.schema_id
-    LEFT JOIN {metadata_schema}.ducklake_data_file f ON t.table_id = f.table_id
-    WHERE {where_clauses}
-    GROUP BY s.schema_name, t.table_name
-    ORDER BY s.schema_name, t.table_name
-  ")
-
-  info <- tryCatch({
-    DBI::dbGetQuery(con, sql)
-  }, error = function(e) {
-    # Fallback: try ducklake_table_info if direct query fails
-    fallback_sql <- glue::glue("FROM ducklake_table_info({.db_sql_quote(catalog)})")
-    fallback_info <- DBI::dbGetQuery(con, fallback_sql)
-
-    # Normalize column names and apply filters manually
-    names(fallback_info) <- tolower(names(fallback_info))
-
-    # Find schema column
-    schema_col <- NULL
-    for (col in c("schema_name", "schema", "table_schema")) {
-      if (col %in% names(fallback_info)) {
-        schema_col <- col
-        break
+  # Get list of tables using SHOW TABLES
+  if (!is.null(table_filter) && !is.null(schema_filter)) {
+    # Specific table requested
+    tables <- data.frame(
+      schema_name = schema_filter,
+      table_name = table_filter,
+      stringsAsFactors = FALSE
+    )
+  } else {
+    # Get all tables from catalog
+    tables_sql <- glue::glue("SELECT table_schema AS schema_name, table_name FROM information_schema.tables WHERE table_catalog = {.db_sql_quote(catalog)} AND table_type = 'BASE TABLE'")
+    tables <- tryCatch({
+      DBI::dbGetQuery(con, tables_sql)
+    }, error = function(e) {
+      # Fallback to SHOW TABLES if information_schema doesn't work
+      show_sql <- glue::glue("SHOW TABLES FROM {catalog}.main")
+      result <- DBI::dbGetQuery(con, show_sql)
+      if (nrow(result) > 0) {
+        data.frame(schema_name = "main", table_name = result[[1]], stringsAsFactors = FALSE)
+      } else {
+        data.frame(schema_name = character(), table_name = character(), stringsAsFactors = FALSE)
       }
-    }
+    })
 
-    # Find table column
-    table_col <- NULL
-    for (col in c("table_name", "table", "name")) {
-      if (col %in% names(fallback_info)) {
-        table_col <- col
-        break
-      }
+    # Apply schema filter
+    if (!is.null(schema_filter) && "schema_name" %in% names(tables)) {
+      tables <- tables[tables$schema_name == schema_filter, , drop = FALSE]
     }
+  }
 
-    # Apply filters
-    if (!is.null(schema_filter) && !is.null(schema_col)) {
-      fallback_info <- fallback_info[fallback_info[[schema_col]] == schema_filter, , drop = FALSE]
-    }
-    if (!is.null(table_filter) && !is.null(table_col)) {
-      fallback_info <- fallback_info[fallback_info[[table_col]] == table_filter, , drop = FALSE]
-    }
+  if (nrow(tables) == 0) {
+    return(data.frame(
+      schema_name = character(),
+      table_name = character(),
+      file_count = integer(),
+      total_rows = numeric(),
+      total_bytes = numeric(),
+      avg_file_bytes = numeric(),
+      avg_rows_per_file = numeric(),
+      stringsAsFactors = FALSE
+    ))
+  }
 
-    # Rename columns to expected names
-    if (!is.null(schema_col) && schema_col != "schema_name") {
-      names(fallback_info)[names(fallback_info) == schema_col] <- "schema_name"
-    }
-    if (!is.null(table_col) && table_col != "table_name") {
-      names(fallback_info)[names(fallback_info) == table_col] <- "table_name"
+  # Get file stats for each table using ducklake_list_files
+  results <- lapply(seq_len(nrow(tables)), function(i) {
+    tbl_schema <- tables$schema_name[i]
+    tbl_name <- tables$table_name[i]
+
+    files_sql <- glue::glue("
+      SELECT
+        COUNT(*) AS file_count,
+        COALESCE(SUM(row_count), 0) AS total_rows,
+        COALESCE(SUM(file_size_bytes), 0) AS total_bytes
+      FROM ducklake_list_files({.db_sql_quote(catalog)}, {.db_sql_quote(tbl_name)}, schema => {.db_sql_quote(tbl_schema)})
+      WHERE data_file IS NOT NULL
+    ")
+
+    tryCatch({
+      stats <- DBI::dbGetQuery(con, files_sql)
+      data.frame(
+        schema_name = tbl_schema,
+        table_name = tbl_name,
+        file_count = as.integer(stats$file_count[1]),
+        total_rows = as.numeric(stats$total_rows[1]),
+        total_bytes = as.numeric(stats$total_bytes[1]),
+        stringsAsFactors = FALSE
+      )
+    }, error = function(e) {
+      # Table might have no files (inlined data only)
+      data.frame(
+        schema_name = tbl_schema,
+        table_name = tbl_name,
+        file_count = 0L,
+        total_rows = 0,
+        total_bytes = 0,
+        stringsAsFactors = FALSE
+      )
+    })
+  })
+
+  info <- do.call(rbind, results)
+
+  # Calculate averages
+  info$avg_file_bytes <- ifelse(info$file_count > 0, info$total_bytes / info$file_count, 0)
+  info$avg_rows_per_file <- ifelse(info$file_count > 0, info$total_rows / info$file_count, 0)
+
+  info
+}
     }
 
     fallback_info
