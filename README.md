@@ -139,11 +139,20 @@ db_upsert(
 # View snapshot history
 db_snapshots()
 
-# Compare versions
+# Compare versions (set-based)
 diff <- db_diff(schema = "trade", table = "imports",
                 from_version = 5, to_version = 10)
 diff$added
 diff$removed
+
+# Get row-level changes via Data Change Feed (more efficient)
+changes <- db_changes(schema = "trade", table = "imports",
+                      from_version = 5, to_version = 10)
+# Returns: snapshot_id, rowid, change_type (insert/delete/update_*), plus all columns
+
+# Filter to just inserts
+new_rows <- db_changes(table = "imports", from_version = 5,
+                       change_types = "insert")
 
 # Rollback if something went wrong
 db_rollback(schema = "trade", table = "imports", version = 5)
@@ -437,7 +446,8 @@ db_write(imports_data, schema = "trade", table = "imports")
 | `db_catalog()` | Table info and stats |
 | `db_table_cols()` | Get column names for a table |
 | `db_view_cols()` | Get column names for a view |
-| `db_diff()` | Compare two snapshots |
+| `db_diff()` | Compare two snapshots (set-based) |
+| `db_changes()` | Get row-level changes via Data Change Feed |
 | `db_rollback()` | Restore table to a previous version |
 | `db_vacuum()` | Clean up old snapshots and unreferenced files |
 | `db_compact()` | Merge small Parquet files for better performance |

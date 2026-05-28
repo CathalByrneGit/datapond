@@ -54,8 +54,34 @@ db_read_arrow <- function(schema = "main",
   files <- .db_get_table_files(con, catalog, schema, table)
 
   if (length(files) == 0) {
-    # Empty table - return empty result with correct schema
-    col_info <- db_table_cols(schema = schema, table = table)
+    # No parquet files - data may be inlined or table may be empty
+    # Check if table has data by querying DuckDB
+    qualified <- paste0(catalog, ".", schema, ".", table)
+    count_sql <- glue::glue("SELECT COUNT(*) AS n FROM {qualified}")
+    row_count <- tryCatch({
+      DBI::dbGetQuery(con, count_sql)$n
+    }, error = function(e) 0)
+
+    if (row_count > 0) {
+      # Data exists but is inlined - fall back to DuckDB query
+      message("Note: Table has inlined data (no parquet files). ",
+              "Reading via DuckDB instead of Arrow. ",
+              "Use db_flush_inlined() to write data to parquet files.")
+
+      if (!is.null(columns)) {
+        col_list <- paste(DBI::dbQuoteIdentifier(con, columns), collapse = ", ")
+        sql <- glue::glue("SELECT {col_list} FROM {qualified}")
+      } else {
+        sql <- glue::glue("SELECT * FROM {qualified}")
+      }
+      result <- DBI::dbGetQuery(con, sql)
+
+      if (as_data_frame) return(result)
+      return(arrow::as_arrow_table(result))
+    }
+
+    # Table is truly empty - return empty result with correct schema
+    col_info <- if (!is.null(columns)) columns else db_table_cols(schema = schema, table = table)
     empty_df <- data.frame(matrix(ncol = length(col_info), nrow = 0))
     names(empty_df) <- col_info
     if (as_data_frame) return(empty_df)
