@@ -170,3 +170,124 @@ test_that("db_write_arrow writes Arrow Table", {
   clean_db_env()
   cleanup_test_lake(lake)
 })
+
+# ==============================================================================
+# Tests for inlined data handling
+# ==============================================================================
+
+test_that("db_read_arrow handles inlined data by falling back to DuckDB", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  skip_if_not(requireNamespace("arrow", quietly = TRUE), "arrow package not available")
+
+  clean_db_env()
+  lake <- create_test_lake("arrow_inlined")
+
+  db_connect(
+    catalog = "test",
+    metadata_path = lake$metadata_path,
+    data_path = lake$data_path
+  )
+
+  # Write small data (will be auto-inlined by DuckLake)
+  test_data <- data.frame(id = 1:3, value = c(10, 20, 30))
+  db_write(test_data, table = "small_table")
+
+  # Should read data even though it's inlined (fallback to DuckDB)
+  expect_message(
+    result <- db_read_arrow(table = "small_table"),
+    "inlined data|Reading via DuckDB"
+  )
+
+  expect_equal(nrow(result), 3)
+  expect_true("id" %in% names(result))
+  expect_true("value" %in% names(result))
+
+  clean_db_env()
+  cleanup_test_lake(lake)
+})
+
+test_that("db_read_arrow with inlined data respects column selection", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  skip_if_not(requireNamespace("arrow", quietly = TRUE), "arrow package not available")
+
+  clean_db_env()
+  lake <- create_test_lake("arrow_inlined_cols")
+
+  db_connect(
+    catalog = "test",
+    metadata_path = lake$metadata_path,
+    data_path = lake$data_path
+  )
+
+  # Write small data (will be auto-inlined)
+  test_data <- data.frame(id = 1:3, value = c(10, 20, 30), name = c("a", "b", "c"))
+  db_write(test_data, table = "small_table")
+
+  # Read with column selection
+  result <- suppressMessages(
+    db_read_arrow(table = "small_table", columns = c("id", "name"))
+  )
+
+  expect_true("id" %in% names(result))
+  expect_true("name" %in% names(result))
+  expect_false("value" %in% names(result))
+
+  clean_db_env()
+  cleanup_test_lake(lake)
+})
+
+test_that("db_read_arrow returns empty result for empty table", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  skip_if_not(requireNamespace("arrow", quietly = TRUE), "arrow package not available")
+
+  clean_db_env()
+  lake <- create_test_lake("arrow_empty")
+
+  db_connect(
+    catalog = "test",
+    metadata_path = lake$metadata_path,
+    data_path = lake$data_path
+  )
+
+  # Create empty table via SQL
+  con <- datapond:::.db_get_con()
+  DBI::dbExecute(con, "CREATE TABLE test.main.empty_table (id INTEGER, value DOUBLE)")
+
+  result <- db_read_arrow(table = "empty_table")
+
+  expect_equal(nrow(result), 0)
+  expect_true("id" %in% names(result))
+  expect_true("value" %in% names(result))
+
+  clean_db_env()
+  cleanup_test_lake(lake)
+})
+
+test_that("db_read_arrow empty table respects column filtering", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  skip_if_not(requireNamespace("arrow", quietly = TRUE), "arrow package not available")
+
+  clean_db_env()
+  lake <- create_test_lake("arrow_empty_cols")
+
+  db_connect(
+    catalog = "test",
+    metadata_path = lake$metadata_path,
+    data_path = lake$data_path
+  )
+
+  # Create empty table
+  con <- datapond:::.db_get_con()
+  DBI::dbExecute(con, "CREATE TABLE test.main.empty_table (id INTEGER, value DOUBLE, name VARCHAR)")
+
+  # Read with column selection
+  result <- db_read_arrow(table = "empty_table", columns = c("id", "name"))
+
+  expect_equal(nrow(result), 0)
+  expect_true("id" %in% names(result))
+  expect_true("name" %in% names(result))
+  expect_false("value" %in% names(result))
+
+  clean_db_env()
+  cleanup_test_lake(lake)
+})
