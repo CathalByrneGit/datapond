@@ -61,22 +61,32 @@ ducklake_version <- function() {
 
     if (nrow(result) > 0 && !is.na(result$extension_version[1]) && nzchar(result$extension_version[1])) {
       ver <- gsub("^v", "", as.character(result$extension_version[1]))
-      # Check if it looks like a version (starts with digit)
-      if (grepl("^[0-9]", ver)) {
+      # Check if it looks like a version (starts with digit, has dots)
+      if (grepl("^[0-9]+\\.[0-9]", ver)) {
         return(ver)
       }
     }
 
-    # Fallback: infer from DuckDB version using compatibility matrix
-    # DuckDB 1.5.x -> DuckLake 1.0
-    # DuckDB 1.4.x -> DuckLake 0.3
-    # DuckDB 1.3.x -> DuckLake 0.2
+    # Fallback: get DuckDB version
     duckdb_ver_raw <- DBI::dbGetQuery(con, "SELECT version() AS v")$v[1]
-    # Extract version number (e.g., "v1.5.0-dev (abc123)" -> "1.5.0")
+
+    # Extract version number - handle formats like:
+    # "v1.5.0" -> "1.5.0"
+    # "v1.5.0-dev123" -> "1.5.0"
+    # "415a9ebd" (commit hash) -> assume latest
     duckdb_ver <- gsub("^v", "", duckdb_ver_raw)
     duckdb_ver <- gsub("\\s.*$", "", duckdb_ver)  # Remove everything after space
     duckdb_ver <- gsub("-.*$", "", duckdb_ver)    # Remove -dev suffix
 
+    # If it's just a hex commit hash (no dots), assume it's a dev build = latest
+    if (!grepl("\\.", duckdb_ver) && grepl("^[0-9a-f]+$", duckdb_ver, ignore.case = TRUE)) {
+      return("1.0.0")  # Assume dev build has latest features
+    }
+
+    # Infer DuckLake version from DuckDB version using compatibility matrix
+    # DuckDB 1.5.x+ -> DuckLake 1.0
+    # DuckDB 1.4.x -> DuckLake 0.3
+    # DuckDB 1.3.x -> DuckLake 0.2
     if (grepl("^1\\.5", duckdb_ver) || grepl("^1\\.[6-9]", duckdb_ver) || grepl("^[2-9]", duckdb_ver)) {
       return("1.0.0")
     } else if (grepl("^1\\.4", duckdb_ver)) {
@@ -88,7 +98,6 @@ ducklake_version <- function() {
     }
 
     # If we still can't parse, assume latest if DuckLake loads successfully
-    # (the fact that INSTALL/LOAD worked means we have a working version)
     "1.0.0"
   }, error = function(e) NA_character_)
 }
