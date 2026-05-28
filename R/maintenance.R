@@ -776,6 +776,124 @@ db_diff <- function(schema = "main",
 }
 
 
+#' Get row-level changes from the Data Change Feed
+#'
+#' @description Uses DuckLake's native Data Change Feed to retrieve row-level
+#' changes between snapshots. More efficient than `db_diff()` and provides
+#' detailed change types (insert, delete, update_preimage, update_postimage).
+#'
+#' @param schema Schema name (default "main")
+#' @param table Table name
+#' @param from_version Starting snapshot version (inclusive)
+#' @param to_version Ending snapshot version (inclusive, default: current)
+#' @param change_types Character vector of change types to include.
+#'   Options: "insert", "delete", "update_preimage", "update_postimage".
+#'   Default includes all types.
+#' @param collect If TRUE (default), returns collected data.frame.
+#'   If FALSE, returns lazy tbl reference.
+#' @return A data.frame with columns: snapshot_id, rowid, change_type, plus
+#'   all columns from the table.
+#' @examples
+#' \dontrun{
+#' db_connect()
+#'
+#' # Get all changes between versions 1 and 5
+#' changes <- db_changes(table = "products", from_version = 1, to_version = 5)
+#'
+#' # See only inserts
+#' inserts <- db_changes(table = "products", from_version = 1,
+#'                       change_types = "insert")
+#'
+#' # See updates (before and after)
+#' updates <- db_changes(table = "products", from_version = 1,
+#'                       change_types = c("update_preimage", "update_postimage"))
+#' }
+#' @seealso [db_diff()] for set-based comparison, [db_snapshots()] to list versions
+#' @export
+db_changes <- function(schema = "main",
+                       table,
+                       from_version,
+                       to_version = NULL,
+                       change_types = c("insert", "delete", "update_preimage", "update_postimage"),
+                       collect = TRUE) {
+
+  schema <- .db_validate_name(schema, "schema")
+  table  <- .db_validate_name(table, "table")
+
+  con <- .db_get_con()
+  if (is.null(con)) {
+    stop("Not connected. Use db_connect() first.", call. = FALSE)
+  }
+
+  catalog <- .db_get("catalog")
+  if (is.null(catalog)) {
+    stop("No DuckLake catalog configured. Use db_connect() first.", call. = FALSE)
+  }
+
+  from_version <- as.integer(from_version)
+  if (is.na(from_version) || from_version < 0) {
+    stop("from_version must be a non-negative integer.", call. = FALSE)
+  }
+
+  # Get current version if to_version not specified
+  if (is.null(to_version)) {
+    snapshots <- db_snapshots(schema = schema, table = table)
+    if (nrow(snapshots) == 0) {
+      stop("No snapshots found for table ", schema, ".", table, call. = FALSE)
+    }
+    to_version <- max(snapshots$snapshot_id, na.rm = TRUE)
+  } else {
+    to_version <- as.integer(to_version)
+    if (is.na(to_version) || to_version < from_version) {
+      stop("to_version must be >= from_version.", call. = FALSE)
+    }
+  }
+
+  # Validate change_types
+  valid_types <- c("insert", "delete", "update_preimage", "update_postimage")
+  change_types <- match.arg(change_types, valid_types, several.ok = TRUE)
+
+  # Build the table_changes query
+  qname <- glue::glue("{catalog}.{schema}.{table}")
+  sql <- glue::glue("
+    SELECT *
+    FROM {catalog}.table_changes({.db_sql_quote(table)}, {from_version}, {to_version}, schema => {.db_sql_quote(schema)})
+  ")
+
+  # Filter by change_types if not all
+  if (length(change_types) < 4) {
+    types_sql <- paste(sapply(change_types, .db_sql_quote), collapse = ", ")
+    sql <- glue::glue("{sql} WHERE change_type IN ({types_sql})")
+  }
+
+  result <- tryCatch({
+    if (collect) {
+      DBI::dbGetQuery(con, sql)
+    } else {
+      dplyr::tbl(con, dplyr::sql(sql))
+    }
+  }, error = function(e) {
+    if (grepl("table_changes|not found|does not exist", e$message, ignore.case = TRUE)) {
+      stop("Data Change Feed not available. Requires DuckLake 1.0+. ",
+           "Use db_diff() for set-based comparison instead.", call. = FALSE)
+    }
+    stop(e)
+  })
+
+  if (collect && nrow(result) > 0) {
+    cat("\n-- Change Feed Summary --\n")
+    cat("From version:", from_version, "-> To version:", to_version, "\n")
+    for (ct in change_types) {
+      count <- sum(result$change_type == ct, na.rm = TRUE)
+      cat(sprintf("  %-20s %d\n", paste0(ct, ":"), count))
+    }
+    cat("\n")
+  }
+
+  result
+}
+
+
 # ---- Query Helper ----
 
 #' Run arbitrary SQL and return results

@@ -788,3 +788,143 @@ test_that("db_cleanup_files runs without error", {
   clean_db_env()
   unlink(temp_dir, recursive = TRUE)
 })
+
+# ==============================================================================
+# Tests for db_changes() - Data Change Feed
+# ==============================================================================
+
+test_that("db_changes errors when not connected", {
+  clean_db_env()
+
+  expect_error(db_changes(table = "test", from_version = 1), "Not connected")
+})
+
+test_that("db_changes validates arguments", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  lake <- create_test_lake("changes_valid")
+
+  db_connect(
+    catalog = "test",
+    metadata_path = lake$metadata_path,
+    data_path = lake$data_path
+  )
+
+  # Invalid table name
+
+  expect_error(db_changes(table = "", from_version = 1), "non-empty")
+  expect_error(db_changes(table = "test; DROP", from_version = 1), "dangerous")
+
+  # Invalid from_version
+  expect_error(db_changes(table = "test", from_version = -1), "non-negative")
+  expect_error(db_changes(table = "test", from_version = "abc"), "non-negative")
+
+  clean_db_env()
+  cleanup_test_lake(lake)
+})
+
+test_that("db_changes validates to_version >= from_version", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+
+  lake <- create_test_lake("changes_version")
+
+  db_connect(
+    catalog = "test",
+    metadata_path = lake$metadata_path,
+    data_path = lake$data_path
+  )
+
+  db_write(data.frame(id = 1:3), table = "test_table")
+
+  expect_error(
+    db_changes(table = "test_table", from_version = 5, to_version = 2),
+    "to_version must be >= from_version"
+  )
+
+  clean_db_env()
+  cleanup_test_lake(lake)
+})
+
+test_that("db_changes returns changes with correct columns", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  skip("Data Change Feed (table_changes) may not be available in all DuckLake versions")
+  clean_db_env()
+
+  lake <- create_test_lake("changes_cols")
+
+  db_connect(
+    catalog = "test",
+    metadata_path = lake$metadata_path,
+    data_path = lake$data_path
+  )
+
+  # Create and populate table
+  db_write(data.frame(id = 1:3, value = c(10, 20, 30)), table = "items")
+  v1 <- max(db_snapshots(table = "items")$snapshot_id)
+
+  # Append more data
+  db_write(data.frame(id = 4:5, value = c(40, 50)), table = "items", mode = "append")
+  v2 <- max(db_snapshots(table = "items")$snapshot_id)
+
+  # Get changes
+  changes <- db_changes(table = "items", from_version = v1, to_version = v2)
+
+  # Should have Data Change Feed columns
+  expect_true("change_type" %in% names(changes))
+  expect_true("snapshot_id" %in% names(changes))
+  # And table columns
+  expect_true("id" %in% names(changes))
+  expect_true("value" %in% names(changes))
+
+  clean_db_env()
+  cleanup_test_lake(lake)
+})
+
+test_that("db_changes filters by change_types", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  skip("Data Change Feed (table_changes) may not be available in all DuckLake versions")
+  clean_db_env()
+
+  lake <- create_test_lake("changes_filter")
+
+  db_connect(
+    catalog = "test",
+    metadata_path = lake$metadata_path,
+    data_path = lake$data_path
+  )
+
+  db_write(data.frame(id = 1:3, value = c(10, 20, 30)), table = "items")
+
+  # Get only inserts
+  changes <- db_changes(table = "items", from_version = 0, change_types = "insert")
+
+  expect_true(all(changes$change_type == "insert"))
+
+  clean_db_env()
+  cleanup_test_lake(lake)
+})
+
+test_that("db_changes collect=FALSE returns lazy tbl", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  skip("Data Change Feed (table_changes) may not be available in all DuckLake versions")
+  clean_db_env()
+
+  lake <- create_test_lake("changes_lazy")
+
+  db_connect(
+    catalog = "test",
+    metadata_path = lake$metadata_path,
+    data_path = lake$data_path
+  )
+
+  db_write(data.frame(id = 1:3), table = "items")
+
+  changes <- db_changes(table = "items", from_version = 0, collect = FALSE)
+
+  expect_true(inherits(changes, "tbl_lazy") || inherits(changes, "tbl_sql"))
+
+  clean_db_env()
+  cleanup_test_lake(lake)
+})

@@ -162,6 +162,11 @@
 #'   `catalog_type = "quack"`.
 #' @param snapshot_version Optional integer snapshot version to attach at
 #' @param snapshot_time Optional timestamp string to attach at (e.g. "2025-05-26 00:00:00")
+#' @param encrypted If TRUE, enables encryption for all data files written to the
+#'   data path. DuckLake auto-generates unique AES encryption keys per parquet file
+#'   and stores them in the catalog. This enables zero-trust data hosting where
+#'   data files can reside on untrusted storage. Keys are automatically retrieved
+#'   from the catalog when reading encrypted files.
 #' @param threads Number of DuckDB threads (NULL leaves default)
 #' @param memory_limit e.g. "4GB" (NULL leaves default)
 #' @param load_extensions character vector of extensions to install/load, e.g. c("httpfs")
@@ -210,6 +215,14 @@
 #'   metadata_path = "quack:db-server.cso.ie:9494/catalog.ducklake",
 #'   data_path = "//CSO-NAS/DataLake/data"
 #' )
+#'
+#' # Encrypted mode - zero-trust data hosting
+#' # Keys are auto-generated per file and stored in the catalog
+#' db_connect(
+#'   metadata_path = "//secure-server/catalog.sqlite",
+#'   data_path = "//untrusted-storage/data",
+#'   encrypted = TRUE
+#' )
 #' }
 #' @export
 db_connect <- function(duckdb_db = ":memory:",
@@ -220,6 +233,7 @@ db_connect <- function(duckdb_db = ":memory:",
                        quack_token = NULL,
                        snapshot_version = NULL,
                        snapshot_time = NULL,
+                       encrypted = FALSE,
                        threads = NULL,
                        memory_limit = NULL,
                        load_extensions = NULL) {
@@ -300,6 +314,9 @@ db_connect <- function(duckdb_db = ":memory:",
   # Build ATTACH options
   attach_opts <- c(glue::glue("DATA_PATH {.db_sql_quote(data_path)}"))
 
+  if (isTRUE(encrypted)) {
+    attach_opts <- c(attach_opts, "ENCRYPTED")
+  }
   if (!is.null(snapshot_version)) {
     attach_opts <- c(attach_opts, glue::glue("SNAPSHOT_VERSION {as.integer(snapshot_version)}"))
   }
@@ -336,6 +353,7 @@ db_connect <- function(duckdb_db = ":memory:",
   assign("db_path", duckdb_db, envir = .db_env)
   assign("snapshot_version", snapshot_version, envir = .db_env)
   assign("snapshot_time", snapshot_time, envir = .db_env)
+  assign("encrypted", isTRUE(encrypted), envir = .db_env)
 
   # Clean up automatically when session ends (best effort)
   reg.finalizer(.db_env, function(e) {
@@ -372,7 +390,8 @@ db_status <- function(verbose = TRUE) {
     catalog_type = .db_get("catalog_type", NA_character_),
     metadata_path = .db_get("metadata_path", NA_character_),
     snapshot_version = .db_get("snapshot_version", NA_integer_),
-    snapshot_time = .db_get("snapshot_time", NA_character_)
+    snapshot_time = .db_get("snapshot_time", NA_character_),
+    encrypted = .db_get("encrypted", FALSE)
   )
 
   if (verbose) {
@@ -400,6 +419,9 @@ db_status <- function(verbose = TRUE) {
       )
       if (nzchar(concurrency_info)) {
         cat("  Concurrency:   ", concurrency_info, "\n")
+      }
+      if (isTRUE(status$encrypted)) {
+        cat("  Encryption:    ", "Enabled (AES per-file)", "\n")
       }
 
       has_version <- !is.null(status$snapshot_version) && !is.na(status$snapshot_version)
