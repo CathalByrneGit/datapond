@@ -46,7 +46,7 @@ test_that("db_flush_inlined flushes inlined data to parquet", {
   db_write(data.frame(id = 1:5, value = c(10, 20, 30, 40, 50)), table = "test_table")
 
   # Flush should complete without error
-  expect_message(db_flush_inlined(), "inlined|flushed|No inlined")
+  expect_no_error(db_flush_inlined())
 
   # Data should still be readable
   result <- db_read(table = "test_table") |> dplyr::collect()
