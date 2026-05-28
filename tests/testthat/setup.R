@@ -61,15 +61,21 @@ ducklake_version <- function() {
 
     if (nrow(result) > 0 && !is.na(result$extension_version[1]) && nzchar(result$extension_version[1])) {
       ver <- gsub("^v", "", as.character(result$extension_version[1]))
-      return(ver)
+      # Check if it looks like a version (starts with digit)
+      if (grepl("^[0-9]", ver)) {
+        return(ver)
+      }
     }
 
     # Fallback: infer from DuckDB version using compatibility matrix
     # DuckDB 1.5.x -> DuckLake 1.0
     # DuckDB 1.4.x -> DuckLake 0.3
     # DuckDB 1.3.x -> DuckLake 0.2
-    duckdb_ver <- DBI::dbGetQuery(con, "SELECT version() AS v")$v[1]
-    duckdb_ver <- gsub("^v", "", duckdb_ver)
+    duckdb_ver_raw <- DBI::dbGetQuery(con, "SELECT version() AS v")$v[1]
+    # Extract version number (e.g., "v1.5.0-dev (abc123)" -> "1.5.0")
+    duckdb_ver <- gsub("^v", "", duckdb_ver_raw)
+    duckdb_ver <- gsub("\\s.*$", "", duckdb_ver)  # Remove everything after space
+    duckdb_ver <- gsub("-.*$", "", duckdb_ver)    # Remove -dev suffix
 
     if (grepl("^1\\.5", duckdb_ver) || grepl("^1\\.[6-9]", duckdb_ver) || grepl("^[2-9]", duckdb_ver)) {
       return("1.0.0")
@@ -77,10 +83,13 @@ ducklake_version <- function() {
       return("0.3.0")
     } else if (grepl("^1\\.3", duckdb_ver)) {
       return("0.2.0")
+    } else if (grepl("^1\\.[0-2]", duckdb_ver)) {
+      return("0.1.0")
     }
 
-    # Unknown - return the DuckDB version as fallback
-    duckdb_ver
+    # If we still can't parse, assume latest if DuckLake loads successfully
+    # (the fact that INSTALL/LOAD worked means we have a working version)
+    "1.0.0"
   }, error = function(e) NA_character_)
 }
 
