@@ -186,7 +186,7 @@ metadata:</p>
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/db_connect.html">db_connect</a></span><span class="op">(</span></span>
 <span>  catalog_type <span class="op">=</span> <span class="st">"duckdb"</span>,</span>
 <span>  metadata_path <span class="op">=</span> <span class="st">"metadata.ducklake"</span>,</span>
-<span>  data_path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/data"</span></span>
+<span>  data_path <span class="op">=</span> <span class="st">"/data/lake/data"</span></span>
 <span><span class="op">)</span></span></code></pre></div>
 <ul>
 <li>Metadata stored in a <code>.ducklake</code> file</li>
@@ -202,8 +202,8 @@ will fail</li>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/db_connect.html">db_connect</a></span><span class="op">(</span></span>
 <span>  catalog_type <span class="op">=</span> <span class="st">"sqlite"</span>,</span>
-<span>  metadata_path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/catalog.sqlite"</span>,</span>
-<span>  data_path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/data"</span></span>
+<span>  metadata_path <span class="op">=</span> <span class="st">"/data/lake/catalog.sqlite"</span>,</span>
+<span>  data_path <span class="op">=</span> <span class="st">"/data/lake/data"</span></span>
 <span><span class="op">)</span></span></code></pre></div>
 <ul>
 <li>Metadata stored in a <code>.sqlite</code> file on the network
@@ -228,7 +228,7 @@ typical usage where writes are less frequent than reads.</p>
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/db_connect.html">db_connect</a></span><span class="op">(</span></span>
 <span>  catalog_type <span class="op">=</span> <span class="st">"postgres"</span>,</span>
 <span>  metadata_path <span class="op">=</span> <span class="st">"dbname=ducklake_catalog host=db.cso.ie"</span>,</span>
-<span>  data_path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/data"</span></span>
+<span>  data_path <span class="op">=</span> <span class="st">"/data/lake/data"</span></span>
 <span><span class="op">)</span></span></code></pre></div>
 <ul>
 <li>Metadata stored in a PostgreSQL database</li>
@@ -792,7 +792,7 @@ model commonly used.</p>
 <div class="section level3">
 <h3 id="architecture">Architecture<a class="anchor" aria-label="anchor" href="#architecture"></a>
 </h3>
-<pre><code>//CSO-NAS/DataLake/
+<pre><code>/data/lake/
 ├── catalog.sqlite           ← Single DuckLake catalog
 └── data/                    ← Data organised automatically by schema/table
     ├── trade/               ← Trade team has access (folder ACLs)
@@ -814,8 +814,8 @@ model commonly used.</p>
 <code class="sourceCode R"><span><span class="co"># Connect to DuckLake</span></span>
 <span><span class="fu"><a href="../reference/db_connect.html">db_connect</a></span><span class="op">(</span></span>
 <span>  catalog_type <span class="op">=</span> <span class="st">"sqlite"</span>,</span>
-<span>  metadata_path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/catalog.sqlite"</span>,</span>
-<span>  data_path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/data"</span></span>
+<span>  metadata_path <span class="op">=</span> <span class="st">"/data/lake/catalog.sqlite"</span>,</span>
+<span>  data_path <span class="op">=</span> <span class="st">"/data/lake/data"</span></span>
 <span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Create schemas - DuckLake creates folders automatically</span></span>
@@ -828,9 +828,9 @@ model commonly used.</p>
 <span><span class="fu"><a href="../reference/db_write.html">db_write</a></span><span class="op">(</span><span class="va">countries</span>, schema <span class="op">=</span> <span class="st">"reference"</span>, table <span class="op">=</span> <span class="st">"countries"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Set folder ACLs on the schema folders:</span></span>
-<span><span class="co"># - //CSO-NAS/DataLake/data/trade/     → Trade team read/write</span></span>
-<span><span class="co"># - //CSO-NAS/DataLake/data/labour/    → Labour team read/write</span></span>
-<span><span class="co"># - //CSO-NAS/DataLake/data/reference/ → Everyone read</span></span></code></pre></div>
+<span><span class="co"># - /data/lake/data/trade/     → Trade team read/write</span></span>
+<span><span class="co"># - /data/lake/data/labour/    → Labour team read/write</span></span>
+<span><span class="co"># - /data/lake/data/reference/ → Everyone read</span></span></code></pre></div>
 </div>
 <div class="section level3">
 <h3 id="how-it-works">How It Works<a class="anchor" aria-label="anchor" href="#how-it-works"></a>
@@ -968,8 +968,8 @@ up to reclaim disk space:</p>
 <span><span class="co"># Connect to DuckLake</span></span>
 <span><span class="fu"><a href="../reference/db_connect.html">db_connect</a></span><span class="op">(</span></span>
 <span>  catalog_type <span class="op">=</span> <span class="st">"sqlite"</span>,</span>
-<span>  metadata_path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/catalog.sqlite"</span>,</span>
-<span>  data_path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/data"</span></span>
+<span>  metadata_path <span class="op">=</span> <span class="st">"/data/lake/catalog.sqlite"</span>,</span>
+<span>  data_path <span class="op">=</span> <span class="st">"/data/lake/data"</span></span>
 <span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Prepare your data</span></span>
@@ -1009,8 +1009,8 @@ up to reclaim disk space:</p>
 <span><span class="co"># Connect to DuckLake (read access to catalog and data folder)</span></span>
 <span><span class="fu"><a href="../reference/db_connect.html">db_connect</a></span><span class="op">(</span></span>
 <span>  catalog_type <span class="op">=</span> <span class="st">"sqlite"</span>,</span>
-<span>  metadata_path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/catalog.sqlite"</span>,</span>
-<span>  data_path <span class="op">=</span> <span class="st">"//CSO-NAS/DataLake/data"</span></span>
+<span>  metadata_path <span class="op">=</span> <span class="st">"/data/lake/catalog.sqlite"</span>,</span>
+<span>  data_path <span class="op">=</span> <span class="st">"/data/lake/data"</span></span>
 <span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Discover what's available</span></span>

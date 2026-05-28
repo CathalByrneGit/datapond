@@ -109,7 +109,7 @@ metadata:
 db_connect(
   catalog_type = "duckdb",
   metadata_path = "metadata.ducklake",
-  data_path = "//CSO-NAS/DataLake/data"
+  data_path = "/data/lake/data"
 )
 ```
 
@@ -123,8 +123,8 @@ db_connect(
 
 db_connect(
   catalog_type = "sqlite",
-  metadata_path = "//CSO-NAS/DataLake/catalog.sqlite",
-  data_path = "//CSO-NAS/DataLake/data"
+  metadata_path = "/data/lake/catalog.sqlite",
+  data_path = "/data/lake/data"
 )
 ```
 
@@ -146,7 +146,7 @@ typical usage where writes are less frequent than reads.
 db_connect(
   catalog_type = "postgres",
   metadata_path = "dbname=ducklake_catalog host=db.cso.ie",
-  data_path = "//CSO-NAS/DataLake/data"
+  data_path = "/data/lake/data"
 )
 ```
 
@@ -767,7 +767,7 @@ used.
 
 ### Architecture
 
-    //CSO-NAS/DataLake/
+    /data/lake/
     ├── catalog.sqlite           ← Single DuckLake catalog
     └── data/                    ← Data organised automatically by schema/table
         ├── trade/               ← Trade team has access (folder ACLs)
@@ -789,8 +789,8 @@ used.
 # Connect to DuckLake
 db_connect(
   catalog_type = "sqlite",
-  metadata_path = "//CSO-NAS/DataLake/catalog.sqlite",
-  data_path = "//CSO-NAS/DataLake/data"
+  metadata_path = "/data/lake/catalog.sqlite",
+  data_path = "/data/lake/data"
 )
 
 # Create schemas - DuckLake creates folders automatically
@@ -803,9 +803,9 @@ db_write(imports_data, schema = "trade", table = "imports")
 db_write(countries, schema = "reference", table = "countries")
 
 # Set folder ACLs on the schema folders:
-# - //CSO-NAS/DataLake/data/trade/     → Trade team read/write
-# - //CSO-NAS/DataLake/data/labour/    → Labour team read/write
-# - //CSO-NAS/DataLake/data/reference/ → Everyone read
+# - /data/lake/data/trade/     → Trade team read/write
+# - /data/lake/data/labour/    → Labour team read/write
+# - /data/lake/data/reference/ → Everyone read
 ```
 
 ### How It Works
@@ -903,8 +903,8 @@ library(datapond)
 # Connect to DuckLake
 db_connect(
   catalog_type = "sqlite",
-  metadata_path = "//CSO-NAS/DataLake/catalog.sqlite",
-  data_path = "//CSO-NAS/DataLake/data"
+  metadata_path = "/data/lake/catalog.sqlite",
+  data_path = "/data/lake/data"
 )
 
 # Prepare your data
@@ -945,8 +945,8 @@ library(datapond)
 # Connect to DuckLake (read access to catalog and data folder)
 db_connect(
   catalog_type = "sqlite",
-  metadata_path = "//CSO-NAS/DataLake/catalog.sqlite",
-  data_path = "//CSO-NAS/DataLake/data"
+  metadata_path = "/data/lake/catalog.sqlite",
+  data_path = "/data/lake/data"
 )
 
 # Discover what's available

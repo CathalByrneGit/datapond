@@ -26,8 +26,8 @@ library(datapond)
 # Connect to DuckLake with SQLite catalog (recommended for shared drives)
 db_connect(
   catalog_type = "sqlite",
-  metadata_path = "//CSO-NAS/DataLake/catalog.sqlite",
-  data_path = "//CSO-NAS/DataLake/data"
+  metadata_path = "/data/lake/catalog.sqlite",
+  data_path = "/data/lake/data"
 )
 
 # See what's available
@@ -179,8 +179,8 @@ db_disconnect()
 library(datapond)
 db_connect(
   catalog_type = "sqlite",
-  metadata_path = "//CSO-NAS/DataLake/catalog.sqlite",
-  data_path = "//CSO-NAS/DataLake/data"
+  metadata_path = "/data/lake/catalog.sqlite",
+  data_path = "/data/lake/data"
 )
 
 # Document your tables with structured metadata (stored as JSON in native comments)
@@ -243,8 +243,8 @@ db_get_lineage(table = "monthly_summary")
 library(datapond)
 db_connect(
   catalog_type = "sqlite",
-  metadata_path = "//CSO-NAS/DataLake/catalog.sqlite",
-  data_path = "//CSO-NAS/DataLake/data"
+  metadata_path = "/data/lake/catalog.sqlite",
+  data_path = "/data/lake/data"
 )
 
 # Launch interactive browser
@@ -281,8 +281,8 @@ in a **catalog database**. You can choose from four backends:
 
 db_connect(
   catalog_type = "sqlite",
-  metadata_path = "//CSO-NAS/DataLake/catalog.sqlite",
-  data_path = "//CSO-NAS/DataLake/data"
+  metadata_path = "/data/lake/catalog.sqlite",
+  data_path = "/data/lake/data"
 )
 ```
 
@@ -302,7 +302,7 @@ If you need true multi-user concurrent writes or remote access:
 db_connect(
   catalog_type = "postgres",
   metadata_path = "dbname=ducklake_catalog host=db.cso.ie",
-  data_path = "//CSO-NAS/DataLake/data"
+  data_path = "/data/lake/data"
 )
 ```
 
@@ -319,7 +319,7 @@ supports Quack as a catalog backend (DuckDB 1.5.3+).
 db_connect(
   catalog_type = "quack",
   metadata_path = "quack:db-server.cso.ie:9494/catalog.ducklake",
-  data_path = "//CSO-NAS/DataLake/data",
+  data_path = "/data/lake/data",
   quack_token = "my-secret-token"  
 )
 
@@ -328,7 +328,7 @@ Sys.setenv(QUACK_TOKEN = "my-secret-token")
 db_connect(
   catalog_type = "quack",
   metadata_path = "quack:db-server.cso.ie:9494/catalog.ducklake",
-  data_path = "//CSO-NAS/DataLake/data"
+  data_path = "/data/lake/data"
 )
 ```
 
