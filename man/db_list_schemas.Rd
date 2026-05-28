@@ -14,7 +14,7 @@ Returns all schemas in the connected DuckLake catalog.
 }
 \examples{
 \dontrun{
-db_lake_connect()
+db_connect()
 db_list_schemas()
 # [1] "main" "trade" "labour"
 }

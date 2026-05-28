@@ -21,7 +21,7 @@ access control - simply set ACLs on the schema folders.
 }
 \examples{
 \dontrun{
-db_lake_connect(data_path = "//CSO-NAS/DataLake")
+db_connect(data_path = "//CSO-NAS/DataLake")
 
 db_create_schema("trade")
 db_create_schema("labour")

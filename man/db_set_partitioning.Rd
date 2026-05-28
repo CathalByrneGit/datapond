@@ -33,7 +33,7 @@ Note: Existing data is not reorganized - only new inserts are partitioned.
 }
 \examples{
 \dontrun{
-db_lake_connect(...)
+db_connect(...)
 
 # Partition by year and month columns
 db_set_partitioning("trade", "imports", c("year", "month"))

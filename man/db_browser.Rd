@@ -15,25 +15,24 @@ db_browser(height = "500px", viewer = c("dialog", "browser", "pane"))
 Opens the browser app. Returns NULL invisibly.
 }
 \description{
-Launches a Shiny app to browse datasets, view metadata,
-search for data, and preview tables.
+Launches a Shiny app to browse tables, view metadata,
+search for data, and preview data.
 }
 \examples{
 \dontrun{
 # Connect first
-db_connect(path = "//CSO-NAS/DataLake")
+db_connect(
+  metadata_path = "catalog.ducklake",
+  data_path = "//CSO-NAS/DataLake"
+)
 
 # Launch browser
-db_browser()
-
-# Or with DuckLake
-db_lake_connect(...)
 db_browser()
 }
 }
 \seealso{
-Other shiny: 
-\code{\link{db_browser_server}()},
-\code{\link{db_browser_ui}()}
+Other shiny:
+\code{\link[=db_browser_server]{db_browser_server()}},
+\code{\link[=db_browser_ui]{db_browser_ui()}}
 }
 \concept{shiny}

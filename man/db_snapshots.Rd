@@ -15,7 +15,7 @@ including snapshot ID, timestamp, and commit metadata.
 }
 \examples{
 \dontrun{
-db_lake_connect()
+db_connect()
 db_snapshots()
 }
 }

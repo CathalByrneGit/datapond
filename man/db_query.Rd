@@ -20,7 +20,7 @@ Escape hatch for power users who need to run custom SQL queries.
 }
 \examples{
 \dontrun{
-db_lake_connect()
+db_connect()
 
 # Run a custom query
 db_query("SELECT * FROM main.products WHERE price > 100")

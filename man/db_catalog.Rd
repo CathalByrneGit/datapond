@@ -7,7 +7,8 @@
 db_catalog()
 }
 \value{
-A data.frame of table information
+A data.frame of table information with columns: schema_name, table_name,
+file_count, total_rows, total_bytes, avg_file_bytes, avg_rows_per_file
 }
 \description{
 Returns information about all tables in the connected DuckLake catalog,
@@ -15,7 +16,10 @@ including row counts, file counts, and storage statistics.
 }
 \examples{
 \dontrun{
-db_lake_connect()
+db_connect()
 db_catalog()
 }
+}
+\seealso{
+\code{\link[=db_tables]{db_tables()}} to list just table names, \code{\link[=db_file_stats]{db_file_stats()}} for detailed stats
 }
