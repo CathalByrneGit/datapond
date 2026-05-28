@@ -457,6 +457,7 @@ db_write(imports_data, schema = "trade", table = "imports")
 
 - `vignette("concepts")` - Background on DuckLake, catalog backends, and access control
 - `vignette("code-walkthrough")` - Detailed explanation of how the package works
+- [DuckLake Documentation](https://ducklake.select/docs/stable/) - Official DuckLake docs
 
 ## Contributing
 
