@@ -325,6 +325,26 @@ db_connect(
 
 **Note:** Quack is currently in beta (DuckDB 1.5.x). Production-ready version planned for DuckDB 2.0 (Fall 2026). See `vignette("catalog-backends")` for security options.
 
+## Encryption (Zero-Trust Storage)
+
+DuckLake supports encryption for all data files, enabling zero-trust storage where data can reside on untrusted infrastructure:
+
+``` r
+db_connect(
+  metadata_path = "//secure-server/catalog.sqlite",
+  data_path = "//untrusted-cloud-storage/data",
+  encrypted = TRUE
+)
+```
+
+**How it works:**
+- Each parquet file is encrypted with a unique AES key (auto-generated)
+- Keys are stored in the catalog database (separate trust zone)
+- Keys are automatically retrieved when reading encrypted files
+- No key management required from users
+
+This is ideal when data files must reside on third-party or shared storage but you control the catalog server.
+
 ## Access Control
 
 datapond relies on **file system permissions** for access control. DuckLake automatically organises data into `{schema}/{table}/` folders within the data path, so you can grant permissions at the schema level.
