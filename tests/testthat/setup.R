@@ -46,22 +46,41 @@ ducklake_available <- function() {
 }
 
 #' Get the installed DuckLake extension version
+#' Returns the extension version string, or infers from DuckDB version
 ducklake_version <- function() {
- tryCatch({
+  tryCatch({
     con <- DBI::dbConnect(duckdb::duckdb(), ":memory:")
     on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
     DBI::dbExecute(con, "INSTALL ducklake")
     DBI::dbExecute(con, "LOAD ducklake")
+
+    # Try to get extension version directly
     result <- DBI::dbGetQuery(con,
-      "SELECT extension_version FROM duckdb_extensions() WHERE extension_name = 'ducklake' AND loaded = true"
+      "SELECT extension_version FROM duckdb_extensions() WHERE extension_name = 'ducklake'"
     )
-    if (nrow(result) > 0 && !is.na(result$extension_version[1])) {
-      # Clean version string (remove 'v' prefix if present)
+
+    if (nrow(result) > 0 && !is.na(result$extension_version[1]) && nzchar(result$extension_version[1])) {
       ver <- gsub("^v", "", as.character(result$extension_version[1]))
-      if (nzchar(ver)) ver else NA_character_
-    } else {
-      NA_character_
+      return(ver)
     }
+
+    # Fallback: infer from DuckDB version using compatibility matrix
+    # DuckDB 1.5.x -> DuckLake 1.0
+    # DuckDB 1.4.x -> DuckLake 0.3
+    # DuckDB 1.3.x -> DuckLake 0.2
+    duckdb_ver <- DBI::dbGetQuery(con, "SELECT version() AS v")$v[1]
+    duckdb_ver <- gsub("^v", "", duckdb_ver)
+
+    if (grepl("^1\\.5", duckdb_ver) || grepl("^1\\.[6-9]", duckdb_ver) || grepl("^[2-9]", duckdb_ver)) {
+      return("1.0.0")
+    } else if (grepl("^1\\.4", duckdb_ver)) {
+      return("0.3.0")
+    } else if (grepl("^1\\.3", duckdb_ver)) {
+      return("0.2.0")
+    }
+
+    # Unknown - return the DuckDB version as fallback
+    duckdb_ver
   }, error = function(e) NA_character_)
 }
 
