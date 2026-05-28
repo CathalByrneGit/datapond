@@ -862,11 +862,11 @@ test_that("db_changes returns changes with correct columns", {
 
   # Create and populate table
   db_write(data.frame(id = 1:3, value = c(10, 20, 30)), table = "items")
-  v1 <- max(db_snapshots(table = "items")$snapshot_id)
+  v1 <- max(db_snapshots()$snapshot_id)
 
   # Append more data
   db_write(data.frame(id = 4:5, value = c(40, 50)), table = "items", mode = "append")
-  v2 <- max(db_snapshots(table = "items")$snapshot_id)
+  v2 <- max(db_snapshots()$snapshot_id)
 
   # Get changes
   changes <- db_changes(table = "items", from_version = v1, to_version = v2)

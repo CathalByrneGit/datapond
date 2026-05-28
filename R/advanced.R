@@ -61,18 +61,22 @@ db_flush_inlined <- function(schema = "main", table = NULL) {
   result <- tryCatch({
     DBI::dbGetQuery(con, sql)
   }, error = function(e) {
-    if (grepl("no inlined data", e$message, ignore.case = TRUE)) {
-      message("No inlined data to flush.")
+    # Some versions return an error when no data to flush
+    if (grepl("no inlined data|empty|no rows", e$message, ignore.case = TRUE)) {
       return(data.frame(schema_name = character(), table_name = character(), rows_flushed = integer()))
     }
     stop("Flush failed: ", e$message, call. = FALSE)
   })
 
-  if (nrow(result) > 0) {
-    total_rows <- sum(result$rows_flushed, na.rm = TRUE)
-    message("Flushed ", total_rows, " rows from ", nrow(result), " table(s) to parquet files.")
-  } else {
+  if (is.null(result) || nrow(result) == 0) {
     message("No inlined data to flush.")
+  } else {
+    total_rows <- sum(result$rows_flushed, na.rm = TRUE)
+    if (total_rows > 0) {
+      message("Flushed ", total_rows, " rows from ", nrow(result), " table(s) to parquet files.")
+    } else {
+      message("No inlined data to flush.")
+    }
   }
 
   invisible(result)
@@ -151,7 +155,7 @@ db_set_inline_threshold <- function(schema = "main", table = NULL, threshold = 1
   DBI::dbExecute(con, sql)
 
   message("Set inline threshold to ", threshold, " rows ", scope_desc, ".")
-  invisible(qname)
+  invisible(TRUE)
 }
 
 
