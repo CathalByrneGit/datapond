@@ -190,11 +190,20 @@
 <span><span class="co"># View snapshot history</span></span>
 <span><span class="fu"><a href="reference/db_snapshots.html">db_snapshots</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Compare versions</span></span>
+<span><span class="co"># Compare versions (set-based)</span></span>
 <span><span class="va">diff</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/db_diff.html">db_diff</a></span><span class="op">(</span>schema <span class="op">=</span> <span class="st">"trade"</span>, table <span class="op">=</span> <span class="st">"imports"</span>,</span>
 <span>                from_version <span class="op">=</span> <span class="fl">5</span>, to_version <span class="op">=</span> <span class="fl">10</span><span class="op">)</span></span>
 <span><span class="va">diff</span><span class="op">$</span><span class="va">added</span></span>
 <span><span class="va">diff</span><span class="op">$</span><span class="va">removed</span></span>
+<span></span>
+<span><span class="co"># Get row-level changes via Data Change Feed (more efficient)</span></span>
+<span><span class="va">changes</span> <span class="op">&lt;-</span> <span class="fu">db_changes</span><span class="op">(</span>schema <span class="op">=</span> <span class="st">"trade"</span>, table <span class="op">=</span> <span class="st">"imports"</span>,</span>
+<span>                      from_version <span class="op">=</span> <span class="fl">5</span>, to_version <span class="op">=</span> <span class="fl">10</span><span class="op">)</span></span>
+<span><span class="co"># Returns: snapshot_id, rowid, change_type (insert/delete/update_*), plus all columns</span></span>
+<span></span>
+<span><span class="co"># Filter to just inserts</span></span>
+<span><span class="va">new_rows</span> <span class="op">&lt;-</span> <span class="fu">db_changes</span><span class="op">(</span>table <span class="op">=</span> <span class="st">"imports"</span>, from_version <span class="op">=</span> <span class="fl">5</span>,</span>
+<span>                       change_types <span class="op">=</span> <span class="st">"insert"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Rollback if something went wrong</span></span>
 <span><span class="fu"><a href="reference/db_rollback.html">db_rollback</a></span><span class="op">(</span>schema <span class="op">=</span> <span class="st">"trade"</span>, table <span class="op">=</span> <span class="st">"imports"</span>, version <span class="op">=</span> <span class="fl">5</span><span class="op">)</span></span>
@@ -403,10 +412,23 @@
 </div>
 </div>
 <div class="section level2">
+<h2 id="encryption-zero-trust-storage">Encryption (Zero-Trust Storage)<a class="anchor" aria-label="anchor" href="#encryption-zero-trust-storage"></a>
+</h2>
+<p>DuckLake supports encryption for all data files, enabling zero-trust storage where data can reside on untrusted infrastructure:</p>
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="reference/db_connect.html">db_connect</a></span><span class="op">(</span></span>
+<span>  metadata_path <span class="op">=</span> <span class="st">"//secure-server/catalog.sqlite"</span>,</span>
+<span>  data_path <span class="op">=</span> <span class="st">"//untrusted-cloud-storage/data"</span>,</span>
+<span>  encrypted <span class="op">=</span> <span class="cn">TRUE</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+<p><strong>How it works:</strong> - Each parquet file is encrypted with a unique AES key (auto-generated) - Keys are stored in the catalog database (separate trust zone) - Keys are automatically retrieved when reading encrypted files - No key management required from users</p>
+<p>This is ideal when data files must reside on third-party or shared storage but you control the catalog server.</p>
+</div>
+<div class="section level2">
 <h2 id="access-control">Access Control<a class="anchor" aria-label="anchor" href="#access-control"></a>
 </h2>
 <p>datapond relies on <strong>file system permissions</strong> for access control. DuckLake automatically organises data into <code>{schema}/{table}/</code> folders within the data path, so you can grant permissions at the schema level.</p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Create schemas - DuckLake creates data folders automatically</span></span>
 <span><span class="fu"><a href="reference/db_create_schema.html">db_create_schema</a></span><span class="op">(</span><span class="st">"trade"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="reference/db_create_schema.html">db_create_schema</a></span><span class="op">(</span><span class="st">"labour"</span><span class="op">)</span></span>
@@ -756,7 +778,11 @@
 </tr>
 <tr>
 <td><code><a href="reference/db_diff.html">db_diff()</a></code></td>
-<td>Compare two snapshots</td>
+<td>Compare two snapshots (set-based)</td>
+</tr>
+<tr>
+<td><code>db_changes()</code></td>
+<td>Get row-level changes via Data Change Feed</td>
 </tr>
 <tr>
 <td><code><a href="reference/db_rollback.html">db_rollback()</a></code></td>
@@ -834,11 +860,11 @@
 <h3 id="development">Development<a class="anchor" aria-label="anchor" href="#development"></a>
 </h3>
 <p>After modifying roxygen2 comments in R files, regenerate documentation:</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu">devtools</span><span class="fu">::</span><span class="fu">document</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="fu">devtools</span><span class="fu">::</span><span class="fu">check</span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
 <p>Run tests:</p>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu">devtools</span><span class="fu">::</span><span class="fu">test</span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
 </div>
 </div>
