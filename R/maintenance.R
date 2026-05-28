@@ -414,7 +414,6 @@ db_file_stats <- function(schema = NULL, table = NULL) {
   }
 
   # Build result with useful statistics
-  # ducklake_table_info returns various column names depending on version
   n_rows <- nrow(info)
 
   # Helper to get column value with fallbacks

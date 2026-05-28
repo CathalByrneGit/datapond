@@ -224,9 +224,12 @@ db_set_clustering <- function(schema = "main", table, columns) {
 #' Use this after setting clustering on a table that already contains data,
 #' or after many appends have fragmented the sort order.
 #'
+#' DuckLake automatically sorts data during compaction based on the table's
+#' sort order (SET SORTED BY), so this function compacts files to re-sort.
+#'
 #' @param schema Schema name (default "main")
 #' @param table Table name
-#' @param max_files Maximum number of files to process in one operation.
+#' @param max_files Maximum number of compaction operations per call.
 #'   Lower values use less memory. Default NULL processes all files.
 #' @return Invisibly returns the qualified table name
 #' @examples
@@ -240,7 +243,7 @@ db_set_clustering <- function(schema = "main", table, columns) {
 #' # Recluster with memory limit
 #' db_recluster(table = "events", max_files = 100)
 #' }
-#' @seealso [db_set_clustering()] to configure clustering order
+#' @seealso [db_set_clustering()] to configure clustering order, [db_compact()]
 #' @export
 db_recluster <- function(schema = "main", table, max_files = NULL) {
   schema <- .db_validate_name(schema, "schema")
@@ -258,6 +261,8 @@ db_recluster <- function(schema = "main", table, max_files = NULL) {
 
   qname <- paste0(catalog, ".", schema, ".", table)
 
+  # DuckLake sorts data during compaction based on SET SORTED BY order
+  # Use ducklake_merge_adjacent_files to compact and re-sort
   args <- c(.db_sql_quote(catalog), .db_sql_quote(table))
 
   named_args <- c(glue::glue("schema_name => {.db_sql_quote(schema)}"))
@@ -265,13 +270,13 @@ db_recluster <- function(schema = "main", table, max_files = NULL) {
     if (!is.numeric(max_files) || max_files < 1) {
       stop("max_files must be a positive integer.", call. = FALSE)
     }
-    named_args <- c(named_args, glue::glue("max_files => {as.integer(max_files)}"))
+    named_args <- c(named_args, glue::glue("max_compacted_files => {as.integer(max_files)}"))
   }
 
   all_args <- c(args, named_args)
-  sql <- glue::glue("CALL ducklake_recluster({paste(all_args, collapse = ', ')})")
+  sql <- glue::glue("CALL ducklake_merge_adjacent_files({paste(all_args, collapse = ', ')})")
 
-  message("Reclustering ", qname, "...")
+  message("Reclustering ", qname, " (compacting with sort order)...")
   DBI::dbExecute(con, sql)
   message("Reclustering complete.")
 
@@ -283,14 +288,14 @@ db_recluster <- function(schema = "main", table, max_files = NULL) {
 # Iceberg Export
 # ==============================================================================
 
-#' Export a DuckLake table as Iceberg format
+#' Export a DuckLake table as Iceberg format (EXPERIMENTAL)
 #'
 #' @description Exports a DuckLake table to Iceberg format for compatibility
-#' with other data lakehouse engines (Spark, Trino, Presto, etc.). Creates
-#' Iceberg metadata files alongside the existing parquet data files.
+#' with other data lakehouse engines (Spark, Trino, Presto, etc.).
 #'
-#' **Note:** This feature requires DuckLake functions that may not yet be
-#' available in all versions. Check DuckLake documentation for compatibility.
+#' **Note:** This is experimental. DuckLake 0.3+ supports Iceberg interoperability
+#' via `COPY FROM DATABASE ducklake TO iceberg_catalog`. This function attempts
+#' to use internal DuckLake Iceberg functions which may not be available.
 #'
 #' @param schema Schema name (default "main")
 #' @param table Table name
