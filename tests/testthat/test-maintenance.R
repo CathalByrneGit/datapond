@@ -670,8 +670,7 @@ test_that("db_file_stats returns expected columns", {
 
 test_that("db_file_stats filters by schema", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
-  # TODO: Fix schema_name detection from DuckLake metadata tables
-  skip("Known issue: schema_name returns NA from ducklake_table_info")
+  skip_if_ducklake_below("1.0.0")
   clean_db_env()
 
   temp_dir <- tempfile(pattern = "file_stats_schema_test_")
@@ -692,10 +691,12 @@ test_that("db_file_stats filters by schema", {
 
   # Filter to main schema
   stats_main <- db_file_stats(schema = "main")
+  expect_true(nrow(stats_main) > 0)
   expect_true(all(stats_main$schema_name == "main"))
 
   # Filter to other schema
   stats_other <- db_file_stats(schema = "other")
+  expect_true(nrow(stats_other) > 0)
   expect_true(all(stats_other$schema_name == "other"))
 
   clean_db_env()
@@ -704,8 +705,7 @@ test_that("db_file_stats filters by schema", {
 
 test_that("db_file_stats filters by table", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
-  # TODO: Fix table filtering - depends on schema detection working
-  skip("Known issue: filtering depends on metadata table query working")
+  skip_if_ducklake_below("1.0.0")
   clean_db_env()
 
   temp_dir <- tempfile(pattern = "file_stats_table_test_")
@@ -862,11 +862,11 @@ test_that("db_changes returns changes with correct columns", {
 
   # Create and populate table
   db_write(data.frame(id = 1:3, value = c(10, 20, 30)), table = "items")
-  v1 <- max(db_snapshots(table = "items")$snapshot_id)
+  v1 <- max(db_snapshots()$snapshot_id)
 
   # Append more data
   db_write(data.frame(id = 4:5, value = c(40, 50)), table = "items", mode = "append")
-  v2 <- max(db_snapshots(table = "items")$snapshot_id)
+  v2 <- max(db_snapshots()$snapshot_id)
 
   # Get changes
   changes <- db_changes(table = "items", from_version = v1, to_version = v2)

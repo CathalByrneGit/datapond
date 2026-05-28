@@ -4,12 +4,10 @@
 \alias{db_dictionary}
 \title{Generate a data dictionary}
 \usage{
-db_dictionary(section = NULL, schema = NULL, include_columns = TRUE)
+db_dictionary(schema = NULL, include_columns = TRUE)
 }
 \arguments{
-\item{section}{Limit to specific section (hive mode, optional)}
-
-\item{schema}{Limit to specific schema (DuckLake mode, optional)}
+\item{schema}{Limit to specific schema (optional)}
 
 \item{include_columns}{Include column-level details (default TRUE)}
 }
@@ -17,7 +15,7 @@ db_dictionary(section = NULL, schema = NULL, include_columns = TRUE)
 A data.frame with the data dictionary
 }
 \description{
-Creates a data dictionary summarizing all datasets/tables
+Creates a data dictionary summarizing all tables
 with their documentation, schemas, and column information.
 }
 \examples{

@@ -2,7 +2,7 @@
 % Please edit documentation in R/docs.R
 \name{db_search}
 \alias{db_search}
-\title{Search for datasets or tables}
+\title{Search for tables}
 \usage{
 db_search(pattern, field = c("all", "name", "description", "owner", "tags"))
 }
@@ -12,10 +12,10 @@ db_search(pattern, field = c("all", "name", "description", "owner", "tags"))
 \item{field}{Field to search: "all" (default), "name", "description", "owner", "tags"}
 }
 \value{
-A data.frame of matching datasets/tables with their documentation
+A data.frame of matching tables with their documentation
 }
 \description{
-Search for datasets/tables by name, description, owner, or tags.
+Search for tables by name, description, owner, or tags.
 }
 \examples{
 \dontrun{

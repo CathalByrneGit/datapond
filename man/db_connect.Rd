@@ -2,20 +2,65 @@
 % Please edit documentation in R/db_connect.R
 \name{db_connect}
 \alias{db_connect}
-\title{Connect to the CSO hive parquet lake}
+\title{Connect to a DuckLake data lake}
 \usage{
 db_connect(
-  path = "//CSO-NAS/DataLake",
-  db = ":memory:",
+  duckdb_db = ":memory:",
+  catalog = "cso",
+  catalog_type = NULL,
+  metadata_path = "metadata.ducklake",
+  data_path = "//CSO-NAS/DataLake",
+  quack_token = NULL,
+  snapshot_version = NULL,
+  snapshot_time = NULL,
+  encrypted = FALSE,
   threads = NULL,
   memory_limit = NULL,
   load_extensions = NULL
 )
 }
 \arguments{
-\item{path}{Root path for the lake (e.g. "//CSO-NAS/DataLake")}
+\item{duckdb_db}{DuckDB database file path. Use ":memory:" for in-memory.}
 
-\item{db}{DuckDB database file path. Use ":memory:" for in-memory.}
+\item{catalog}{DuckLake catalog name inside DuckDB (e.g. "cso")}
+
+\item{catalog_type}{Type of catalog database backend. If NULL (default),
+auto-detected from metadata_path extension:
+\itemize{
+\item ".sqlite" or ".db" -> "sqlite"
+\item ".ducklake" or ".duckdb" -> "duckdb"
+\item "postgres://" connection string -> "postgres"
+\item "quack://" URI -> "quack" (EXPERIMENTAL)
+}
+Can also be set explicitly to one of: "duckdb", "sqlite", "postgres", "quack".
+
+Note: "quack" uses the Quack Remote Protocol for client-server DuckDB with
+multiple concurrent writers. This is EXPERIMENTAL (beta in DuckDB 1.5.x,
+production-ready version planned for DuckDB 2.0 in Fall 2026).}
+
+\item{metadata_path}{Path or connection string for DuckLake metadata:
+\itemize{
+\item For "duckdb": file path (e.g. "metadata.ducklake")
+\item For "sqlite": file path (e.g. "//CSO-NAS/DataLake/catalog.sqlite")
+\item For "postgres": connection string (e.g. "dbname=ducklake_catalog host=localhost")
+\item For "quack": URI (e.g. "quack:server:9494/catalog.ducklake")
+}}
+
+\item{data_path}{Root storage path where DuckLake writes Parquet data files}
+
+\item{quack_token}{Authentication token for Quack server. If NULL (default),
+falls back to the \code{QUACK_TOKEN} environment variable. Only used when
+\code{catalog_type = "quack"}.}
+
+\item{snapshot_version}{Optional integer snapshot version to attach at}
+
+\item{snapshot_time}{Optional timestamp string to attach at (e.g. "2025-05-26 00:00:00")}
+
+\item{encrypted}{If TRUE, enables encryption for all data files written to the
+data path. DuckLake auto-generates unique AES encryption keys per parquet file
+and stores them in the catalog. This enables zero-trust data hosting where
+data files can reside on untrusted storage. Keys are automatically retrieved
+from the catalog when reading encrypted files.}
 
 \item{threads}{Number of DuckDB threads (NULL leaves default)}
 
@@ -27,14 +72,61 @@ db_connect(
 DuckDB connection object
 }
 \description{
-Establishes a singleton connection to DuckDB and stores base path.
+Establishes a connection to DuckDB and attaches a DuckLake catalog.
+DuckLake provides ACID transactions, time travel, and schema evolution on top
+of Parquet files.
 }
 \examples{
 \dontrun{
-# Connect to hive-partitioned data lake
-db_connect(path = "//CSO-NAS/DataLake")
+# DuckDB catalog (single user, simplest setup)
+db_connect(
+  metadata_path = "metadata.ducklake",
+  data_path = "//CSO-NAS/DataLake"
+)
 
-# With performance tuning
-db_connect(path = "//CSO-NAS/DataLake", threads = 4, memory_limit = "8GB")
+# SQLite catalog (auto-detected from .sqlite extension)
+db_connect(
+  metadata_path = "//CSO-NAS/DataLake/catalog.sqlite",
+  data_path = "//CSO-NAS/DataLake/data"
+)
+
+# PostgreSQL catalog (multi-user lakehouse, remote clients)
+db_connect(
+  catalog_type = "postgres",
+  metadata_path = "dbname=ducklake_catalog host=db.cso.ie user=analyst",
+  data_path = "//CSO-NAS/DataLake/data"
+)
+
+# Time travel - connect to a specific snapshot
+db_connect(
+  metadata_path = "catalog.sqlite",
+  data_path = "//CSO-NAS/DataLake/data",
+  snapshot_version = 5
+)
+
+# EXPERIMENTAL: Quack remote protocol (multi-writer via DuckDB server)
+# Requires a DuckDB server running with Quack enabled
+db_connect(
+  catalog_type = "quack",
+  metadata_path = "quack:db-server.cso.ie:9494/catalog.ducklake",
+  data_path = "//CSO-NAS/DataLake/data",
+  quack_token = "my-secret-token"
+)
+
+# Or use environment variable
+Sys.setenv(QUACK_TOKEN = "my-secret-token")
+db_connect(
+  catalog_type = "quack",
+  metadata_path = "quack:db-server.cso.ie:9494/catalog.ducklake",
+  data_path = "//CSO-NAS/DataLake/data"
+)
+
+# Encrypted mode - zero-trust data hosting
+# Keys are auto-generated per file and stored in the catalog
+db_connect(
+  metadata_path = "//secure-server/catalog.sqlite",
+  data_path = "//untrusted-storage/data",
+  encrypted = TRUE
+)
 }
 }

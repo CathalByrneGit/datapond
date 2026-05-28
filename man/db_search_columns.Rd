@@ -2,27 +2,29 @@
 % Please edit documentation in R/docs.R
 \name{db_search_columns}
 \alias{db_search_columns}
-\title{Search for columns}
+\title{Search for columns by name}
 \usage{
-db_search_columns(pattern)
+db_search_columns(pattern, schema = NULL)
 }
 \arguments{
-\item{pattern}{Column name pattern (case-insensitive, matches partial strings)}
+\item{pattern}{Column name pattern (case-insensitive)}
+
+\item{schema}{Optional schema to limit search}
 }
 \value{
-A data.frame of matching columns with their table/dataset info
+A data.frame with schema, table, column_name, and column_type
 }
 \description{
-Search for columns by name across all datasets/tables.
+Find tables that contain columns matching a pattern.
 }
 \examples{
 \dontrun{
 db_connect()
 
-# Find all columns containing "country"
+# Find all columns with "country" in the name
 db_search_columns("country")
 
-# Find all ID columns
+# Find ID columns
 db_search_columns("_id")
 }
 }

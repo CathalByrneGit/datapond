@@ -31,7 +31,7 @@ rows would be inserted vs updated.
 }
 \examples{
 \dontrun{
-db_lake_connect()
+db_connect()
 
 db_preview_upsert(my_data, table = "products", by = "product_id")
 }

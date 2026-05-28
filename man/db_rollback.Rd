@@ -35,7 +35,7 @@ This creates a new snapshot with the rolled-back data.
 }
 \examples{
 \dontrun{
-db_lake_connect()
+db_connect()
 
 # Rollback to a specific version
 db_rollback(table = "products", version = 5)

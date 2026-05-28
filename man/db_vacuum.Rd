@@ -27,7 +27,7 @@ referenced by any snapshot within the retention period.
 }
 \examples{
 \dontrun{
-db_lake_connect()
+db_connect()
 
 # See what would be cleaned up (dry run)
 db_vacuum(older_than = "30 days")

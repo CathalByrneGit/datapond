@@ -14,11 +14,11 @@ experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](h
 ## Installation
 
 ``` r
-# Install from local source
-devtools::install("path/to/datapond")
+# Install pak if you don't have it
+install.packages("pak")
 
-# Or load for development
-devtools::load_all("path/to/datapond")
+# Install datapond from GitHub
+pak::pak("CathalByrneGit/datapond")
 ```
 
 ## Quick Start

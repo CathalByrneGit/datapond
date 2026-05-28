@@ -14,11 +14,11 @@ A list (invisibly if verbose=TRUE) containing connection details.
 }
 \description{
 Returns information about the current connection state,
-including mode (hive/ducklake), paths, and connection validity.
+including paths, catalog configuration, and connection validity.
 }
 \examples{
 \dontrun{
-db_lake_connect()
+db_connect()
 db_status()
 }
 }

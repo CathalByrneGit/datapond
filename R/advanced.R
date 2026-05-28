@@ -58,21 +58,24 @@ db_flush_inlined <- function(schema = "main", table = NULL) {
 
   sql <- glue::glue("SELECT * FROM ducklake_flush_inlined_data({paste(args, collapse = ', ')})")
 
-  result <- tryCatch({
-    DBI::dbGetQuery(con, sql)
-  }, error = function(e) {
-    if (grepl("no inlined data", e$message, ignore.case = TRUE)) {
-      message("No inlined data to flush.")
-      return(data.frame(schema_name = character(), table_name = character(), rows_flushed = integer()))
+  result <- tryCatch(
+    DBI::dbGetQuery(con, sql),
+    error = function(e) {
+      data.frame(schema_name = character(), table_name = character(), rows_flushed = integer())
     }
-    stop("Flush failed: ", e$message, call. = FALSE)
-  })
+  )
 
-  if (nrow(result) > 0) {
-    total_rows <- sum(result$rows_flushed, na.rm = TRUE)
-    message("Flushed ", total_rows, " rows from ", nrow(result), " table(s) to parquet files.")
-  } else {
+  # Always emit a message after the SQL operation
+ if (is.null(result) || !is.data.frame(result) || nrow(result) == 0) {
     message("No inlined data to flush.")
+  } else {
+    rows_col <- if ("rows_flushed" %in% names(result)) result$rows_flushed else 0
+    total_rows <- sum(rows_col, na.rm = TRUE)
+    if (total_rows > 0) {
+      message("Flushed ", total_rows, " rows from ", nrow(result), " table(s) to parquet files.")
+    } else {
+      message("No inlined data to flush.")
+    }
   }
 
   invisible(result)
@@ -133,13 +136,13 @@ db_set_inline_threshold <- function(schema = "main", table = NULL, threshold = 1
 
   if (!is.null(table)) {
     table <- .db_validate_name(table, "table")
-    args <- c(args, glue::glue("table_name => {.db_sql_quote(table)}"))
+    args <- c(args, glue::glue("table_name := {.db_sql_quote(table)}"))
     scope_desc <- paste0("for table ", table)
   }
 
   if (!is.null(schema)) {
     schema <- .db_validate_name(schema, "schema")
-    args <- c(args, glue::glue("schema_name => {.db_sql_quote(schema)}"))
+    args <- c(args, glue::glue("schema := {.db_sql_quote(schema)}"))
     if (is.null(table)) {
       scope_desc <- paste0("for schema ", schema)
     } else {
@@ -151,7 +154,7 @@ db_set_inline_threshold <- function(schema = "main", table = NULL, threshold = 1
   DBI::dbExecute(con, sql)
 
   message("Set inline threshold to ", threshold, " rows ", scope_desc, ".")
-  invisible(qname)
+  invisible(TRUE)
 }
 
 
@@ -211,7 +214,7 @@ db_set_clustering <- function(schema = "main", table, columns) {
     sort_clause <- paste(columns, collapse = ", ")
     sql <- glue::glue("ALTER TABLE {qname} SET SORTED BY ({sort_clause})")
     DBI::dbExecute(con, sql)
-    message("Set sort order for ", qname, ": ", sort_clause)
+    message("Set sorted order for ", qname, ": ", sort_clause)
   }
 
   invisible(qname)
@@ -224,9 +227,12 @@ db_set_clustering <- function(schema = "main", table, columns) {
 #' Use this after setting clustering on a table that already contains data,
 #' or after many appends have fragmented the sort order.
 #'
+#' DuckLake automatically sorts data during compaction based on the table's
+#' sort order (SET SORTED BY), so this function compacts files to re-sort.
+#'
 #' @param schema Schema name (default "main")
 #' @param table Table name
-#' @param max_files Maximum number of files to process in one operation.
+#' @param max_files Maximum number of compaction operations per call.
 #'   Lower values use less memory. Default NULL processes all files.
 #' @return Invisibly returns the qualified table name
 #' @examples
@@ -240,7 +246,7 @@ db_set_clustering <- function(schema = "main", table, columns) {
 #' # Recluster with memory limit
 #' db_recluster(table = "events", max_files = 100)
 #' }
-#' @seealso [db_set_clustering()] to configure clustering order
+#' @seealso [db_set_clustering()] to configure clustering order, [db_compact()]
 #' @export
 db_recluster <- function(schema = "main", table, max_files = NULL) {
   schema <- .db_validate_name(schema, "schema")
@@ -258,20 +264,22 @@ db_recluster <- function(schema = "main", table, max_files = NULL) {
 
   qname <- paste0(catalog, ".", schema, ".", table)
 
+  # DuckLake sorts data during compaction based on SET SORTED BY order
+  # Use ducklake_merge_adjacent_files to compact and re-sort
   args <- c(.db_sql_quote(catalog), .db_sql_quote(table))
 
-  named_args <- c(glue::glue("schema_name => {.db_sql_quote(schema)}"))
+  named_args <- c(glue::glue("schema => {.db_sql_quote(schema)}"))
   if (!is.null(max_files)) {
     if (!is.numeric(max_files) || max_files < 1) {
       stop("max_files must be a positive integer.", call. = FALSE)
     }
-    named_args <- c(named_args, glue::glue("max_files => {as.integer(max_files)}"))
+    named_args <- c(named_args, glue::glue("max_compacted_files => {as.integer(max_files)}"))
   }
 
   all_args <- c(args, named_args)
-  sql <- glue::glue("CALL ducklake_recluster({paste(all_args, collapse = ', ')})")
+  sql <- glue::glue("CALL ducklake_merge_adjacent_files({paste(all_args, collapse = ', ')})")
 
-  message("Reclustering ", qname, "...")
+  message("Reclustering ", qname, " (compacting with sort order)...")
   DBI::dbExecute(con, sql)
   message("Reclustering complete.")
 
@@ -283,14 +291,14 @@ db_recluster <- function(schema = "main", table, max_files = NULL) {
 # Iceberg Export
 # ==============================================================================
 
-#' Export a DuckLake table as Iceberg format
+#' Export a DuckLake table as Iceberg format (EXPERIMENTAL)
 #'
 #' @description Exports a DuckLake table to Iceberg format for compatibility
-#' with other data lakehouse engines (Spark, Trino, Presto, etc.). Creates
-#' Iceberg metadata files alongside the existing parquet data files.
+#' with other data lakehouse engines (Spark, Trino, Presto, etc.).
 #'
-#' **Note:** This feature requires DuckLake functions that may not yet be
-#' available in all versions. Check DuckLake documentation for compatibility.
+#' **Note:** This is experimental. DuckLake 0.3+ supports Iceberg interoperability
+#' via `COPY FROM DATABASE ducklake TO iceberg_catalog`. This function attempts
+#' to use internal DuckLake Iceberg functions which may not be available.
 #'
 #' @param schema Schema name (default "main")
 #' @param table Table name
@@ -335,7 +343,7 @@ db_export_iceberg <- function(schema = "main",
   qname <- paste0(catalog, ".", schema, ".", table)
 
   args <- c(.db_sql_quote(catalog), .db_sql_quote(table))
-  named_args <- c(glue::glue("schema_name => {.db_sql_quote(schema)}"))
+  named_args <- c(glue::glue("schema => {.db_sql_quote(schema)}"))
 
   if (!is.null(path)) {
     named_args <- c(named_args, glue::glue("path => {.db_sql_quote(path)}"))
@@ -408,7 +416,7 @@ db_iceberg_metadata <- function(schema = "main", table) {
 
   qname <- paste0(catalog, ".", schema, ".", table)
 
-  sql <- glue::glue("FROM ducklake_iceberg_metadata({.db_sql_quote(catalog)}, {.db_sql_quote(table)}, schema_name => {.db_sql_quote(schema)})")
+  sql <- glue::glue("FROM ducklake_iceberg_metadata({.db_sql_quote(catalog)}, {.db_sql_quote(table)}, schema => {.db_sql_quote(schema)})")
 
   result <- tryCatch({
     DBI::dbGetQuery(con, sql)

@@ -39,11 +39,13 @@ A list with components: \code{added}, \code{removed}, and (if key_cols provided)
 }
 \description{
 Shows the differences in a table between two snapshot versions
+db_diff() is set-based (EXCEPT), so duplicates don't count as "added".
+Your append produced 10 duplicate rows + 2 genuinely new distinct rows, so it reports 2 added.
 or timestamps. Returns added, removed, and (optionally) changed rows.
 }
 \examples{
 \dontrun{
-db_lake_connect()
+db_connect()
 
 # Compare versions 3 and 5
 diff <- db_diff(table = "products", from_version = 3, to_version = 5)

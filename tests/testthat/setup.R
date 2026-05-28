@@ -46,16 +46,59 @@ ducklake_available <- function() {
 }
 
 #' Get the installed DuckLake extension version
+#' Returns the extension version string, or infers from DuckDB version
 ducklake_version <- function() {
   tryCatch({
     con <- DBI::dbConnect(duckdb::duckdb(), ":memory:")
     on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
     DBI::dbExecute(con, "INSTALL ducklake")
     DBI::dbExecute(con, "LOAD ducklake")
+
+    # Try to get extension version directly
     result <- DBI::dbGetQuery(con,
       "SELECT extension_version FROM duckdb_extensions() WHERE extension_name = 'ducklake'"
     )
-    if (nrow(result) > 0) result$extension_version[1] else NA_character_
+
+    if (nrow(result) > 0 && !is.na(result$extension_version[1]) && nzchar(result$extension_version[1])) {
+      ver <- gsub("^v", "", as.character(result$extension_version[1]))
+      # Check if it looks like a version (starts with digit, has dots)
+      if (grepl("^[0-9]+\\.[0-9]", ver)) {
+        return(ver)
+      }
+    }
+
+    # Fallback: get DuckDB version
+    duckdb_ver_raw <- DBI::dbGetQuery(con, "SELECT version() AS v")$v[1]
+
+    # Extract version number - handle formats like:
+    # "v1.5.0" -> "1.5.0"
+    # "v1.5.0-dev123" -> "1.5.0"
+    # "415a9ebd" (commit hash) -> assume latest
+    duckdb_ver <- gsub("^v", "", duckdb_ver_raw)
+    duckdb_ver <- gsub("\\s.*$", "", duckdb_ver)  # Remove everything after space
+    duckdb_ver <- gsub("-.*$", "", duckdb_ver)    # Remove -dev suffix
+
+    # If it's just a hex commit hash (no dots), assume it's a dev build = latest
+    if (!grepl("\\.", duckdb_ver) && grepl("^[0-9a-f]+$", duckdb_ver, ignore.case = TRUE)) {
+      return("1.0.0")  # Assume dev build has latest features
+    }
+
+    # Infer DuckLake version from DuckDB version using compatibility matrix
+    # DuckDB 1.5.x+ -> DuckLake 1.0
+    # DuckDB 1.4.x -> DuckLake 0.3
+    # DuckDB 1.3.x -> DuckLake 0.2
+    if (grepl("^1\\.5", duckdb_ver) || grepl("^1\\.[6-9]", duckdb_ver) || grepl("^[2-9]", duckdb_ver)) {
+      return("1.0.0")
+    } else if (grepl("^1\\.4", duckdb_ver)) {
+      return("0.3.0")
+    } else if (grepl("^1\\.3", duckdb_ver)) {
+      return("0.2.0")
+    } else if (grepl("^1\\.[0-2]", duckdb_ver)) {
+      return("0.1.0")
+    }
+
+    # If we still can't parse, assume latest if DuckLake loads successfully
+    "1.0.0"
   }, error = function(e) NA_character_)
 }
 
@@ -73,14 +116,23 @@ duckdb_version <- function() {
 #' Check if DuckLake version meets minimum requirement
 ducklake_version_ok <- function(min_version = MIN_DUCKLAKE_VERSION) {
   ver <- ducklake_version()
-  if (is.na(ver)) return(FALSE)
-  utils::compareVersion(ver, min_version) >= 0
+  if (is.na(ver) || !nzchar(ver)) return(FALSE)
+  tryCatch({
+    utils::compareVersion(ver, min_version) >= 0
+  }, error = function(e) FALSE)
 }
 
 #' Skip test if DuckLake version is below minimum
 skip_if_ducklake_below <- function(min_version) {
   ver <- ducklake_version()
-  if (is.na(ver) || utils::compareVersion(ver, min_version) < 0) {
+  if (is.na(ver) || !nzchar(ver)) {
+    testthat::skip(paste0("Could not determine DuckLake version (requires >= ", min_version, ")"))
+  }
+  cmp <- tryCatch({
+    utils::compareVersion(ver, min_version)
+  }, error = function(e) -1)
+
+  if (cmp < 0) {
     testthat::skip(paste0("Requires DuckLake >= ", min_version, " (have: ", ver, ")"))
   }
 }

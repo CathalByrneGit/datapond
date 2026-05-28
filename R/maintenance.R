@@ -312,7 +312,7 @@ db_compact <- function(schema = "main", table = NULL, max_files = NULL) {
 #' }
 #' @seealso [db_compact()] to merge small files
 #' @export
-db_file_stats <- function(schema = "main", table = NULL) {
+db_file_stats <- function(schema = NULL, table = NULL) {
   con <- .db_get_con()
   if (is.null(con)) {
     stop("Not connected. Use db_connect() first.", call. = FALSE)
@@ -323,34 +323,43 @@ db_file_stats <- function(schema = "main", table = NULL) {
     stop("No DuckLake catalog configured. Use db_connect() first.", call. = FALSE)
   }
 
-  # Validate filter params first
- schema_filter <- if (!is.null(schema)) .db_validate_name(schema, "schema") else NULL
+  # Validate filter params
+  schema_filter <- if (!is.null(schema)) .db_validate_name(schema, "schema") else NULL
   table_filter <- if (!is.null(table)) .db_validate_name(table, "table") else NULL
 
-  # Query DuckLake internal metadata tables directly for reliable column names
-  # DuckLake stores metadata in memory database, not in the attached catalog
-  metadata_schema <- paste0("memory.__ducklake_metadata_", catalog)
+  # Query DuckLake metadata tables directly
+  # Tables are in __ducklake_metadata_{catalog} schema
+  meta_schema <- glue::glue("__ducklake_metadata_{catalog}")
 
-  # Build query with optional filters
-  where_clauses <- "1=1"
+  # Build WHERE clauses for filtering
+  where_clauses <- c(
+    "t.end_snapshot IS NULL",  # Only current tables
+    "s.end_snapshot IS NULL"   # Only current schemas
+  )
+
   if (!is.null(schema_filter)) {
-    where_clauses <- paste0(where_clauses, " AND s.schema_name = ", .db_sql_quote(schema_filter))
+    where_clauses <- c(where_clauses, glue::glue("s.schema_name = {.db_sql_quote(schema_filter)}"))
   }
   if (!is.null(table_filter)) {
-    where_clauses <- paste0(where_clauses, " AND t.table_name = ", .db_sql_quote(table_filter))
+    where_clauses <- c(where_clauses, glue::glue("t.table_name = {.db_sql_quote(table_filter)}"))
   }
 
+  where_sql <- paste(where_clauses, collapse = " AND ")
+
+  # Query joining ducklake_schema, ducklake_table, and ducklake_data_file
   sql <- glue::glue("
     SELECT
       s.schema_name,
       t.table_name,
-      COUNT(f.file_id) AS file_count,
-      COALESCE(SUM(f.row_count), 0) AS total_rows,
+      COUNT(f.data_file_id) AS file_count,
+      COALESCE(SUM(f.record_count), 0) AS total_rows,
       COALESCE(SUM(f.file_size_bytes), 0) AS total_bytes
-    FROM {metadata_schema}.ducklake_table t
-    JOIN {metadata_schema}.ducklake_schema s ON t.schema_id = s.schema_id
-    LEFT JOIN {metadata_schema}.ducklake_data_file f ON t.table_id = f.table_id
-    WHERE {where_clauses}
+    FROM {meta_schema}.ducklake_table t
+    JOIN {meta_schema}.ducklake_schema s ON t.schema_id = s.schema_id
+    LEFT JOIN {meta_schema}.ducklake_data_file f
+      ON t.table_id = f.table_id
+      AND f.end_snapshot IS NULL
+    WHERE {where_sql}
     GROUP BY s.schema_name, t.table_name
     ORDER BY s.schema_name, t.table_name
   ")
@@ -358,99 +367,33 @@ db_file_stats <- function(schema = "main", table = NULL) {
   info <- tryCatch({
     DBI::dbGetQuery(con, sql)
   }, error = function(e) {
-    # Fallback: try ducklake_table_info if direct query fails
-    fallback_sql <- glue::glue("FROM ducklake_table_info({.db_sql_quote(catalog)})")
-    fallback_info <- DBI::dbGetQuery(con, fallback_sql)
-
-    # Normalize column names and apply filters manually
-    names(fallback_info) <- tolower(names(fallback_info))
-
-    # Find schema column
-    schema_col <- NULL
-    for (col in c("schema_name", "schema", "table_schema")) {
-      if (col %in% names(fallback_info)) {
-        schema_col <- col
-        break
-      }
-    }
-
-    # Find table column
-    table_col <- NULL
-    for (col in c("table_name", "table", "name")) {
-      if (col %in% names(fallback_info)) {
-        table_col <- col
-        break
-      }
-    }
-
-    # Apply filters
-    if (!is.null(schema_filter) && !is.null(schema_col)) {
-      fallback_info <- fallback_info[fallback_info[[schema_col]] == schema_filter, , drop = FALSE]
-    }
-    if (!is.null(table_filter) && !is.null(table_col)) {
-      fallback_info <- fallback_info[fallback_info[[table_col]] == table_filter, , drop = FALSE]
-    }
-
-    # Rename columns to expected names
-    if (!is.null(schema_col) && schema_col != "schema_name") {
-      names(fallback_info)[names(fallback_info) == schema_col] <- "schema_name"
-    }
-    if (!is.null(table_col) && table_col != "table_name") {
-      names(fallback_info)[names(fallback_info) == table_col] <- "table_name"
-    }
-
-    fallback_info
+    # Return empty result on error
+    data.frame(
+      schema_name = character(),
+      table_name = character(),
+      file_count = integer(),
+      total_rows = numeric(),
+      total_bytes = numeric(),
+      stringsAsFactors = FALSE
+    )
   })
 
   if (nrow(info) == 0) {
-    message("No tables found in catalog.")
-    return(invisible(data.frame(
-      schema_name = character(0),
-      table_name = character(0),
-      file_count = integer(0),
-      total_rows = numeric(0),
-      total_bytes = numeric(0),
-      avg_file_bytes = numeric(0),
-      avg_rows_per_file = numeric(0)
-    )))
+    info <- data.frame(
+      schema_name = character(),
+      table_name = character(),
+      file_count = integer(),
+      total_rows = numeric(),
+      total_bytes = numeric(),
+      stringsAsFactors = FALSE
+    )
   }
 
-  # Build result with useful statistics
-  # ducklake_table_info returns various column names depending on version
-  n_rows <- nrow(info)
+  # Calculate averages
+  info$avg_file_bytes <- ifelse(info$file_count > 0, info$total_bytes / info$file_count, 0)
+  info$avg_rows_per_file <- ifelse(info$file_count > 0, info$total_rows / info$file_count, 0)
 
-  # Helper to get column value with fallbacks
-  get_col <- function(df, candidates, default_val) {
-    for (col in candidates) {
-      if (col %in% names(df)) {
-        return(df[[col]])
-      }
-    }
-    rep(default_val, nrow(df))
-  }
-
-  result <- data.frame(
-    schema_name = get_col(info, c("schema_name", "schema", "table_schema"), NA_character_),
-    table_name = get_col(info, c("table_name", "table", "name"), NA_character_),
-    file_count = get_col(info, c("file_count", "files", "num_files"), NA_integer_),
-    total_rows = get_col(info, c("row_count", "rows", "total_rows", "cardinality"), NA_real_),
-    total_bytes = get_col(info, c("estimated_size", "size", "total_bytes", "bytes"), NA_real_),
-    stringsAsFactors = FALSE
-  )
-
-  # Calculate derived statistics
-  result$avg_file_bytes <- ifelse(
-    result$file_count > 0,
-    result$total_bytes / result$file_count,
-    NA_real_
-  )
-  result$avg_rows_per_file <- ifelse(
-    result$file_count > 0,
-    result$total_rows / result$file_count,
-    NA_real_
-  )
-
-  result
+  info
 }
 
 
@@ -830,20 +773,20 @@ db_changes <- function(schema = "main",
     stop("No DuckLake catalog configured. Use db_connect() first.", call. = FALSE)
   }
 
-  from_version <- as.integer(from_version)
+  from_version <- suppressWarnings(as.integer(from_version))
   if (is.na(from_version) || from_version < 0) {
     stop("from_version must be a non-negative integer.", call. = FALSE)
   }
 
   # Get current version if to_version not specified
   if (is.null(to_version)) {
-    snapshots <- db_snapshots(schema = schema, table = table)
+    snapshots <- db_snapshots()
     if (nrow(snapshots) == 0) {
-      stop("No snapshots found for table ", schema, ".", table, call. = FALSE)
+      stop("No snapshots found in catalog.", call. = FALSE)
     }
     to_version <- max(snapshots$snapshot_id, na.rm = TRUE)
   } else {
-    to_version <- as.integer(to_version)
+    to_version <- suppressWarnings(as.integer(to_version))
     if (is.na(to_version) || to_version < from_version) {
       stop("to_version must be >= from_version.", call. = FALSE)
     }
@@ -932,7 +875,7 @@ db_insertions <- function(schema = "main",
 
   from_version <- as.integer(from_version)
   to_version <- if (is.null(to_version)) {
-    snapshots <- db_snapshots(schema = schema, table = table)
+    snapshots <- db_snapshots()
     max(snapshots$snapshot_id, na.rm = TRUE)
   } else {
     as.integer(to_version)
@@ -987,7 +930,7 @@ db_deletions <- function(schema = "main",
 
   from_version <- as.integer(from_version)
   to_version <- if (is.null(to_version)) {
-    snapshots <- db_snapshots(schema = schema, table = table)
+    snapshots <- db_snapshots()
     max(snapshots$snapshot_id, na.rm = TRUE)
   } else {
     as.integer(to_version)

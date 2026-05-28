@@ -32,8 +32,8 @@ server <- function(input, output, session) {
 }
 }
 \seealso{
-Other shiny: 
-\code{\link{db_browser}()},
-\code{\link{db_browser_server}()}
+Other shiny:
+\code{\link[=db_browser]{db_browser()}},
+\code{\link[=db_browser_server]{db_browser_server()}}
 }
 \concept{shiny}

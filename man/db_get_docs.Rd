@@ -2,28 +2,37 @@
 % Please edit documentation in R/docs.R
 \name{db_get_docs}
 \alias{db_get_docs}
-\title{Get documentation for a dataset or table}
+\title{Get documentation for a table}
 \usage{
-db_get_docs(section = NULL, dataset = NULL, schema = "main", table = NULL)
+db_get_docs(schema = "main", table)
 }
 \arguments{
-\item{section}{Section name (hive mode only)}
+\item{schema}{Schema name (default "main")}
 
-\item{dataset}{Dataset name (hive mode only)}
-
-\item{schema}{Schema name (DuckLake mode, default "main")}
-
-\item{table}{Table name (DuckLake mode only)}
+\item{table}{Table name}
 }
 \value{
-A list containing description, owner, tags, and column documentation
+A list containing description, owner, tags, lineage, and column documentation
 }
 \description{
-Retrieve documentation metadata for a dataset or table.
+Retrieve documentation metadata for a table and its columns.
+Metadata is stored using native SQL COMMENT ON statements.
 }
 \examples{
 \dontrun{
 db_connect()
-db_get_docs("Trade", "Imports")
+
+# First, add documentation
+db_comment(table = "imports", comment = list(
+  description = "Monthly import values",
+  owner = "Trade Section",
+  tags = c("trade", "monthly")
+))
+
+# Then retrieve it
+db_get_docs(table = "imports")
 }
+}
+\seealso{
+\code{\link[=db_comment]{db_comment()}} to add documentation
 }

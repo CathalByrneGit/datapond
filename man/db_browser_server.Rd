@@ -27,8 +27,8 @@ server <- function(input, output, session) {
 }
 }
 \seealso{
-Other shiny: 
-\code{\link{db_browser}()},
-\code{\link{db_browser_ui}()}
+Other shiny:
+\code{\link[=db_browser]{db_browser()}},
+\code{\link[=db_browser_ui]{db_browser_ui()}}
 }
 \concept{shiny}

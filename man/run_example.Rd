@@ -21,7 +21,6 @@ Runs one of the example scripts included with the package.
 run_example()
 
 # Run specific example
-run_example("browser_demo_hive")
-run_example("browser_demo_ducklake")
+run_example("browser_demo")
 }
 }
