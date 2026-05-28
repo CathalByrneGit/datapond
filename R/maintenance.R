@@ -395,60 +395,6 @@ db_file_stats <- function(schema = NULL, table = NULL) {
 
   info
 }
-    }
-
-    fallback_info
-  })
-
-  if (nrow(info) == 0) {
-    message("No tables found in catalog.")
-    return(invisible(data.frame(
-      schema_name = character(0),
-      table_name = character(0),
-      file_count = integer(0),
-      total_rows = numeric(0),
-      total_bytes = numeric(0),
-      avg_file_bytes = numeric(0),
-      avg_rows_per_file = numeric(0)
-    )))
-  }
-
-  # Build result with useful statistics
-  n_rows <- nrow(info)
-
-  # Helper to get column value with fallbacks
-  get_col <- function(df, candidates, default_val) {
-    for (col in candidates) {
-      if (col %in% names(df)) {
-        return(df[[col]])
-      }
-    }
-    rep(default_val, nrow(df))
-  }
-
-  result <- data.frame(
-    schema_name = get_col(info, c("schema_name", "schema", "table_schema"), NA_character_),
-    table_name = get_col(info, c("table_name", "table", "name"), NA_character_),
-    file_count = get_col(info, c("file_count", "files", "num_files"), NA_integer_),
-    total_rows = get_col(info, c("row_count", "rows", "total_rows", "cardinality"), NA_real_),
-    total_bytes = get_col(info, c("estimated_size", "size", "total_bytes", "bytes"), NA_real_),
-    stringsAsFactors = FALSE
-  )
-
-  # Calculate derived statistics
-  result$avg_file_bytes <- ifelse(
-    result$file_count > 0,
-    result$total_bytes / result$file_count,
-    NA_real_
-  )
-  result$avg_rows_per_file <- ifelse(
-    result$file_count > 0,
-    result$total_rows / result$file_count,
-    NA_real_
-  )
-
-  result
-}
 
 
 #' Clean up orphaned files from DuckLake storage
