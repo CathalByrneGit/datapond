@@ -151,16 +151,11 @@ db_write_arrow <- function(data,
 #' Get Parquet file paths for a DuckLake table
 #' @noRd
 .db_get_table_files <- function(con, catalog, schema, table) {
-  metadata_schema <- paste0("memory.__ducklake_metadata_", catalog)
-
+  # Use ducklake_table_data_files function instead of querying metadata directly
   sql <- glue::glue("
-    SELECT f.path
-    FROM {metadata_schema}.ducklake_data_file f
-    JOIN {metadata_schema}.ducklake_table t ON f.table_id = t.table_id
-    JOIN {metadata_schema}.ducklake_schema s ON t.schema_id = s.schema_id
-    WHERE s.schema_name = {.db_sql_quote(schema)}
-      AND t.table_name = {.db_sql_quote(table)}
-      AND f.path IS NOT NULL
+    SELECT path
+    FROM ducklake_table_data_files({.db_sql_quote(catalog)}, {.db_sql_quote(table)}, schema_name => {.db_sql_quote(schema)})
+    WHERE path IS NOT NULL
   ")
 
   result <- tryCatch({

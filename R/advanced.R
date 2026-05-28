@@ -46,12 +46,12 @@ db_flush_inlined <- function(schema = "main", table = NULL) {
 
   if (!is.null(table)) {
     table <- .db_validate_name(table, "table")
-    args <- c(args, .db_sql_quote(table))
+    args <- c(args, glue::glue("table_name => {.db_sql_quote(table)}"))
   }
 
   if (!is.null(schema)) {
     schema <- .db_validate_name(schema, "schema")
-    args <- c(args, glue::glue("schema => {.db_sql_quote(schema)}"))
+    args <- c(args, glue::glue("schema_name => {.db_sql_quote(schema)}"))
   }
 
   sql <- glue::glue("CALL ducklake_flush_inlined_data({paste(args, collapse = ', ')})")
@@ -114,7 +114,7 @@ db_set_inline_threshold <- function(schema = "main", table, threshold = 10000) {
 
   qname <- paste0(catalog, ".", schema, ".", table)
 
-  sql <- glue::glue("ALTER TABLE {qname} SET (inline_row_threshold = {as.integer(threshold)})")
+  sql <- glue::glue("ALTER TABLE {qname} SET (data_inlining_row_limit = {as.integer(threshold)})")
   DBI::dbExecute(con, sql)
 
   message("Set inline threshold for ", qname, " to ", threshold, " rows.")
@@ -126,29 +126,29 @@ db_set_inline_threshold <- function(schema = "main", table, threshold = 10000) {
 # Clustering / Sorted Tables
 # ==============================================================================
 
-#' Set clustering order for a table
+#' Set sort order for a table
 #'
 #' @description Configures the sort order for data files in a table. When new
 #' data is written, it will be sorted by these columns within each file.
 #' This improves query performance for range scans and filters on the
-#' clustering columns.
+#' sorted columns.
 #'
 #' @param schema Schema name (default "main")
 #' @param table Table name
-#' @param columns Character vector of column names to cluster by, in order of priority.
-#'   Use NULL to remove clustering.
+#' @param columns Character vector of column names to sort by, in order of priority.
+#'   Use NULL to remove sort order.
 #' @return Invisibly returns the qualified table name
 #' @examples
 #' \dontrun{
 #' db_connect()
 #'
-#' # Set clustering for time-series queries
+#' # Set sort order for time-series queries
 #' db_set_clustering(table = "events", columns = c("event_date", "user_id"))
 #'
-#' # Remove clustering
+#' # Remove sort order
 #' db_set_clustering(table = "events", columns = NULL)
 #' }
-#' @seealso [db_recluster()] to apply clustering to existing data, [db_write()]
+#' @seealso [db_recluster()] to apply sort order to existing data, [db_write()]
 #'   with `sort_by` parameter
 #' @export
 db_set_clustering <- function(schema = "main", table, columns) {
@@ -168,17 +168,17 @@ db_set_clustering <- function(schema = "main", table, columns) {
   qname <- paste0(catalog, ".", schema, ".", table)
 
   if (is.null(columns) || length(columns) == 0) {
-    sql <- glue::glue("ALTER TABLE {qname} RESET CLUSTERING ORDER")
+    sql <- glue::glue("ALTER TABLE {qname} RESET SORTED BY")
     DBI::dbExecute(con, sql)
-    message("Removed clustering from ", qname)
+    message("Removed sort order from ", qname)
   } else {
     if (!is.character(columns)) {
       stop("columns must be a character vector.", call. = FALSE)
     }
     sort_clause <- paste(columns, collapse = ", ")
-    sql <- glue::glue("ALTER TABLE {qname} SET CLUSTERING ORDER BY ({sort_clause})")
+    sql <- glue::glue("ALTER TABLE {qname} SET SORTED BY ({sort_clause})")
     DBI::dbExecute(con, sql)
-    message("Set clustering for ", qname, ": ", sort_clause)
+    message("Set sort order for ", qname, ": ", sort_clause)
   }
 
   invisible(qname)
@@ -227,7 +227,7 @@ db_recluster <- function(schema = "main", table, max_files = NULL) {
 
   args <- c(.db_sql_quote(catalog), .db_sql_quote(table))
 
-  named_args <- c(glue::glue("schema => {.db_sql_quote(schema)}"))
+  named_args <- c(glue::glue("schema_name => {.db_sql_quote(schema)}"))
   if (!is.null(max_files)) {
     if (!is.numeric(max_files) || max_files < 1) {
       stop("max_files must be a positive integer.", call. = FALSE)
@@ -255,6 +255,9 @@ db_recluster <- function(schema = "main", table, max_files = NULL) {
 #' @description Exports a DuckLake table to Iceberg format for compatibility
 #' with other data lakehouse engines (Spark, Trino, Presto, etc.). Creates
 #' Iceberg metadata files alongside the existing parquet data files.
+#'
+#' **Note:** This feature requires DuckLake functions that may not yet be
+#' available in all versions. Check DuckLake documentation for compatibility.
 #'
 #' @param schema Schema name (default "main")
 #' @param table Table name
@@ -299,7 +302,7 @@ db_export_iceberg <- function(schema = "main",
   qname <- paste0(catalog, ".", schema, ".", table)
 
   args <- c(.db_sql_quote(catalog), .db_sql_quote(table))
-  named_args <- c(glue::glue("schema => {.db_sql_quote(schema)}"))
+  named_args <- c(glue::glue("schema_name => {.db_sql_quote(schema)}"))
 
   if (!is.null(path)) {
     named_args <- c(named_args, glue::glue("path => {.db_sql_quote(path)}"))
@@ -314,6 +317,10 @@ db_export_iceberg <- function(schema = "main",
   result <- tryCatch({
     DBI::dbGetQuery(con, sql)
   }, error = function(e) {
+    if (grepl("does not exist", e$message, ignore.case = TRUE)) {
+      stop("Iceberg export not available in this DuckLake version. ",
+           "Check DuckLake documentation for Iceberg compatibility.", call. = FALSE)
+    }
     stop("Iceberg export failed: ", e$message, call. = FALSE)
   })
 
@@ -328,6 +335,9 @@ db_export_iceberg <- function(schema = "main",
 #'
 #' @description Returns Iceberg-compatible metadata for a DuckLake table,
 #' including schema, partitioning, and snapshot information in Iceberg format.
+#'
+#' **Note:** This feature requires DuckLake functions that may not yet be
+#' available in all versions. Check DuckLake documentation for compatibility.
 #'
 #' @param schema Schema name (default "main")
 #' @param table Table name
@@ -365,11 +375,15 @@ db_iceberg_metadata <- function(schema = "main", table) {
 
   qname <- paste0(catalog, ".", schema, ".", table)
 
-  sql <- glue::glue("FROM ducklake_iceberg_metadata({.db_sql_quote(catalog)}, {.db_sql_quote(table)}, schema => {.db_sql_quote(schema)})")
+  sql <- glue::glue("FROM ducklake_iceberg_metadata({.db_sql_quote(catalog)}, {.db_sql_quote(table)}, schema_name => {.db_sql_quote(schema)})")
 
   result <- tryCatch({
     DBI::dbGetQuery(con, sql)
   }, error = function(e) {
+    if (grepl("does not exist", e$message, ignore.case = TRUE)) {
+      stop("Iceberg metadata not available in this DuckLake version. ",
+           "Check DuckLake documentation for Iceberg compatibility.", call. = FALSE)
+    }
     stop("Failed to get Iceberg metadata: ", e$message, call. = FALSE)
   })
 
