@@ -745,7 +745,6 @@
 </tr>
 </tbody>
 </table>
-<p><em>Note: Iceberg functions require DuckLake features that may not be available in all versions.</em></p>
 </div>
 <div class="section level3">
 <h3 id="metadata--maintenance">Metadata &amp; Maintenance<a class="anchor" aria-label="anchor" href="#metadata--maintenance"></a>
@@ -783,6 +782,14 @@
 <tr>
 <td><code>db_changes()</code></td>
 <td>Get row-level changes via Data Change Feed</td>
+</tr>
+<tr>
+<td><code>db_insertions()</code></td>
+<td>Get only inserted rows between snapshots</td>
+</tr>
+<tr>
+<td><code>db_deletions()</code></td>
+<td>Get only deleted rows between snapshots</td>
 </tr>
 <tr>
 <td><code><a href="reference/db_rollback.html">db_rollback()</a></code></td>

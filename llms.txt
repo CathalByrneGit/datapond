@@ -475,9 +475,6 @@ memory used). Use the lazy approach for in-lake transformations.*
 | `db_export_iceberg()` | Export table to Iceberg format for Spark/Trino/Presto |
 | `db_iceberg_metadata()` | Get Iceberg-compatible metadata for a table |
 
-*Note: Iceberg functions require DuckLake features that may not be
-available in all versions.*
-
 ### Metadata & Maintenance
 
 | Function | Description |
@@ -488,6 +485,8 @@ available in all versions.*
 | [`db_view_cols()`](https://cathalbyrnegit.github.io/datapond/reference/db_view_cols.md) | Get column names for a view |
 | [`db_diff()`](https://cathalbyrnegit.github.io/datapond/reference/db_diff.md) | Compare two snapshots (set-based) |
 | `db_changes()` | Get row-level changes via Data Change Feed |
+| `db_insertions()` | Get only inserted rows between snapshots |
+| `db_deletions()` | Get only deleted rows between snapshots |
 | [`db_rollback()`](https://cathalbyrnegit.github.io/datapond/reference/db_rollback.md) | Restore table to a previous version |
 | [`db_vacuum()`](https://cathalbyrnegit.github.io/datapond/reference/db_vacuum.md) | Clean up old snapshots and unreferenced files |
 | `db_compact()` | Merge small Parquet files for better performance |
