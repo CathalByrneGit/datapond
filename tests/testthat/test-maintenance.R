@@ -849,7 +849,7 @@ test_that("db_changes validates to_version >= from_version", {
 
 test_that("db_changes returns changes with correct columns", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
-  skip("Data Change Feed (table_changes) may not be available in all DuckLake versions")
+  skip_if_ducklake_below("1.0.0")
   clean_db_env()
 
   lake <- create_test_lake("changes_cols")
@@ -884,7 +884,7 @@ test_that("db_changes returns changes with correct columns", {
 
 test_that("db_changes filters by change_types", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
-  skip("Data Change Feed (table_changes) may not be available in all DuckLake versions")
+  skip_if_ducklake_below("1.0.0")
   clean_db_env()
 
   lake <- create_test_lake("changes_filter")
@@ -908,7 +908,7 @@ test_that("db_changes filters by change_types", {
 
 test_that("db_changes collect=FALSE returns lazy tbl", {
   skip_if_not(ducklake_available(), "DuckLake extension not available")
-  skip("Data Change Feed (table_changes) may not be available in all DuckLake versions")
+  skip_if_ducklake_below("1.0.0")
   clean_db_env()
 
   lake <- create_test_lake("changes_lazy")

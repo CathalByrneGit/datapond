@@ -853,11 +853,14 @@ db_changes <- function(schema = "main",
   valid_types <- c("insert", "delete", "update_preimage", "update_postimage")
   change_types <- match.arg(change_types, valid_types, several.ok = TRUE)
 
+
   # Build the table_changes query
-  qname <- glue::glue("{catalog}.{schema}.{table}")
+  # Syntax: FROM catalog.table_changes('table', from_snapshot, to_snapshot)
+  # For tables not in main schema, use 'schema.table' format
+  table_ref <- if (schema == "main") table else paste0(schema, ".", table)
   sql <- glue::glue("
     SELECT *
-    FROM {catalog}.table_changes({.db_sql_quote(table)}, {from_version}, {to_version}, schema => {.db_sql_quote(schema)})
+    FROM {catalog}.table_changes({.db_sql_quote(table_ref)}, {from_version}, {to_version})
   ")
 
   # Filter by change_types if not all
@@ -891,6 +894,116 @@ db_changes <- function(schema = "main",
   }
 
   result
+}
+
+
+#' Get inserted rows from the Data Change Feed
+#'
+#' @description Convenience wrapper around `db_changes()` that returns only
+#' inserted rows. Uses DuckLake's native `table_insertions` function.
+#'
+#' @inheritParams db_changes
+#' @return A data.frame with columns: snapshot_id, rowid, plus all table columns.
+#' @examples
+#' \dontrun{
+#' # Get all rows inserted between versions 1 and 5
+#' new_rows <- db_insertions(table = "products", from_version = 1, to_version = 5)
+#' }
+#' @seealso [db_changes()] for all change types, [db_deletions()] for deleted rows
+#' @export
+db_insertions <- function(schema = "main",
+                          table,
+                          from_version,
+                          to_version = NULL,
+                          collect = TRUE) {
+
+  schema <- .db_validate_name(schema, "schema")
+  table  <- .db_validate_name(table, "table")
+
+  con <- .db_get_con()
+  if (is.null(con)) {
+    stop("Not connected. Use db_connect() first.", call. = FALSE)
+  }
+
+  catalog <- .db_get("catalog")
+  if (is.null(catalog)) {
+    stop("No DuckLake catalog configured. Use db_connect() first.", call. = FALSE)
+  }
+
+  from_version <- as.integer(from_version)
+  to_version <- if (is.null(to_version)) {
+    snapshots <- db_snapshots(schema = schema, table = table)
+    max(snapshots$snapshot_id, na.rm = TRUE)
+  } else {
+    as.integer(to_version)
+  }
+
+  table_ref <- if (schema == "main") table else paste0(schema, ".", table)
+  sql <- glue::glue("
+    SELECT *
+    FROM {catalog}.table_insertions({.db_sql_quote(table_ref)}, {from_version}, {to_version})
+  ")
+
+  if (collect) {
+    DBI::dbGetQuery(con, sql)
+  } else {
+    dplyr::tbl(con, dplyr::sql(sql))
+  }
+}
+
+
+#' Get deleted rows from the Data Change Feed
+#'
+#' @description Convenience wrapper around `db_changes()` that returns only
+#' deleted rows. Uses DuckLake's native `table_deletions` function.
+#'
+#' @inheritParams db_changes
+#' @return A data.frame with columns: snapshot_id, rowid, plus all table columns.
+#' @examples
+#' \dontrun{
+#' # Get all rows deleted between versions 1 and 5
+#' removed_rows <- db_deletions(table = "products", from_version = 1, to_version = 5)
+#' }
+#' @seealso [db_changes()] for all change types, [db_insertions()] for inserted rows
+#' @export
+db_deletions <- function(schema = "main",
+                         table,
+                         from_version,
+                         to_version = NULL,
+                         collect = TRUE) {
+
+  schema <- .db_validate_name(schema, "schema")
+  table  <- .db_validate_name(table, "table")
+
+  con <- .db_get_con()
+  if (is.null(con)) {
+    stop("Not connected. Use db_connect() first.", call. = FALSE)
+  }
+
+  catalog <- .db_get("catalog")
+  if (is.null(catalog)) {
+    stop("No DuckLake catalog configured. Use db_connect() first.", call. = FALSE)
+  }
+
+  from_version <- as.integer(from_version)
+  to_version <- if (is.null(to_version)) {
+    snapshots <- db_snapshots(schema = schema, table = table)
+    max(snapshots$snapshot_id, na.rm = TRUE)
+  } else {
+    as.integer(to_version)
+  }
+
+  table_ref <- if (schema == "main") table else paste0(schema, ".", table)
+  sql <- glue::glue("
+    SELECT *
+    FROM {catalog}.table_deletions({.db_sql_quote(table_ref)}, {from_version}, {to_version})
+  ")
+
+  if (collect) {
+    DBI::dbGetQuery(con, sql)
+  } else {
+    dplyr::tbl(con, dplyr::sql(sql))
+  }
 }
 
 
