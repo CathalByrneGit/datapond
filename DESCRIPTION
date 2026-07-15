@@ -2,7 +2,7 @@ Package: datapond
 Title: Simple Data Lake Infrastructure for R with DuckLake
 Version: 0.1.0
 Authors@R:
-    person("Cathal", "Byrne", email = "cathal.byrne@cso.ie", role = c("aut", "cre"))
+    person("Cathal", "Byrne", email = "cathal470@gmail.com", role = c("aut", "cre"))
 Description: Provides a unified R interface for DuckLake, a modern data lakehouse
     format built on DuckDB. Supports ACID transactions, time travel queries,
     schema evolution, and Iceberg export for Spark/Trino compatibility. Features
@@ -26,6 +26,7 @@ Imports:
 Suggests:
     arrow,
     bslib,
+    dplyneage,
     DT,
     fs,
     shiny,

@@ -327,27 +327,46 @@ db_dictionary <- function(schema = NULL, include_columns = TRUE) {
 #' Record data lineage
 #'
 #' @description Records the source(s) of a table for data lineage tracking.
-#'   Lineage is stored in the table's comment as JSON metadata.
+#'   Lineage is stored in the table's comment as JSON metadata alongside
+#'   description, owner, and tags.
+#'
+#'   When `pipeline` is supplied (a lazy dbplyr table), column-level lineage
+#'   is extracted automatically using the `dplyneage` package (if installed).
+#'   This traces exactly which source columns produce which output columns,
+#'   through joins, aggregations, and computed expressions.
 #'
 #' @param schema Schema name (default "main")
 #' @param table Table name
-#' @param sources Character vector of source table names or descriptions
+#' @param sources Character vector of source table names. Inferred from
+#'   `pipeline` if not supplied.
 #' @param transformation Description of how data was transformed
+#' @param pipeline Optional lazy dbplyr table (the pipeline that produced the
+#'   table). If supplied and `dplyneage` is installed, column-level lineage is
+#'   extracted automatically. `sources` can be omitted when `pipeline` is given.
 #' @return Invisibly returns TRUE
 #'
 #' @examples
 #' \dontrun{
 #' db_connect()
 #'
+#' # Simple manual lineage
 #' db_lineage(
 #'   table = "monthly_summary",
 #'   sources = c("raw.transactions", "raw.products"),
 #'   transformation = "Aggregated by month and product category"
 #' )
+#'
+#' # Automatic column-level lineage from a dbplyr pipeline (requires dplyneage)
+#' pipeline <- db_read(table = "imports") |>
+#'   dplyr::group_by(country) |>
+#'   dplyr::summarise(total = sum(value))
+#'
+#' db_lineage(table = "country_totals", pipeline = pipeline)
 #' }
-#' @seealso [db_get_lineage()] to retrieve lineage
+#' @seealso [db_get_lineage()] to retrieve lineage, [db_lineage_flow()] to visualise
 #' @export
-db_lineage <- function(schema = "main", table, sources, transformation = NULL) {
+db_lineage <- function(schema = "main", table, sources = NULL,
+                       transformation = NULL, pipeline = NULL) {
 
   con <- .db_get_con()
   if (is.null(con)) {
@@ -355,17 +374,49 @@ db_lineage <- function(schema = "main", table, sources, transformation = NULL) {
   }
 
   schema <- .db_validate_name(schema, "schema")
-  table <- .db_validate_name(table, "table")
+  table  <- .db_validate_name(table, "table")
   catalog <- .db_get("catalog")
+  qname  <- paste(catalog, schema, table, sep = ".")
 
-  qname <- paste(catalog, schema, table, sep = ".")
-
-  # Check table exists
   if (!.db_table_exists(con, catalog, schema, table)) {
     stop("Table '", qname, "' not found.", call. = FALSE)
   }
 
-  # Get existing table comment/metadata
+  # Extract column-level lineage from pipeline via dplyneage
+  col_edges <- NULL
+  if (!is.null(pipeline)) {
+    if (!inherits(pipeline, c("tbl_lazy", "tbl_sql"))) {
+      stop("'pipeline' must be a lazy dbplyr table (tbl_lazy/tbl_sql).", call. = FALSE)
+    }
+    if (!requireNamespace("dplyneage", quietly = TRUE)) {
+      message("Install dplyneage for automatic column-level lineage: ",
+              "pak::pak('tgerke/dplyneage')")
+    } else {
+      lin <- tryCatch(
+        dplyneage::extract_lineage(pipeline),
+        error = function(e) {
+          message("Could not extract column lineage: ", e$message)
+          NULL
+        }
+      )
+      if (!is.null(lin)) {
+        edges <- dplyneage::lineage_edges(lin)
+        col_edges <- as.list(edges)
+
+        # Infer sources from pipeline if not provided
+        if (is.null(sources)) {
+          sources <- unique(edges$source_table)
+          sources <- sources[nzchar(sources)]
+        }
+      }
+    }
+  }
+
+  if (is.null(sources) && is.null(col_edges)) {
+    stop("Provide 'sources' or 'pipeline'.", call. = FALSE)
+  }
+
+  # Merge into existing comment metadata
   existing_comment <- .db_get_table_comment(con, catalog, schema, table)
   existing_meta <- if (!is.null(existing_comment)) {
     .db_parse_comment(existing_comment)
@@ -373,28 +424,29 @@ db_lineage <- function(schema = "main", table, sources, transformation = NULL) {
     list()
   }
 
-  # Update with lineage info
-  existing_meta$lineage_sources <- sources
-  if (!is.null(transformation)) {
-    existing_meta$lineage_transformation <- transformation
-  }
+  if (!is.null(sources))       existing_meta$lineage_sources        <- sources
+  if (!is.null(transformation)) existing_meta$lineage_transformation <- transformation
+  if (!is.null(col_edges))     existing_meta$lineage_column_edges   <- col_edges
 
-  # Save back using db_comment
   db_comment(schema = schema, table = table, comment = existing_meta)
 
-  message("Recorded lineage for ", qname)
+  level <- if (!is.null(col_edges)) "column-level" else "table-level"
+  message("Recorded ", level, " lineage for ", qname)
   invisible(TRUE)
 }
 
 
 #' Get lineage information
 #'
-#' @description Retrieves lineage information for a table.
+#' @description Retrieves lineage information stored for a table.
 #'
 #' @param schema Schema name (default "main")
 #' @param table Table name
-#' @return A list with sources and transformation, or NULL if not recorded
-#' @seealso [db_lineage()] to record lineage
+#' @return A list with `sources`, `transformation`, and (if available)
+#'   `column_edges` data frame with columns: source_table, source_column,
+#'   target_table, target_column, transformation, expression.
+#'   Returns NULL if no lineage has been recorded.
+#' @seealso [db_lineage()] to record lineage, [db_lineage_flow()] to visualise
 #' @export
 db_get_lineage <- function(schema = "main", table) {
 
@@ -404,19 +456,63 @@ db_get_lineage <- function(schema = "main", table) {
   }
 
   schema <- .db_validate_name(schema, "schema")
-  table <- .db_validate_name(table, "table")
+  table  <- .db_validate_name(table, "table")
   catalog <- .db_get("catalog")
 
-  # Get table comment
   table_comment <- .db_get_table_comment(con, catalog, schema, table)
   if (is.null(table_comment)) return(NULL)
 
   parsed <- .db_parse_comment(table_comment)
-  if (is.null(parsed$lineage_sources)) return(NULL)
+  if (is.null(parsed$lineage_sources) && is.null(parsed$lineage_column_edges)) {
+    return(NULL)
+  }
 
-  list(
-    sources = parsed$lineage_sources,
+  result <- list(
+    sources        = parsed$lineage_sources,
     transformation = parsed$lineage_transformation
+  )
+
+  if (!is.null(parsed$lineage_column_edges)) {
+    result$column_edges <- as.data.frame(parsed$lineage_column_edges)
+  }
+
+  result
+}
+
+
+#' Visualise column-level lineage as an interactive diagram
+#'
+#' @description Renders an interactive React Flow lineage diagram for a table,
+#'   showing how source columns flow into output columns. Requires `dplyneage`.
+#'
+#' @param schema Schema name (default "main")
+#' @param table Table name
+#' @return An htmlwidget (displayed in the viewer or browser)
+#' @examples
+#' \dontrun{
+#' db_connect()
+#' db_lineage_flow(table = "country_totals")
+#' }
+#' @seealso [db_lineage()] to record lineage, [db_get_lineage()] to retrieve it
+#' @export
+db_lineage_flow <- function(schema = "main", table) {
+  if (!requireNamespace("dplyneage", quietly = TRUE)) {
+    stop("Install dplyneage to visualise lineage: pak::pak('tgerke/dplyneage')",
+         call. = FALSE)
+  }
+
+  lin <- db_get_lineage(schema = schema, table = table)
+  if (is.null(lin)) {
+    stop("No lineage recorded for this table. Run db_lineage() first.", call. = FALSE)
+  }
+  if (is.null(lin$column_edges)) {
+    stop("Only table-level lineage is available. Re-run db_lineage(pipeline = ...) ",
+         "for column-level lineage.", call. = FALSE)
+  }
+
+  # Reconstruct a lineage object from stored edges and render
+  dplyneage::lineage_flow(
+    dplyneage::lineage_from_edges(lin$column_edges)
   )
 }
 

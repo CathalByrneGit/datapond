@@ -94,6 +94,9 @@
 #' @param inline Deprecated. DuckLake automatically inlines small writes based on
 #'   the `data_inlining_row_limit` threshold (default 10 rows). Use
 #'   [db_set_inline_threshold()] to adjust the threshold for a table.
+#' @param track_lineage If TRUE and `data` is a lazy dbplyr table, automatically
+#'   records column-level lineage after the write using [db_lineage()]. Requires
+#'   the `dplyneage` package (`pak::pak("tgerke/dplyneage")`). Default FALSE.
 #' @param commit_author Optional author for DuckLake commit metadata
 #' @param commit_message Optional message for DuckLake commit metadata
 #' @return Invisibly returns the qualified table name
@@ -162,13 +165,14 @@ db_write <- function(data,
                      bucket_by = NULL,
                      sort_by = NULL,
                      inline = FALSE,
+                     track_lineage = FALSE,
                      commit_author = NULL,
                      commit_message = NULL) {
 
   mode <- match.arg(mode)
 
   # Determine if data is a lazy dbplyr table or a data.frame
- is_lazy <- inherits(data, "tbl_lazy") || inherits(data, "tbl_sql")
+  is_lazy <- inherits(data, "tbl_lazy") || inherits(data, "tbl_sql")
 
   if (!is_lazy && !is.data.frame(data)) {
     stop("data must be a data.frame, tibble, or lazy dbplyr table.", call. = FALSE)
@@ -400,6 +404,18 @@ db_write <- function(data,
   action <- ifelse(mode == "overwrite", "Wrote", "Appended")
   source <- if (is_lazy) "(from query)" else "(from data.frame)"
   message(action, " data to ", qname, " ", source)
+
+  # Auto-record lineage when requested and input is a lazy pipeline
+  if (isTRUE(track_lineage)) {
+    if (!is_lazy) {
+      message("track_lineage ignored: lineage tracking requires a lazy dbplyr pipeline.")
+    } else {
+      tryCatch(
+        db_lineage(schema = schema, table = table, pipeline = data),
+        error = function(e) message("Lineage tracking failed: ", e$message)
+      )
+    }
+  }
 
   invisible(qname)
 }
