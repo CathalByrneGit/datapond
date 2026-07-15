@@ -152,6 +152,13 @@
 #' db_write(my_data, table = "imports", mode = "append",
 #'          commit_author = "jsmith",
 #'          commit_message = "Added Q3 data")
+#'
+#' # Write and automatically record column-level lineage in one step (requires dplyneage)
+#' db_read(table = "raw_transactions") |>
+#'   left_join(db_read(table = "products"), by = "product_id") |>
+#'   group_by(month, category) |>
+#'   summarise(revenue = sum(amount), .groups = "drop") |>
+#'   db_write(table = "monthly_summary", track_lineage = TRUE)
 #' }
 #' @seealso [db_flush_inlined()] to flush inlined data, [db_set_clustering()] to
 #'   change clustering on existing tables, [db_recluster()] to re-sort data
