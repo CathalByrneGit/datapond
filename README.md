@@ -221,21 +221,42 @@ writexl::write_xlsx(dict, "data_dictionary.xlsx")
 ### Data Lineage
 
 ``` r
-# Record where data came from
+# 1. Manual table-level lineage (sources= listed explicitly)
 db_lineage(
   table = "monthly_summary",
   sources = c("raw.transactions", "raw.products"),
   transformation = "Aggregated by month and product category"
 )
 
-# Retrieve lineage information
+# 2. Auto column-level lineage from a lazy dbplyr pipeline
+#    (sources are inferred; requires dplyneage)
+pipeline <- raw_transactions |>
+  dplyr::left_join(raw_products, by = "product_id") |>
+  dplyr::group_by(month, category) |>
+  dplyr::summarise(total = sum(amount), .groups = "drop")
+
+db_lineage(table = "monthly_summary", pipeline = pipeline)
+
+# 3. One-liner: write and record lineage in a single step
+pipeline |> db_write(schema = "main", table = "monthly_summary", track_lineage = TRUE)
+
+# 4. Retrieve lineage (returns sources, transformation, and column_edges)
 db_get_lineage(table = "monthly_summary")
 #> $sources
 #> [1] "raw.transactions" "raw.products"
 #>
 #> $transformation
 #> [1] "Aggregated by month and product category"
+#>
+#> $column_edges
+#> # A data frame: ...
+
+# 5. Visualise column-level lineage as an interactive diagram (requires dplyneage)
+db_lineage_flow(table = "monthly_summary")
 ```
+
+> **Optional dependency:** column-level lineage and `db_lineage_flow()` require
+> the `dplyneage` package — install with `pak::pak("tgerke/dplyneage")`.
 
 ### Interactive Browser
 
@@ -430,8 +451,9 @@ db_write(imports_data, schema = "trade", table = "imports")
 | `db_dictionary()` | Generate full data dictionary |
 | `db_search()` | Search by name, description, owner, or tags |
 | `db_search_columns()` | Find columns by name across all tables |
-| `db_lineage()` | Record data lineage (sources and transformations) |
-| `db_get_lineage()` | Retrieve lineage information for a table |
+| `db_lineage()` | Record data lineage (sources, transformation, or pipeline for column-level) |
+| `db_get_lineage()` | Retrieve lineage (sources, transformation, column_edges) for a table |
+| `db_lineage_flow()` | Render interactive column-level lineage diagram (requires dplyneage) |
 
 ### Partitioning & Clustering
 

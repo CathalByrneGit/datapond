@@ -544,29 +544,157 @@ db_search <- function(pattern, field = c("all", "name", "description", "owner", 
 
 ### `db_lineage()` - Record Data Lineage
 
-Lineage is stored in the table's native COMMENT as JSON alongside other metadata:
+#### Design: static analysis via dplyneage
+
+`db_lineage()` supports two modes. In the simple mode, the caller supplies `sources` and an optional `transformation` string. In the richer mode, the caller passes the actual dbplyr `pipeline` that produced the table, and the optional `dplyneage` package analyses its query tree to extract column-level lineage:
 
 ```{r}
-db_lineage <- function(schema = "main", table, sources, transformation = NULL) {
-  # Get existing table comment/metadata
-  existing_comment <- .db_get_table_comment(con, catalog, schema, table)
-  existing_meta <- .db_parse_comment(existing_comment) %||% list()
+db_lineage <- function(schema = "main", table, sources = NULL,
+                       transformation = NULL, pipeline = NULL) {
 
-  # Add lineage info (preserves existing description, owner, tags)
-  existing_meta$lineage_sources <- sources
-  existing_meta$lineage_transformation <- transformation
+  # pipeline must be a lazy dbplyr table (not collected data)
+  if (!is.null(pipeline)) {
+    if (!inherits(pipeline, c("tbl_lazy", "tbl_sql"))) {
+      stop("'pipeline' must be a lazy dbplyr table (tbl_lazy/tbl_sql).")
+    }
 
-  # Save back using db_comment
-  db_comment(schema = schema, table = table, comment = existing_meta)
+    # dplyneage is optional - graceful degradation when absent
+    if (!requireNamespace("dplyneage", quietly = TRUE)) {
+      message("Install dplyneage for automatic column-level lineage: ",
+              "pak::pak('tgerke/dplyneage')")
+    } else {
+      # Extract lineage by walking the dbplyr query tree - no SQL execution
+      lin   <- dplyneage::extract_lineage(pipeline)
+      edges <- dplyneage::lineage_edges(lin)
+      col_edges <- as.list(edges)
+
+      # Infer table-level sources from the edge data when not provided
+      if (is.null(sources)) {
+        sources <- unique(edges$source_table)
+        sources <- sources[nzchar(sources)]
+      }
+    }
+  }
+  ...
 }
 ```
 
-**Key points:**
+`dplyneage::extract_lineage()` inspects the dbplyr query object (its lazy expression tree) rather than executing it. It traces each output column back through joins, aggregations, and computed expressions to the originating source column. This means no data is read from the database during lineage extraction - it is purely static analysis of the dplyr call graph.
 
-- All metadata stored in native COMMENT ON (survives disconnect/reconnect)
-- JSON format allows structured data (description, owner, tags, lineage)
-- `db_get_lineage()` extracts lineage from the parsed comment JSON
-- Lineage is merged with existing metadata, not overwritten
+#### Storage: lineage_column_edges alongside other metadata
+
+Column edges are serialised as a list and stored in the table's JSON comment under the key `lineage_column_edges`, alongside the existing `description`, `owner`, `tags`, and `lineage_sources` fields:
+
+```{r}
+# The comment JSON for a table with full metadata looks like:
+{
+  "description": "Aggregated import totals by country",
+  "owner": "Trade Section",
+  "tags": ["trade", "monthly"],
+  "lineage_sources": ["main.imports"],
+  "lineage_transformation": "Grouped by country, summed value",
+  "lineage_column_edges": [
+    { "source_table": "main.imports", "source_column": "value",
+      "target_column": "total", "transformation": "SUM" },
+    { "source_table": "main.imports", "source_column": "country",
+      "target_column": "country", "transformation": "identity" }
+  ]
+}
+```
+
+Because this sits inside the native `COMMENT ON TABLE` statement, it:
+
+- Survives disconnect/reconnect (no separate metadata table needed)
+- Is versioned alongside the table in DuckLake snapshots (time-travel aware)
+- Merges cleanly with any existing description, owner, or tags (the merge reads the current comment, updates only the lineage keys, and writes the whole object back)
+
+```{r}
+# Merge logic - never overwrites description/owner/tags
+existing_meta <- .db_parse_comment(.db_get_table_comment(...)) %||% list()
+
+if (!is.null(sources))       existing_meta$lineage_sources        <- sources
+if (!is.null(transformation)) existing_meta$lineage_transformation <- transformation
+if (!is.null(col_edges))     existing_meta$lineage_column_edges   <- col_edges
+
+db_comment(schema = schema, table = table, comment = existing_meta)
+```
+
+#### Graceful degradation when dplyneage is absent
+
+`requireNamespace("dplyneage", quietly = TRUE)` is the standard R idiom for a soft optional dependency. When `dplyneage` is not installed:
+
+- A single informative `message()` is printed (not a warning, not an error)
+- The function continues and records table-level lineage only (sources + transformation string), if those were provided
+- `db_write(track_lineage = TRUE)` silently falls back to no lineage rather than aborting a write
+
+This means the package works fully without `dplyneage`; the extra package only unlocks column-level detail.
+
+#### `db_get_lineage()` - Retrieve lineage
+
+```{r}
+db_get_lineage <- function(schema = "main", table) {
+  parsed <- .db_parse_comment(.db_get_table_comment(con, catalog, schema, table))
+
+  result <- list(
+    sources        = parsed$lineage_sources,
+    transformation = parsed$lineage_transformation
+  )
+
+  # column_edges is only present when dplyneage was used
+  if (!is.null(parsed$lineage_column_edges)) {
+    result$column_edges <- as.data.frame(parsed$lineage_column_edges)
+  }
+
+  result
+}
+```
+
+`column_edges` is returned as a proper `data.frame` with one row per source-to-target column relationship. When only table-level lineage was recorded (no `pipeline=` argument, or `dplyneage` was absent), `column_edges` is simply absent from the returned list.
+
+#### `db_lineage_flow()` - Visualise column lineage
+
+```{r}
+db_lineage_flow <- function(schema = "main", table) {
+  lin <- db_get_lineage(schema = schema, table = table)
+
+  # Reconstruct a dplyneage lineage object from the stored edge data.frame
+  dplyneage::lineage_flow(
+    dplyneage::lineage_from_edges(lin$column_edges)
+  )
+}
+```
+
+The edges stored in JSON are sufficient to reconstruct the `dplyneage` lineage object via `lineage_from_edges()`. `lineage_flow()` then renders an interactive React Flow diagram in the viewer. This means the original pipeline object does not need to be kept around - the serialised edges capture everything needed for rendering.
+
+#### `db_write(track_lineage = TRUE)` - One-step shortcut
+
+For the common case of writing a dbplyr pipeline and immediately wanting lineage recorded, `db_write()` accepts `track_lineage = TRUE`:
+
+```{r}
+db_read(table = "imports") |>
+  dplyr::group_by(country) |>
+  dplyr::summarise(total = sum(value)) |>
+  db_write(table = "country_totals", track_lineage = TRUE)
+# Wrote data to cso.main.country_totals (from query)
+# Recorded column-level lineage for cso.main.country_totals
+```
+
+Internally, `db_write()` calls `db_lineage(schema, table, pipeline = data)` after a successful write, passing the same lazy table object it used for the write:
+
+```{r}
+if (isTRUE(track_lineage)) {
+  if (!is_lazy) {
+    message("track_lineage ignored: lineage tracking requires a lazy dbplyr pipeline.")
+  } else {
+    tryCatch(
+      db_lineage(schema = schema, table = table, pipeline = data),
+      error = function(e) message("Lineage tracking failed: ", e$message)
+    )
+  }
+}
+```
+
+`track_lineage` is only meaningful for lazy table input. For data.frame input, a message is printed and the write continues normally. Lineage failures are caught with `tryCatch` so a lineage extraction error never aborts a completed write.
 
 ---
 
