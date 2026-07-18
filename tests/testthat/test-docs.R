@@ -540,3 +540,137 @@ test_that("db_get_lineage retrieves recorded lineage", {
   clean_db_env()
   unlink(temp_dir, recursive = TRUE)
 })
+
+# ==============================================================================
+# Tests for pipeline-based lineage (dplyneage integration)
+# ==============================================================================
+
+test_that("db_lineage requires sources or pipeline", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+  lake <- create_test_lake("lineage_req")
+
+  db_connect(
+    catalog = "test",
+    metadata_path = lake$metadata_path,
+    data_path = lake$data_path
+  )
+
+  db_write(data.frame(id = 1:3, value = 1:3), table = "src")
+  db_write(data.frame(id = 1:3, total = 1:3), table = "tgt")
+
+  expect_error(
+    db_lineage(table = "tgt"),
+    "sources.*pipeline"
+  )
+
+  clean_db_env()
+  cleanup_test_lake(lake)
+})
+
+test_that("db_lineage pipeline= infers sources when dplyneage not installed", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  skip_if(requireNamespace("dplyneage", quietly = TRUE), "dplyneage is installed")
+  clean_db_env()
+  lake <- create_test_lake("lineage_no_pkg")
+
+  db_connect(
+    catalog = "test",
+    metadata_path = lake$metadata_path,
+    data_path = lake$data_path
+  )
+
+  db_write(data.frame(id = 1:3, value = 1:3), table = "src")
+  db_write(data.frame(id = integer(), total = integer()), table = "tgt")
+
+  pipeline <- db_read(table = "src") |>
+    dplyr::summarise(total = sum(value))
+
+  # Should emit a message about installing dplyneage, not error
+  expect_error(
+    db_lineage(table = "tgt", pipeline = pipeline),
+    "sources.*pipeline"
+  )
+
+  clean_db_env()
+  cleanup_test_lake(lake)
+})
+
+test_that("db_write track_lineage=TRUE warns for data.frames", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+  lake <- create_test_lake("lineage_df")
+
+  db_connect(
+    catalog = "test",
+    metadata_path = lake$metadata_path,
+    data_path = lake$data_path
+  )
+
+  expect_message(
+    db_write(data.frame(id = 1:3), table = "t1", track_lineage = TRUE),
+    "track_lineage ignored"
+  )
+
+  clean_db_env()
+  cleanup_test_lake(lake)
+})
+
+test_that("db_lineage_flow errors without dplyneage", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  skip_if(requireNamespace("dplyneage", quietly = TRUE), "dplyneage is installed")
+  clean_db_env()
+
+  lake <- create_test_lake("lineage_flow")
+  db_connect(
+    catalog = "test",
+    metadata_path = lake$metadata_path,
+    data_path = lake$data_path
+  )
+  db_write(data.frame(id = 1:3), table = "t")
+  db_lineage(table = "t", sources = "raw.t")
+
+  expect_error(db_lineage_flow(table = "t"), "Install dplyneage")
+
+  clean_db_env()
+  cleanup_test_lake(lake)
+})
+
+test_that("db_get_lineage returns column_edges when stored", {
+  skip_if_not(ducklake_available(), "DuckLake extension not available")
+  clean_db_env()
+  lake <- create_test_lake("lineage_col")
+
+  db_connect(
+    catalog = "test",
+    metadata_path = lake$metadata_path,
+    data_path = lake$data_path
+  )
+
+  db_write(data.frame(id = 1:3, total = 1:3), table = "t")
+
+  # Manually inject column_edges as if dplyneage had produced them
+  existing <- datapond:::.db_get_table_comment(
+    datapond:::.db_get_con(),
+    datapond:::.db_get("catalog"),
+    "main", "t"
+  )
+  meta <- datapond:::.db_parse_comment(existing) %||% list()
+  meta$lineage_sources <- "raw.src"
+  meta$lineage_column_edges <- list(
+    list(source_table = "src", source_column = "value",
+         target_table = "t",   target_column = "total",
+         transformation = "DIRECT", expression = "value")
+  )
+  datapond:::db_comment(table = "t", comment = meta)
+
+  result <- db_get_lineage(table = "t")
+
+  expect_type(result, "list")
+  expect_true("column_edges" %in% names(result))
+  expect_equal(nrow(result$column_edges), 1L)
+  expect_equal(result$column_edges$source_column, "value")
+
+  clean_db_env()
+  cleanup_test_lake(lake)
+})

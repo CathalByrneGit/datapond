@@ -677,29 +677,101 @@ The data dictionary includes:
 
 ## Data Lineage
 
-Track where your data comes from and how it was transformed:
+Track where your data comes from and how it was transformed. datapond supports two approaches: manual lineage, where you describe sources yourself, and automatic column-level lineage, which uses the optional dplyneage package to analyse the query tree without executing it.
+
+### Manual Lineage
+
+The simplest approach is to record lineage yourself when creating derived tables:
 
 ```{r}
 # Record lineage when creating derived tables
 db_lineage(
+  schema = "analysis",
   table = "monthly_summary",
   sources = c("raw.transactions", "raw.products"),
   transformation = "Aggregated by month and product category"
 )
+```
 
-# Later, retrieve lineage information
-db_get_lineage(table = "monthly_summary")
+Lineage information is stored in the table's native COMMENT as JSON alongside other metadata.
+
+### Automatic Column-Level Lineage
+
+For richer lineage, pass a lazy dbplyr table to the `pipeline=` argument. datapond uses the dplyneage package to walk the query tree and automatically extract which source columns feed each output column — without executing the query.
+
+```{r}
+# Build your pipeline as a lazy dbplyr table (not yet executed)
+pipeline <- db_read(schema = "raw", table = "transactions") |>
+  left_join(db_read(schema = "raw", table = "products"), by = "product_id") |>
+  group_by(month, category) |>
+  summarise(revenue = sum(amount), units = n(), .groups = "drop")
+
+# Record lineage — sources and column edges are inferred from the pipeline
+db_lineage(
+  schema = "analysis",
+  table = "monthly_summary",
+  pipeline = pipeline,
+  transformation = "Aggregated by month and product category"
+)
+```
+
+When `pipeline=` is supplied, `sources=` can be omitted; datapond infers the source tables from the query plan. You can still pass `sources=` explicitly if you want to override or supplement what is detected.
+
+### Tracking Lineage at Write Time
+
+You can record lineage automatically when writing a table by setting `track_lineage = TRUE` on `db_write()`:
+
+```{r}
+db_read(schema = "raw", table = "transactions") |>
+  left_join(db_read(schema = "raw", table = "products"), by = "product_id") |>
+  group_by(month, category) |>
+  summarise(revenue = sum(amount), units = n(), .groups = "drop") |>
+  db_write(
+    schema = "analysis",
+    table = "monthly_summary",
+    track_lineage = TRUE
+  )
+```
+
+This is equivalent to calling `db_write()` followed by `db_lineage(pipeline = ...)` but in a single step.
+
+### Retrieving Lineage
+
+```{r}
+db_get_lineage(schema = "analysis", table = "monthly_summary")
 #> $sources
 #> [1] "raw.transactions" "raw.products"
 #>
 #> $transformation
 #> [1] "Aggregated by month and product category"
 #>
-#> $recorded_at
-#> [1] "2025-03-10 14:30:00"
+#> $column_edges
+#>       source_table source_column  target_table target_column
+#> 1 raw.transactions         month      analysis         month
+#> 2     raw.products      category      analysis      category
+#> 3 raw.transactions        amount      analysis       revenue
+#> 4 raw.transactions    product_id      analysis         units
 ```
 
-Lineage information is stored in the table's native COMMENT as JSON alongside other metadata.
+When column-level lineage is available, `db_get_lineage()` returns a `column_edges` data frame with one row per source-to-destination column mapping. Tables recorded with manual lineage only return `NULL` for `column_edges`.
+
+### Visualising Lineage
+
+When column-level lineage has been recorded, `db_lineage_flow()` renders an interactive React Flow diagram in the RStudio Viewer or a browser:
+
+```{r}
+db_lineage_flow(schema = "analysis", table = "monthly_summary")
+```
+
+The diagram shows source tables on the left, the destination table on the right, and edges for each column mapping. Nodes are colour-coded by schema. This function requires dplyneage to be installed.
+
+### Installing dplyneage
+
+Column-level lineage features (`pipeline=`, `track_lineage = TRUE`, and `db_lineage_flow()`) depend on the optional dplyneage package. Manual lineage works without it.
+
+```{r}
+pak::pak("tgerke/dplyneage")
+```
 
 ---
 
