@@ -1,15 +1,17 @@
 
-<!-- README.md is generated from README.Rmd. Please edit that file -->
-
 # datapond
 
 <!-- badges: start -->
 
 [![Lifecycle:
-experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
+superseded](https://img.shields.io/badge/lifecycle-superseded-blue.svg)](https://lifecycle.r-lib.org/articles/stages.html#superseded)
 <!-- badges: end -->
 
-**datapond** is a simple and lightweight data lake infrastructure for small to medium data requirements. It provides a unified R interface for [DuckLake](https://ducklake.select/) — a modern data lakehouse built on [DuckDB](https://duckdb.org/) that adds ACID transactions, time travel, and schema evolution on top of Parquet files.
+> **This package is superseded.** Please use [**ducklake**](https://github.com/tgerke/ducklake-r) by Travis Gerke instead — a tidyverse-friendly DuckLake interface available on CRAN (`install.packages("ducklake")`). This repository is archived for reference.
+
+---
+
+**datapond** was a simple and lightweight data lake infrastructure for small to medium data requirements. It provided a unified R interface for [DuckLake](https://ducklake.select/) — a modern data lakehouse built on [DuckDB](https://duckdb.org/) that adds ACID transactions, time travel, and schema evolution on top of Parquet files.
 
 ## Installation
 

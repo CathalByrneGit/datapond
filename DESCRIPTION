@@ -3,14 +3,11 @@ Title: Simple Data Lake Infrastructure for R with DuckLake
 Version: 0.1.0
 Authors@R:
     person("Cathal", "Byrne", email = "cathal470@gmail.com", role = c("aut", "cre"))
-Description: Provides a unified R interface for DuckLake, a modern data lakehouse
-    format built on DuckDB. Supports ACID transactions, time travel queries,
-    schema evolution, and Iceberg export for Spark/Trino compatibility. Features
-    include multiple catalog backends (DuckDB, SQLite, PostgreSQL), Hive and bucket
-    partitioning, data clustering, streaming via data inlining, and direct Arrow
-    integration. Facilitates data sharing between teams with built-in governance,
-    table/column documentation via SQL COMMENT, views and macros stored in the
-    catalog, and access control via file system permissions.
+Description: SUPERSEDED - please use the 'ducklake' package on CRAN
+    (<https://github.com/tgerke/ducklake-r>) instead. Provides a unified R
+    interface for DuckLake, a modern data lakehouse format built on DuckDB.
+    Supports ACID transactions, time travel queries, schema evolution, and
+    Iceberg export. This package is archived and no longer maintained.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
