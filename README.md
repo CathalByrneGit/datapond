@@ -256,7 +256,8 @@ db_lineage_flow(table = "monthly_summary")
 ```
 
 > **Optional dependency:** column-level lineage and `db_lineage_flow()` require
-> the `dplyneage` package — install with `pak::pak("tgerke/dplyneage")`.
+> the [`dplyneage`](https://github.com/tgerke/dplyneage) package — install with
+> `pak::pak("tgerke/dplyneage")`.
 
 ### Interactive Browser
 
