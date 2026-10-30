@@ -1,7 +1,15 @@
 # datapond
 
-**datapond** is a simple and lightweight data lake infrastructure for
-small to medium data requirements. It provides a unified R interface for
+> **This package is superseded.** Please use
+> [**ducklake**](https://github.com/tgerke/ducklake-r) by Travis Gerke
+> instead — a tidyverse-friendly DuckLake interface available on CRAN
+> (`install.packages("ducklake")`). This repository is archived for
+> reference.
+
+------------------------------------------------------------------------
+
+**datapond** was a simple and lightweight data lake infrastructure for
+small to medium data requirements. It provided a unified R interface for
 [DuckLake](https://ducklake.select/) — a modern data lakehouse built on
 [DuckDB](https://duckdb.org/) that adds ACID transactions, time travel,
 and schema evolution on top of Parquet files.
@@ -220,21 +228,43 @@ writexl::write_xlsx(dict, "data_dictionary.xlsx")
 
 ``` r
 
-# Record where data came from
+# 1. Manual table-level lineage (sources= listed explicitly)
 db_lineage(
   table = "monthly_summary",
   sources = c("raw.transactions", "raw.products"),
   transformation = "Aggregated by month and product category"
 )
 
-# Retrieve lineage information
+# 2. Auto column-level lineage from a lazy dbplyr pipeline
+#    (sources are inferred; requires dplyneage)
+pipeline <- raw_transactions |>
+  dplyr::left_join(raw_products, by = "product_id") |>
+  dplyr::group_by(month, category) |>
+  dplyr::summarise(total = sum(amount), .groups = "drop")
+
+db_lineage(table = "monthly_summary", pipeline = pipeline)
+
+# 3. One-liner: write and record lineage in a single step
+pipeline |> db_write(schema = "main", table = "monthly_summary", track_lineage = TRUE)
+
+# 4. Retrieve lineage (returns sources, transformation, and column_edges)
 db_get_lineage(table = "monthly_summary")
 #> $sources
 #> [1] "raw.transactions" "raw.products"
 #>
 #> $transformation
 #> [1] "Aggregated by month and product category"
+#>
+#> $column_edges
+#> # A data frame: ...
+
+# 5. Visualise column-level lineage as an interactive diagram (requires dplyneage)
+db_lineage_flow(table = "monthly_summary")
 ```
+
+> **Optional dependency:** column-level lineage and `db_lineage_flow()`
+> require the [`dplyneage`](https://github.com/tgerke/dplyneage) package
+> — install with `pak::pak("tgerke/dplyneage")`.
 
 ### Interactive Browser
 
@@ -453,8 +483,9 @@ in-lake transformations.*
 | [`db_dictionary()`](https://cathalbyrnegit.github.io/datapond/reference/db_dictionary.md) | Generate full data dictionary |
 | [`db_search()`](https://cathalbyrnegit.github.io/datapond/reference/db_search.md) | Search by name, description, owner, or tags |
 | [`db_search_columns()`](https://cathalbyrnegit.github.io/datapond/reference/db_search_columns.md) | Find columns by name across all tables |
-| [`db_lineage()`](https://cathalbyrnegit.github.io/datapond/reference/db_lineage.md) | Record data lineage (sources and transformations) |
-| [`db_get_lineage()`](https://cathalbyrnegit.github.io/datapond/reference/db_get_lineage.md) | Retrieve lineage information for a table |
+| [`db_lineage()`](https://cathalbyrnegit.github.io/datapond/reference/db_lineage.md) | Record data lineage (sources, transformation, or pipeline for column-level) |
+| [`db_get_lineage()`](https://cathalbyrnegit.github.io/datapond/reference/db_get_lineage.md) | Retrieve lineage (sources, transformation, column_edges) for a table |
+| `db_lineage_flow()` | Render interactive column-level lineage diagram (requires dplyneage) |
 
 ### Partitioning & Clustering
 
