@@ -767,7 +767,7 @@ The diagram shows source tables on the left, the destination table on the right,
 
 ### Installing dplyneage
 
-Column-level lineage features (`pipeline=`, `track_lineage = TRUE`, and `db_lineage_flow()`) depend on the optional dplyneage package. Manual lineage works without it.
+Column-level lineage features (`pipeline=`, `track_lineage = TRUE`, and `db_lineage_flow()`) depend on the optional [`dplyneage`](https://github.com/tgerke/dplyneage) package by Travis Gerke. Manual lineage works without it.
 
 ```{r}
 pak::pak("tgerke/dplyneage")
